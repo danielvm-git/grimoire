@@ -72,6 +72,9 @@ repositories:
 staleness:
   pull_requests_days: 30   # default: 30
   issues_days: 365         # default: 365
+  branches_days: 90        # default: 90 — branches with no commits for this many days
+  problematic_stale_issues_pct: 20  # highlight when stale/open issues >= 20%
+  problematic_stale_prs_pct: 20     # highlight when stale/open PRs >= 20%
 
 refresh_interval_minutes: 5  # default: 5
 
@@ -90,7 +93,7 @@ log_file: "./grimoire.log"
 - `StaticRepoSource(repo: str, branches: list[str] = [])`
 - `TeamRepoSource(team: str, exclude: list[str] = [])`
 - `RepoSource` — discriminated union of the above (by field presence)
-- `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365)`
+- `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, branches_days: int = 90, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
 - `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional)
 
 ### Config loading

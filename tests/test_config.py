@@ -188,8 +188,32 @@ class TestLoadConfig:
         config = load_config(config_file)
         assert config.staleness.pull_requests_days == 30
         assert config.staleness.issues_days == 365
+        assert config.staleness.branches_days == 90
+        assert config.staleness.problematic_stale_issues_pct == 20
+        assert config.staleness.problematic_stale_prs_pct == 20
         assert config.refresh_interval_minutes == 5
         assert config.data_dir == Path("./data")
+
+    def test_staleness_thresholds_parsed(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "test"
+            repositories:
+              - repo: "owner/repo"
+            staleness:
+              pull_requests_days: 14
+              issues_days: 180
+              branches_days: 60
+              problematic_stale_issues_pct: 30
+              problematic_stale_prs_pct: 10
+            """)
+        )
+        config = load_config(config_file)
+        assert config.staleness.branches_days == 60
+        assert config.staleness.problematic_stale_issues_pct == 30
+        assert config.staleness.problematic_stale_prs_pct == 10
 
     def test_config_from_env_var(self, tmp_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GRIMOIRE_CONFIG", str(tmp_config))

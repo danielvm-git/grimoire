@@ -26,16 +26,30 @@
                 <span class="opacity-70">{{ repo.open_issues }} issues</span>
                 {% if repo.stale_issues %}
                 <span class="opacity-40"> · </span>
-                <span class="text-warning">{{ repo.stale_issues }} stale</span>
+                <span class="{% if repo.open_issues > 0 and (repo.stale_issues * 100 / repo.open_issues) >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">{{ repo.stale_issues }} stale</span>
                 {% endif %}
             </span>
             <span>
                 <span class="opacity-70">{{ repo.open_prs }} PRs</span>
                 {% if repo.stale_prs %}
                 <span class="opacity-40"> · </span>
-                <span class="text-warning">{{ repo.stale_prs }} stale</span>
+                <span class="{% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">{{ repo.stale_prs }} stale</span>
                 {% endif %}
             </span>
+        </div>
+
+        {# ── Last Activity & Branches ── #}
+        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-sm">
+            {% if repo.last_commit_at %}
+            <span class="opacity-60" title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">
+                Last activity: {{ time_ago(repo.last_commit_at) }}
+            </span>
+            {% endif %}
+            {% if repo.total_branches %}
+            <a href="https://github.com/{{ repo.full_name }}/branches" target="_blank" rel="noopener" class="link link-hover opacity-60">
+                {{ repo.total_branches }} branch{{ 'es' if repo.total_branches != 1 else '' }}{% if repo.stale_branches %} <span class="opacity-80">({{ repo.stale_branches }} stale)</span>{% endif %}
+            </a>
+            {% endif %}
         </div>
 
         {# ── Workflows ── #}

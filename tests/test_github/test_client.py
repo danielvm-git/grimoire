@@ -284,3 +284,62 @@ async def test_get_workflow_runs(client: GitHubClient) -> None:
     assert runs is not None
     assert len(runs) == 1
     assert runs[0]["conclusion"] == "success"
+
+
+# ---------------------------------------------------------------------------
+# Branch methods
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_get_branches(client: GitHubClient) -> None:
+    respx.get("https://api.github.com/repos/owner/repo/branches").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"name": "main", "commit": {"sha": "abc"}},
+                {"name": "develop", "commit": {"sha": "def"}},
+            ],
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    branches = await client.get_branches("owner/repo")
+    assert branches is not None
+    assert len(branches) == 2
+    assert branches[0]["name"] == "main"
+
+
+@respx.mock
+async def test_get_branch(client: GitHubClient) -> None:
+    respx.get("https://api.github.com/repos/owner/repo/branches/main").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "main",
+                "commit": {
+                    "sha": "abc",
+                    "commit": {
+                        "committer": {"date": "2026-04-10T12:00:00Z"},
+                    },
+                },
+            },
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    data = await client.get_branch("owner/repo", "main")
+    assert data is not None
+    assert data["name"] == "main"
+    assert data["commit"]["commit"]["committer"]["date"] == "2026-04-10T12:00:00Z"
+
+
+@respx.mock
+async def test_get_branch_304(client: GitHubClient) -> None:
+    """A 304 response should return None (cache hit)."""
+    respx.get("https://api.github.com/repos/owner/repo/branches/main").mock(
+        return_value=httpx.Response(
+            304,
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    data = await client.get_branch("owner/repo", "main")
+    assert data is None

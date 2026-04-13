@@ -23,6 +23,8 @@ class GitHubClient:
     async def get_workflows(self, full_name: str) -> list[dict]: ...
     async def get_workflow_runs(self, full_name: str, branch: str) -> list[dict]: ...
     async def get_default_branch(self, full_name: str) -> str: ...
+    async def get_branches(self, full_name: str) -> list[dict]: ...
+    async def get_branch(self, full_name: str, branch: str) -> dict: ...
     async def get_check_runs_for_ref(self, full_name: str, ref: str) -> list[dict]: ...
 ```
 
@@ -102,6 +104,9 @@ async def fetch_repository_stats(
       - open PRs count + stale PRs count
         (no pushes or comments in staleness.pull_requests_days)
       - workflow statuses for each observed branch
+      - last commit time across all observed branches
+      - total branch count + stale branch count
+        (no commits in staleness.branches_days)
     Return a RepositoryStats object. On failure, return stats with
     warnings populated and counts from the last cached values.
     """
@@ -130,7 +135,7 @@ All fetched data is persisted to the SQLite database as the **persistent cache**
 
 | Table | Columns |
 |---|---|
-| `cached_repository` | full_name, default_branch, archived, source, fetched_at |
+| `cached_repository` | full_name, default_branch, archived, source, last_commit_at, total_branches, stale_branches, fetched_at |
 | `cached_issue` | repo_full_name, title, number, url, created_at, last_comment_at, fetched_at |
 | `cached_pull_request` | repo_full_name, title, number, url, author, created_at, last_push_at, last_comment_at, fetched_at |
 | `cached_workflow_status` | repo_full_name, workflow_name, branch, status, url, run_url, fetched_at |
@@ -162,6 +167,9 @@ class RepoSummary(BaseModel):
     stale_pull_requests: int
     workflow_failures: int          # count of failing workflows across all branches
     check_failures: int             # count of failing checks across all branches
+    last_commit_at: datetime | None # most recent commit across observed branches
+    total_branches: int             # total number of branches in the repo
+    stale_branches: int             # branches with no commits in staleness.branches_days
     warnings: list[str]
     fetched_at: datetime
 

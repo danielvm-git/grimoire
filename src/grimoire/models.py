@@ -66,6 +66,9 @@ class RepositoryStats(BaseModel):
     stale_pr_items: list[PullRequestDetail] = []
     warnings: list[str] = []
     fetched_at: datetime | None = None
+    last_commit_at: datetime | None = None
+    total_branches: int = 0
+    stale_branches: int = 0
 
 
 class CheckResult(BaseModel):

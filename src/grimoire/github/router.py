@@ -48,6 +48,9 @@ def _build_summary(repo: TrackedRepository, stats: RepositoryStats) -> RepoSumma
         open_pull_requests=stats.open_pull_requests,
         stale_pull_requests=stats.stale_pull_requests,
         workflow_failures=workflow_failures,
+        last_commit_at=stats.last_commit_at,
+        total_branches=stats.total_branches,
+        stale_branches=stats.stale_branches,
         warnings=stats.warnings,
         fetched_at=stats.fetched_at,
     )
@@ -90,6 +93,9 @@ async def get_repo_detail(owner: str, name: str) -> RepoDetailResponse:
         stale_issues=stats.stale_issues,
         open_pull_requests=stats.open_pull_requests,
         stale_pull_requests=stats.stale_pull_requests,
+        last_commit_at=stats.last_commit_at,
+        total_branches=stats.total_branches,
+        stale_branches=stats.stale_branches,
         workflows=[
             WorkflowStatusResponse(
                 name=w.name,

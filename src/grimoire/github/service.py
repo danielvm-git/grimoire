@@ -246,6 +246,52 @@ async def fetch_repository_stats(
     except Exception as exc:
         warnings.append(f"Failed to fetch workflows: {exc}")
 
+    # -- Branches & last commit ----------------------------------------------
+    last_commit_at: datetime | None = previous.last_commit_at if previous else None
+    total_branches: int = previous.total_branches if previous else 0
+    stale_branches: int = previous.stale_branches if previous else 0
+
+    # Fetch last commit time for each observed branch
+    branch_commit_dates: list[datetime] = []
+    for branch in repo.branches:
+        try:
+            branch_data = await client.get_branch(repo.full_name, branch)
+            if branch_data is not None:
+                commit_date_str = (
+                    branch_data.get("commit", {})
+                    .get("commit", {})
+                    .get("committer", {})
+                    .get("date")
+                )
+                dt = _parse_dt(commit_date_str)
+                if dt is not None:
+                    branch_commit_dates.append(dt)
+        except Exception as exc:
+            warnings.append(f"Failed to fetch branch {branch} info: {exc}")
+
+    if branch_commit_dates:
+        last_commit_at = max(branch_commit_dates)
+
+    # Fetch all branches for total/stale counts
+    try:
+        all_branches = await client.get_branches(repo.full_name)
+        if all_branches is not None:
+            total_branches = len(all_branches)
+            stale_cutoff = now - timedelta(days=staleness.branches_days)
+            stale_branches = 0
+            for b in all_branches:
+                commit_date_str = (
+                    b.get("commit", {}).get("commit", {}).get("committer", {}).get("date")
+                )
+                # Branches list returns shallow commit; date may be at top level
+                if not commit_date_str:
+                    commit_date_str = b.get("commit", {}).get("committer", {}).get("date")
+                dt = _parse_dt(commit_date_str)
+                if dt is not None and dt < stale_cutoff:
+                    stale_branches += 1
+    except Exception as exc:
+        warnings.append(f"Failed to fetch branches: {exc}")
+
     return RepositoryStats(
         full_name=repo.full_name,
         default_branch=repo.default_branch,
@@ -258,6 +304,9 @@ async def fetch_repository_stats(
         stale_pr_items=stale_pr_items,
         warnings=warnings,
         fetched_at=now,
+        last_commit_at=last_commit_at,
+        total_branches=total_branches,
+        stale_branches=stale_branches,
     )
 
 
@@ -389,6 +438,9 @@ async def save_stats_to_db(
                     stale_issues=stats.stale_issues,
                     open_pull_requests=stats.open_pull_requests,
                     stale_pull_requests=stats.stale_pull_requests,
+                    last_commit_at=stats.last_commit_at,
+                    total_branches=stats.total_branches,
+                    stale_branches=stats.stale_branches,
                     fetched_at=stats.fetched_at or now,
                 )
             )
@@ -527,6 +579,9 @@ async def load_stats_from_db(
                     stale_issue_items=stale_issue_items,
                     stale_pr_items=stale_pr_items,
                     fetched_at=cr.fetched_at,
+                    last_commit_at=cr.last_commit_at,
+                    total_branches=cr.total_branches,
+                    stale_branches=cr.stale_branches,
                 )
             )
 

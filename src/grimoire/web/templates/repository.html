@@ -47,7 +47,11 @@
     </div>
     <div class="stat bg-base-100 rounded-box shadow">
         <div class="stat-title">Stale Issues</div>
-        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.stale_issues == 0 else 'text-warning' }}">{{ stats.stale_issues }}</div>
+        {% set stale_issues_pct = (stats.stale_issues * 100 / stats.open_issues) if stats.open_issues > 0 else 0 %}
+        <div class="stat-value font-mono-nums text-2xl {{ 'text-warning' if stale_issues_pct >= staleness.problematic_stale_issues_pct else 'text-success' }}">{{ stats.stale_issues }}</div>
+        {% if stats.open_issues > 0 %}
+        <div class="stat-desc">{{ '%.0f' | format(stale_issues_pct) }}% of open</div>
+        {% endif %}
     </div>
     <div class="stat bg-base-100 rounded-box shadow">
         <div class="stat-title">Open PRs</div>
@@ -55,7 +59,33 @@
     </div>
     <div class="stat bg-base-100 rounded-box shadow">
         <div class="stat-title">Stale PRs</div>
-        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.stale_pull_requests == 0 else 'text-warning' }}">{{ stats.stale_pull_requests }}</div>
+        {% set stale_prs_pct = (stats.stale_pull_requests * 100 / stats.open_pull_requests) if stats.open_pull_requests > 0 else 0 %}
+        <div class="stat-value font-mono-nums text-2xl {{ 'text-warning' if stale_prs_pct >= staleness.problematic_stale_prs_pct else 'text-success' }}">{{ stats.stale_pull_requests }}</div>
+        {% if stats.open_pull_requests > 0 %}
+        <div class="stat-desc">{{ '%.0f' | format(stale_prs_pct) }}% of open</div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Activity & Branches ──────────────────────────────────────────── #}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat bg-base-100 rounded-box shadow">
+        <div class="stat-title">Last Activity</div>
+        {% if stats.last_commit_at %}
+        <div class="stat-value font-mono-nums text-2xl">{{ time_ago(stats.last_commit_at) }}</div>
+        <div class="stat-desc">{{ stats.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}</div>
+        {% else %}
+        <div class="stat-value text-2xl opacity-50">—</div>
+        {% endif %}
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow">
+        <div class="stat-title">Branches</div>
+        <div class="stat-value font-mono-nums text-2xl">{{ stats.total_branches }}</div>
+        {% if stats.stale_branches %}
+        <div class="stat-desc">
+            <a href="https://github.com/{{ repo_name }}/branches/stale" target="_blank" rel="noopener" class="link link-hover text-warning">{{ stats.stale_branches }} stale</a>
+        </div>
+        {% endif %}
     </div>
 </div>
 

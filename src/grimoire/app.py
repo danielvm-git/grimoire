@@ -38,6 +38,7 @@ from grimoire.github.service import refresh_all_stats
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import router as metrics_router
 from grimoire.web.router import router as web_router
+from grimoire.web.router import set_staleness_config
 from grimoire.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Database
     engine = await get_engine(str(config.database_path))
     await create_tables(engine)
+
+    # Expose staleness thresholds to web layer
+    set_staleness_config(config.staleness)
 
     # GitHub client
     client = GitHubClient(config.github.token, engine)
