@@ -94,6 +94,9 @@ class CachedRepository(SQLModel, table=True):
     stale_issues: int = 0
     open_pull_requests: int = 0
     stale_pull_requests: int = 0
+    last_commit_at: Optional[datetime] = None
+    total_branches: int = 0
+    stale_branches: int = 0
     fetched_at: datetime = Field(default_factory=_utcnow)
 
 

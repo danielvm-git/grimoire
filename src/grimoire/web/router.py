@@ -11,11 +11,21 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from grimoire.config import StalenessConfig
 from grimoire.models import WorkflowStatus
 
 router = APIRouter(tags=["web"])
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+# Module-level staleness config — set from app lifespan
+_staleness_config: StalenessConfig = StalenessConfig()
+
+
+def set_staleness_config(config: StalenessConfig) -> None:
+    """Register the staleness thresholds from the app config."""
+    global _staleness_config  # noqa: PLW0603
+    _staleness_config = config
 
 
 # ---------------------------------------------------------------------------
@@ -40,6 +50,9 @@ class RepoViewModel:
     workflows_by_branch: dict[str, list[WorkflowStatus]]
     checks_by_branch: dict[str, list[dict[str, Any]]]
     fetched_at: datetime | None = None
+    last_commit_at: datetime | None = None
+    total_branches: int = 0
+    stale_branches: int = 0
 
     @property
     def has_problems(self) -> bool:
@@ -109,6 +122,7 @@ SORT_KEYS: dict[str, Any] = {
     "stale_prs": lambda r: r.stale_prs,
     "workflow_failures": lambda r: r.workflow_failures,
     "check_failures": lambda r: r.check_failures,
+    "last_activity": lambda r: r.last_commit_at or datetime.min.replace(tzinfo=timezone.utc),
 }
 
 SORT_LABELS: dict[str, str] = {
@@ -119,6 +133,7 @@ SORT_LABELS: dict[str, str] = {
     "stale_prs": "Stale PRs",
     "workflow_failures": "Failing Workflows",
     "check_failures": "Failing Checks",
+    "last_activity": "Last Activity",
 }
 
 
@@ -208,6 +223,9 @@ def _build_repo_viewmodels() -> list[RepoViewModel]:
                 workflows_by_branch=workflows_by_branch,
                 checks_by_branch=checks_by_branch,
                 fetched_at=stats.fetched_at,
+                last_commit_at=stats.last_commit_at,
+                total_branches=stats.total_branches,
+                stale_branches=stats.stale_branches,
             )
         )
     return viewmodels
@@ -248,6 +266,8 @@ async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> H
             "sort": sort,
             "dir": dir,
             "sort_labels": SORT_LABELS,
+            "staleness": _staleness_config,
+            "time_ago": _time_ago,
         },
     )
 
@@ -290,6 +310,8 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
             "workflows_by_branch": workflows_by_branch,
             "checks_by_branch": checks_by_branch,
             "workflow_failures": workflow_failures,
+            "staleness": _staleness_config,
+            "time_ago": _time_ago,
         },
     )
 
@@ -336,6 +358,8 @@ async def dashboard_cards_partial(
         "partials/dashboard_cards.html",
         context={
             "repos": repos,
+            "staleness": _staleness_config,
+            "time_ago": _time_ago,
         },
     )
 

@@ -93,6 +93,12 @@ class StalenessConfig(BaseModel):
 
     pull_requests_days: int = 30
     issues_days: int = 365
+    branches_days: int = 90
+
+    # Percentage thresholds: highlight stale counts as problematic
+    # when stale/open >= this percentage.
+    problematic_stale_issues_pct: int = 20
+    problematic_stale_prs_pct: int = 20
 
 
 class GrimoireConfig(BaseModel):

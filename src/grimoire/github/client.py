@@ -162,6 +162,16 @@ class GitHubClient:
             return "main"
         return data.get("default_branch", "main")
 
+    async def get_branches(self, full_name: str) -> list[dict[str, Any]] | None:
+        """Return all branches for a repo (paginated)."""
+        owner, repo = full_name.split("/", 1)
+        return await self._paginated_get(f"/repos/{owner}/{repo}/branches")
+
+    async def get_branch(self, full_name: str, branch: str) -> dict[str, Any] | None:
+        """Return metadata for a single branch, including latest commit info."""
+        owner, repo = full_name.split("/", 1)
+        return await self._request("GET", f"/repos/{owner}/{repo}/branches/{branch}")
+
     # -- internal helpers ----------------------------------------------------
 
     async def _paginated_get(

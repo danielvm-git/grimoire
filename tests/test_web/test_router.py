@@ -59,6 +59,31 @@ class TestRepositoryDetail:
         assert "Refactor auth module" in resp.text
         assert "charlie" in resp.text
 
+    async def test_repo_detail_shows_last_activity(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/repo/acme/api")
+        assert "Last Activity" in resp.text
+        assert "2026-04-10" in resp.text
+
+    async def test_repo_detail_shows_branches(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/repo/acme/api")
+        assert "Branches" in resp.text
+        # 8 total branches, 3 stale
+        assert ">8<" in resp.text or ">8</div>" in resp.text
+
+    async def test_repo_detail_stale_threshold_highlighting(self, web_client: AsyncClient) -> None:
+        """acme/api has 2 stale out of 5 issues (40%) which exceeds 20% threshold → warning."""
+        resp = await web_client.get("/repo/acme/api")
+        assert "text-warning" in resp.text
+        assert "40% of open" in resp.text
+
+    async def test_repo_detail_no_warning_when_below_threshold(
+        self, web_client: AsyncClient
+    ) -> None:
+        """acme/frontend has 0 stale issues → should show text-success."""
+        resp = await web_client.get("/repo/acme/frontend")
+        # Stale Issues box should show text-success (0 stale)
+        assert "Stale Issues" not in resp.text or "text-success" in resp.text
+
     async def test_repo_without_stale_items_hides_sections(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/repo/acme/frontend")
         assert resp.status_code == 200
@@ -114,6 +139,24 @@ class TestDashboardPartial:
         api_pos = text.index("acme/api")
         frontend_pos = text.index("acme/frontend")
         assert frontend_pos < api_pos
+
+    async def test_sort_last_activity(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-cards?sort=last_activity&dir=desc")
+        text = resp.text
+        # acme/frontend has 2026-04-12, acme/api has 2026-04-10 — frontend should come first
+        api_pos = text.index("acme/api")
+        frontend_pos = text.index("acme/frontend")
+        assert frontend_pos < api_pos
+
+    async def test_dashboard_shows_last_activity(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=asc")
+        assert "Last activity:" in resp.text
+
+    async def test_dashboard_shows_branches(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=asc")
+        assert "8 branches" in resp.text
+        assert "3 stale" in resp.text
+        assert "4 branches" in resp.text
 
 
 class TestActionRunPartial:

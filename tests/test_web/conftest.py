@@ -82,6 +82,9 @@ def _populate_cache() -> None:
             ],
             warnings=[],
             fetched_at=datetime.now(tz=timezone.utc),
+            last_commit_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+            total_branches=8,
+            stale_branches=3,
         ),
         RepositoryStats(
             full_name="acme/frontend",
@@ -106,6 +109,9 @@ def _populate_cache() -> None:
             ],
             warnings=["Rate limit approaching"],
             fetched_at=datetime.now(tz=timezone.utc),
+            last_commit_at=datetime(2026, 4, 12, tzinfo=timezone.utc),
+            total_branches=4,
+            stale_branches=0,
         ),
     ]
     update_cache(repos, stats)

@@ -68,8 +68,12 @@ def create_app() -> FastAPI:
 | **Repository** | Name as link to detail page | ✓ (alphabetical) |
 | **Issues** | Open count + stale count, e.g., `12 (3 stale)` | ✓ (by open, by stale) |
 | **Pull Requests** | Open count + stale count, e.g., `5 (1 stale)` | ✓ (by open, by stale) |
+| **Last Activity** | Time since last commit across observed branches, e.g., `3d ago` | ✓ (by last commit time) |
+| **Branches** | Total count + stale count with link to GitHub branches page | — |
 | **Workflows** | Compact badge grid (see below) | ✓ (by number of failures) |
 | **Checks** | Compact badge grid (see below) | ✓ (by number of failures) |
+
+**Staleness highlighting:** Stale issue/PR counts are highlighted in yellow only when the stale percentage (stale/open) meets or exceeds the configured thresholds (`staleness.problematic_stale_issues_pct`, `staleness.problematic_stale_prs_pct`). Below the threshold, stale counts render without warning color.
 
 **Per-repo warnings:** If a repo has warnings (e.g., "Data is 2h stale"), show an amber ⚠ icon in the row. Hover/click reveals the warning text.
 
@@ -112,7 +116,7 @@ Clicking a column header triggers an HTMX request that re-renders just the table
 
 The server sorts the data and returns the `<tbody>` HTML fragment. No full page reload.
 
-Supported sort keys: `name`, `issues`, `stale_issues`, `prs`, `stale_prs`, `workflow_failures`, `check_failures`.
+Supported sort keys: `name`, `issues`, `stale_issues`, `prs`, `stale_prs`, `workflow_failures`, `check_failures`, `last_activity`.
 
 ### Refresh (HTMX)
 
@@ -142,7 +146,13 @@ The "Refresh" button triggers an API call and then re-fetches the table:
 - Observed branches list.
 - Warning banner if any warnings exist.
 
-**2. Issues**
+**2. Stats Grid**
+- Open issues, stale issues, open PRs, stale PRs.
+- Stale counts are color-coded based on percentage thresholds (yellow when stale/open ≥ configured %; green otherwise). Percentage is shown as "X% of open".
+- Last Activity: time since last commit across observed branches, with absolute timestamp.
+- Branches: total count with link to stale branches on GitHub if any are stale.
+
+**3. Issues**
 - Total open issues count.
 - **Stale issues table** (issues with no comments in `staleness.issues_days`):
 
