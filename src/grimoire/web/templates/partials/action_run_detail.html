@@ -1,0 +1,38 @@
+{% if results %}
+<div class="p-3 bg-base-200 rounded-box">
+    <table class="table table-xs">
+        <thead>
+            <tr>
+                <th>Repository</th>
+                <th>Branch</th>
+                <th>Status</th>
+                <th>Output</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results %}
+            <tr>
+                <td class="font-medium">{{ r.repo_full_name }}</td>
+                <td><span class="badge badge-ghost badge-xs">{{ r.branch }}</span></td>
+                <td>
+                    {% if r.passed %}
+                    <span class="badge badge-success badge-xs gap-1">✓ pass</span>
+                    {% else %}
+                    <span class="badge badge-error badge-xs gap-1">✗ fail</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if r.output %}
+                    <pre class="text-xs whitespace-pre-wrap bg-neutral text-neutral-content p-2 rounded max-h-48 overflow-y-auto max-w-lg font-mono">{{ r.output }}</pre>
+                    {% else %}
+                    <span class="text-xs opacity-40">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="p-3 text-sm opacity-50 text-center">No per-repo results available for run #{{ run_id }}.</div>
+{% endif %}

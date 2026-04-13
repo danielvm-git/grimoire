@@ -1,0 +1,46 @@
+# Grimoire Configuration
+# ======================
+# Copy this file to config.yaml and adjust values.
+# String values support environment variable references: "${ENV_VAR}"
+
+# GitHub authentication
+github:
+  token: "${GITHUB_TOKEN}"   # or a literal: "ghp_your_token_here"
+
+# Git user for commits/PRs made by actions (optional — omit if not using actions)
+# git:
+#   user:
+#     name: "Your Name"
+#     email: "you@example.com"
+#   signing:                  # optional
+#     key_path: "/keys/id_ed25519"
+#     format: "ssh"           # "ssh" or "gpg"
+#   ssh_known_hosts: "/keys/known_hosts"
+
+# Repositories to track
+repositories:
+  # Individual repo with specific branches
+  - repo: "owner/repo-name"
+    branches: ["main", "develop"]
+
+  # Individual repo (default branch only)
+  - repo: "owner/another-repo"
+
+  # All repos from a GitHub team (archived repos are always excluded)
+  # - team: "org-name/team-slug"
+  #   exclude:
+  #     - "org-name/excluded-repo"
+
+# Staleness thresholds
+staleness:
+  pull_requests_days: 30   # PRs with no push/comment for this many days
+  issues_days: 365         # Issues with no comment for this many days
+
+# Data refresh interval (also default check frequency)
+refresh_interval_minutes: 5
+
+# Paths
+data_dir: "./data"           # Contains checks/ and actions/ subdirectories
+workspace_dir: "./workspace" # Where repos are cloned
+database_path: "./grimoire.db"
+log_file: "./grimoire.log"
