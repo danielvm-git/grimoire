@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Actions — Grimoire{% endblock %}
+{% block nav_actions %}active{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold mb-6">Actions</h1>
+
+{# ── Available Actions ─────────────────────────────────────────────── #}
+{% if actions %}
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+    {% for action in actions %}
+    <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow">
+        <div class="card-body p-5">
+            <div class="flex justify-between items-start">
+                <div>
+                    <h3 class="card-title text-base">{{ action.name }}</h3>
+                    <p class="text-sm opacity-60 mt-1">{{ action.description }}</p>
+                </div>
+                {% if action.schedule %}
+                <div class="badge badge-ghost badge-sm whitespace-nowrap" title="Cron schedule">⏱ {{ action.schedule }}</div>
+                {% endif %}
+            </div>
+            <div class="card-actions justify-end mt-3">
+                <button class="btn btn-primary btn-sm gap-1"
+                        hx-post="/api/actions/{{ action.slug }}/run"
+                        hx-swap="none"
+                        hx-on::after-request="if(event.detail.successful) { showToast('Action triggered', 'success'); } else { showToast('Failed to trigger action', 'error'); }">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+                    Run
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="hero min-h-[20vh] mb-8">
+    <div class="hero-content text-center">
+        <div class="max-w-md">
+            <div class="text-4xl mb-3">⚡</div>
+            <h2 class="text-xl font-bold mb-2">No actions configured</h2>
+            <p class="opacity-60">Add YAML files to the <code class="kbd kbd-sm">data/actions/</code> directory to define actions.</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Run History ───────────────────────────────────────────────────── #}
+<div class="card bg-base-100 shadow">
+    <div class="card-body">
+        <h2 class="card-title text-lg mb-2">Run History</h2>
+        {% if runs %}
+        <div class="overflow-x-auto">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Action</th>
+                    <th>Trigger</th>
+                    <th>Status</th>
+                    <th>Started</th>
+                    <th>Repos</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr class="hover">
+                    <td class="font-mono-nums text-sm">#{{ run.id }}</td>
+                    <td class="font-medium">{{ run.action_name }}</td>
+                    <td><span class="badge badge-ghost badge-sm">{{ run.triggered_by }}</span></td>
+                    <td>
+                        {% if run.status == 'completed' %}
+                        <span class="badge badge-success badge-sm gap-1">✓ completed</span>
+                        {% elif run.status == 'failed' %}
+                        <span class="badge badge-error badge-sm gap-1">✗ failed</span>
+                        {% else %}
+                        <span class="badge badge-warning badge-sm gap-1">
+                            <span class="loading loading-spinner loading-xs"></span>
+                            {{ run.status }}
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="text-sm opacity-70">{{ run.started_at }}</td>
+                    <td class="font-mono-nums">
+                        <span class="{% if run.passed_repos == run.total_repos %}text-success{% else %}text-error{% endif %}">{{ run.passed_repos }}</span>/{{ run.total_repos }}
+                    </td>
+                    <td>
+                        <button class="btn btn-ghost btn-xs"
+                                hx-get="/partials/action-run/{{ run.id }}"
+                                hx-target="#run-detail-{{ run.id }}"
+                                hx-swap="innerHTML">
+                            Details
+                        </button>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="7" id="run-detail-{{ run.id }}" class="p-0"></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 opacity-50">
+            <div class="text-3xl mb-2">📋</div>
+            <p class="text-sm">No action runs recorded yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

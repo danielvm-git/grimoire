@@ -1,0 +1,13 @@
+services:
+  grimoire:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data:ro
+      - grimoire-workspace:/app/workspace
+      - ./state:/app/state
+
+volumes:
+  grimoire-workspace:

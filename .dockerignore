@@ -1,0 +1,13 @@
+workspace/
+.venv/
+.git/
+*.db
+*.log
+__pycache__/
+.ruff_cache/
+.pytest_cache/
+.coverage
+dist/
+build/
+docs/
+tests/

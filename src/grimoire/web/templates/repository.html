@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}{{ repo_name }} — Grimoire{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block content %}
+
+{# ── Breadcrumb ────────────────────────────────────────────────────── #}
+<div class="breadcrumbs text-sm mb-4">
+    <ul>
+        <li><a href="/">Dashboard</a></li>
+        <li>{{ repo_name }}</li>
+    </ul>
+</div>
+
+{# ── Hero Section ──────────────────────────────────────────────────── #}
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div>
+        <h1 class="text-3xl font-bold">{{ repo_name }}</h1>
+        <div class="flex flex-wrap gap-2 mt-2">
+            <span class="badge badge-primary badge-outline">{{ repo.source }}</span>
+            {% for branch in branches %}
+            <span class="badge badge-ghost gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                {{ branch }}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    <a href="https://github.com/{{ repo_name }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+        View on GitHub
+    </a>
+</div>
+
+{# ── Warnings ──────────────────────────────────────────────────────── #}
+{% if stats.warnings %}
+<div class="alert alert-warning mb-6 shadow-sm">
+    <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-5 w-5" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+    <span>{{ stats.warnings | join(' · ') }}</span>
+</div>
+{% endif %}
+
+{# ── Stats Grid ────────────────────────────────────────────────────── #}
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="stat bg-base-100 rounded-box shadow">
+        <div class="stat-title">Open Issues</div>
+        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.open_issues == 0 else ('text-warning' if stats.open_issues < 6 else 'text-error') }}">{{ stats.open_issues }}</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow">
+        <div class="stat-title">Stale Issues</div>
+        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.stale_issues == 0 else 'text-warning' }}">{{ stats.stale_issues }}</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow">
+        <div class="stat-title">Open PRs</div>
+        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.open_pull_requests == 0 else ('text-warning' if stats.open_pull_requests < 6 else 'text-error') }}">{{ stats.open_pull_requests }}</div>
+    </div>
+    <div class="stat bg-base-100 rounded-box shadow">
+        <div class="stat-title">Stale PRs</div>
+        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.stale_pull_requests == 0 else 'text-warning' }}">{{ stats.stale_pull_requests }}</div>
+    </div>
+</div>
+
+{# ── Stale Issues ──────────────────────────────────────────────────── #}
+{% if stats.stale_issue_items %}
+<div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="card-title text-lg">Stale Issues</h2>
+            <span class="badge badge-warning font-mono-nums">{{ stats.stale_issue_items | length }}</span>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Last Activity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for issue in stats.stale_issue_items %}
+                <tr class="hover">
+                    <td class="font-mono-nums text-sm">{{ issue.number }}</td>
+                    <td>
+                        <a href="{{ issue.url }}" target="_blank" rel="noopener" class="link link-hover">{{ issue.title }}</a>
+                    </td>
+                    <td class="text-sm opacity-60">{{ issue.author }}</td>
+                    <td class="text-sm opacity-60">
+                        {% if issue.last_activity_at %}{{ issue.last_activity_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Stale Pull Requests ───────────────────────────────────────────── #}
+{% if stats.stale_pr_items %}
+<div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="card-title text-lg">Stale Pull Requests</h2>
+            <span class="badge badge-warning font-mono-nums">{{ stats.stale_pr_items | length }}</span>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Last Activity</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pr in stats.stale_pr_items %}
+                <tr class="hover">
+                    <td class="font-mono-nums text-sm">{{ pr.number }}</td>
+                    <td>
+                        <a href="{{ pr.url }}" target="_blank" rel="noopener" class="link link-hover">{{ pr.title }}</a>
+                    </td>
+                    <td class="text-sm opacity-60">{{ pr.author }}</td>
+                    <td class="text-sm opacity-60">
+                        {% if pr.last_activity_at %}{{ pr.last_activity_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ── Workflows ─────────────────────────────────────────────────────── #}
+{% if workflows_by_branch %}
+<div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="card-title text-lg">Workflows</h2>
+            {% if workflow_failures %}
+            <span class="badge badge-error font-mono-nums">{{ workflow_failures }} failing</span>
+            {% else %}
+            <span class="badge badge-success">All passing</span>
+            {% endif %}
+        </div>
+
+        {% for branch, workflows in workflows_by_branch.items() %}
+        <details class="collapse collapse-arrow bg-base-200 rounded-box mb-2" {% if loop.first %}open{% endif %}>
+            <summary class="collapse-title font-medium py-3 min-h-0">
+                <span class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                    {{ branch }}
+                    <span class="flex gap-1 ml-2">
+                        {% for wf in workflows %}
+                        <span class="dot dot-{{ wf.status }}" style="width:10px;height:10px"></span>
+                        {% endfor %}
+                    </span>
+                </span>
+            </summary>
+            <div class="collapse-content">
+                <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <tbody>
+                        {% for wf in workflows %}
+                        <tr>
+                            <td class="flex items-center gap-2">
+                                <span class="dot dot-{{ wf.status }}"></span>
+                                {{ wf.name }}
+                            </td>
+                            <td class="text-sm opacity-70">{{ wf.status }}</td>
+                            <td class="text-right">
+                                {% if wf.run_url or wf.url %}
+                                <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener" class="link link-primary text-sm">View run ↗</a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+        <h2 class="card-title text-lg">Workflows</h2>
+        <p class="text-sm opacity-50">No workflows found for this repository.</p>
+    </div>
+</div>
+{% endif %}
+
+{# ── Checks ────────────────────────────────────────────────────────── #}
+{% if checks_by_branch %}
+<div class="card bg-base-100 shadow mb-6">
+    <div class="card-body">
+        <h2 class="card-title text-lg">Checks</h2>
+
+        {% for branch, checks in checks_by_branch.items() %}
+        <details class="collapse collapse-arrow bg-base-200 rounded-box mb-2" {% if loop.first %}open{% endif %}>
+            <summary class="collapse-title font-medium py-3 min-h-0">
+                <span class="flex items-center gap-2">
+                    {{ branch }}
+                    <span class="flex gap-1 ml-2">
+                        {% for chk in checks %}
+                        <span class="dot dot-{{ 'pass' if chk.passed else 'fail' }}" style="width:10px;height:10px"></span>
+                        {% endfor %}
+                    </span>
+                </span>
+            </summary>
+            <div class="collapse-content">
+                <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <tbody>
+                        {% for chk in checks %}
+                        <tr>
+                            <td class="flex items-center gap-2">
+                                <span class="dot dot-{{ 'pass' if chk.passed else 'fail' }}"></span>
+                                <div>
+                                    <div class="font-medium">{{ chk.check_name }}</div>
+                                    {% if chk.description %}<div class="text-xs opacity-50">{{ chk.description }}</div>{% endif %}
+                                </div>
+                            </td>
+                            <td class="text-sm">{{ 'Passed' if chk.passed else 'Failed' }}</td>
+                            <td class="text-right">
+                                <button class="btn btn-ghost btn-xs"
+                                        hx-get="/partials/check-output/{{ chk.id }}"
+                                        hx-target="#check-output-{{ chk.id }}"
+                                        hx-swap="innerHTML">
+                                    Output
+                                </button>
+                                <div id="check-output-{{ chk.id }}"></div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

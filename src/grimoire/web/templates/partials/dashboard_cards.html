@@ -1,0 +1,91 @@
+{% for repo in repos %}
+<div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow {% if repo.has_problems %}card-problem{% endif %}">
+    <div class="card-body p-5">
+        {# ── Header ── #}
+        <div class="flex justify-between items-start">
+            <div>
+                <h3 class="card-title text-base">
+                    <a href="/repo/{{ repo.full_name }}" class="link link-hover">
+                        <span class="opacity-60">{{ repo.owner }}/</span><span class="font-bold">{{ repo.name }}</span>
+                    </a>
+                </h3>
+                <div class="flex flex-wrap gap-1 mt-1">
+                    <span class="badge badge-outline badge-xs">{{ repo.source }}</span>
+                    {% for branch in repo.branches %}
+                    <span class="badge badge-ghost badge-xs">{{ branch }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            <a href="https://github.com/{{ repo.full_name }}" target="_blank" rel="noopener"
+               class="btn btn-ghost btn-xs opacity-50 hover:opacity-100" title="View on GitHub">↗</a>
+        </div>
+
+        {# ── Stats Row ── #}
+        <div class="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-sm font-mono-nums">
+            <span>
+                <span class="opacity-70">{{ repo.open_issues }} issues</span>
+                {% if repo.stale_issues %}
+                <span class="opacity-40"> · </span>
+                <span class="text-warning">{{ repo.stale_issues }} stale</span>
+                {% endif %}
+            </span>
+            <span>
+                <span class="opacity-70">{{ repo.open_prs }} PRs</span>
+                {% if repo.stale_prs %}
+                <span class="opacity-40"> · </span>
+                <span class="text-warning">{{ repo.stale_prs }} stale</span>
+                {% endif %}
+            </span>
+        </div>
+
+        {# ── Workflows ── #}
+        {% if repo.workflows_by_branch %}
+        <div class="mt-3">
+            <div class="text-xs font-semibold opacity-50 uppercase tracking-wider mb-1">Workflows</div>
+            {% for branch, workflows in repo.workflows_by_branch.items() %}
+            <div class="flex items-center gap-1.5 {% if not loop.first %}mt-1{% endif %}">
+                {% if repo.branches | length > 1 %}
+                <span class="text-xs opacity-50 w-20 truncate" title="{{ branch }}">{{ branch }}</span>
+                {% endif %}
+                {% for wf in workflows %}
+                <div class="tooltip tooltip-top" data-tip="{{ wf.name }}: {{ wf.status }}">
+                    <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener">
+                        <span class="dot dot-{{ wf.status }}"></span>
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Checks ── #}
+        {% if repo.checks_by_branch %}
+        <div class="mt-2">
+            <div class="text-xs font-semibold opacity-50 uppercase tracking-wider mb-1">Checks</div>
+            {% for branch, checks in repo.checks_by_branch.items() %}
+            <div class="flex items-center gap-1.5 {% if not loop.first %}mt-1{% endif %}">
+                {% if repo.branches | length > 1 %}
+                <span class="text-xs opacity-50 w-20 truncate" title="{{ branch }}">{{ branch }}</span>
+                {% endif %}
+                {% for chk in checks %}
+                <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }}: {{ 'pass' if chk.passed else 'fail' }}">
+                    <span class="dot dot-{{ 'pass' if chk.passed else 'fail' }}"></span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ── Warning ── #}
+        {% if repo.warnings %}
+        <div class="mt-2">
+            <div class="tooltip tooltip-bottom" data-tip="{{ repo.warnings | join('; ') }}">
+                <span class="text-warning text-xs">⚠ {{ repo.warnings | length }} warning{{ 's' if repo.warnings | length > 1 }}</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}

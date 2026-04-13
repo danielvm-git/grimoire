@@ -1,0 +1,197 @@
+# Module 4: Checks Engine
+
+Load user-defined checks from YAML files, resolve their targets, execute them against repos, schedule them, and expose REST APIs for management.
+
+**Dependencies:** Module 1 (config, models, database), Module 3 (workspace).
+
+## 4.1 — Check Definition Format
+
+Checks live as YAML files in `{data_dir}/checks/`. Each file defines one check.
+
+```yaml
+# data/checks/uv-lock-fresh.yaml
+# The filename (without .yaml) becomes the URL slug: "uv-lock-fresh"
+name: "UV Lock Fresh"
+description: "Ensures the uv.lock file is up to date with pyproject.toml"
+targets:
+  # Exactly one of: list, regex, script
+  regex: "lucabello/.*"
+  # list: ["lucabello/repo1", "lucabello/repo2"]
+  # script: "test -f pyproject.toml"
+script: |
+  uv lock --check
+schedule: "0 */6 * * *"   # optional cron; omit to use default refresh interval
+enabled: true              # optional; default true
+```
+
+### Pydantic models
+
+```python
+class TargetSpec(BaseModel):
+    """Targeting configuration. Exactly one field must be set."""
+    list: list[str] | None = None
+    regex: str | None = None
+    script: str | None = None
+
+    @model_validator(mode="after")
+    def exactly_one_target(self) -> Self:
+        set_count = sum(1 for v in [self.list, self.regex, self.script] if v is not None)
+        if set_count != 1:
+            raise ValueError("Exactly one of 'list', 'regex', or 'script' must be set")
+        return self
+
+class CheckDefinition(BaseModel):
+    name: str
+    slug: str               # auto-derived from YAML filename (e.g., "uv-lock-fresh")
+    description: str
+    targets: TargetSpec
+    script: str
+    schedule: str | None = None  # cron expression
+    enabled: bool = True
+```
+
+## 4.2 — Check Loader
+
+**File:** `src/grimoire/checks/loader.py`
+
+```python
+def load_checks(data_dir: Path) -> list[CheckDefinition]:
+    """
+    Load all YAML files from {data_dir}/checks/.
+    Parse each into a CheckDefinition model.
+    Derive slug from filename (e.g., "uv-lock-fresh.yaml" → "uv-lock-fresh").
+    Validate slug uniqueness (no duplicate filenames).
+    Raise on validation errors (fail fast at startup).
+    """
+```
+
+## 4.3 — Target Resolution (shared utility)
+
+**File:** `src/grimoire/targeting.py`
+
+This is a shared utility used by both the checks engine and the actions engine.
+
+```python
+async def resolve_targets(
+    targets: TargetSpec,
+    repos: list[TrackedRepository],
+    workspace: WorkspaceManager,
+) -> list[TrackedRepository]:
+    """
+    Resolve which repos a check/action applies to.
+
+    - list: filter repos whose full_name is in targets.list
+    - regex: filter repos whose full_name matches the regex pattern
+    - script: run the script in each repo's default branch workdir;
+              include repo if exit code is 0
+    """
+```
+
+**Notes:**
+- For `script` targeting, the script runs in the repo's default branch workdir (not all branches).
+- Script targeting uses the same environment as check/action execution (GH_TOKEN, etc.).
+- Results can be cached for the duration of a single check/action run (target set doesn't change mid-run).
+
+## 4.4 — Check Execution Engine
+
+**File:** `src/grimoire/checks/engine.py`
+
+```python
+async def run_check(
+    check: CheckDefinition,
+    repo: TrackedRepository,
+    branch: str,
+    workspace: WorkspaceManager,
+) -> CheckResult:
+    """
+    1. Call workspace.reset_workdir(full_name, branch) to ensure clean state.
+    2. Run check.script as a subprocess in the workdir.
+    3. Set env vars (GH_TOKEN, GITHUB_TOKEN, etc.) from workspace.get_env().
+    4. Capture stdout+stderr (combined).
+    5. Return CheckResult (passed = exit code 0).
+    6. Store result in database (CheckResultRecord).
+    """
+
+async def run_check_for_all_targets(
+    check: CheckDefinition,
+    repos: list[TrackedRepository],
+    workspace: WorkspaceManager,
+) -> list[CheckResult]:
+    """
+    1. Resolve targets.
+    2. For each target repo × each observed branch, run the check.
+    3. Execute concurrently (bounded by semaphore).
+    4. Return all results.
+    """
+```
+
+**Subprocess execution details:**
+- Use `asyncio.create_subprocess_shell` (scripts may use pipes, conditionals, etc.).
+- Set `cwd` to the workdir path.
+- Merge `workspace.get_env()` into the subprocess environment.
+- Capture stdout and stderr together (combined stream).
+- Apply a timeout (configurable, default 5 minutes per check per repo).
+- On timeout, kill the process and record as failure with "Timed out" in output.
+- **Output size cap:** Store at most 64KB of output. If exceeded, keep the last 64KB and prepend `"[output truncated — showing last 64KB]\n"`.
+
+## 4.5 — Check Scheduling
+
+**File:** `src/grimoire/checks/scheduler.py`
+
+- On startup, load all checks and register enabled ones with APScheduler.
+- If `schedule` is set, use a `CronTrigger` parsed from the cron expression.
+- If `schedule` is not set, use an `IntervalTrigger` matching `refresh_interval_minutes`.
+- Toggling a check on/off adds/removes it from the scheduler and updates `CheckToggleRecord` in the DB.
+- Toggle state persists across restarts (read from DB on startup).
+
+## 4.6 — Check REST API
+
+**File:** `src/grimoire/checks/router.py`
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/checks` | List all check definitions + enabled status |
+| `GET` | `/api/checks/{slug}/results` | Latest results for a check, grouped by repo+branch |
+| `POST` | `/api/checks/{slug}/run` | Trigger a check run. Optional query: `?repo=owner/repo` to target a single repo |
+| `POST` | `/api/checks/{slug}/toggle` | Toggle check enabled/disabled |
+
+**Response models** (Pydantic, for auto-generated OpenAPI docs):
+
+```python
+class CheckListItem(BaseModel):
+    name: str
+    slug: str
+    description: str
+    schedule: str | None
+    enabled: bool
+    target_count: int  # number of repos this check applies to
+
+class CheckResultResponse(BaseModel):
+    check_name: str
+    repo_full_name: str
+    branch: str
+    passed: bool
+    output: str
+    timestamp: datetime
+
+class CheckRunResponse(BaseModel):
+    check_name: str
+    results: list[CheckResultResponse]
+    started_at: datetime
+    finished_at: datetime
+```
+
+## Acceptance Criteria
+
+- [ ] YAML check definitions are loaded and validated correctly
+- [ ] Invalid YAML (missing fields, multiple target types) raises clear errors at startup
+- [ ] Target resolution works for all three modes (list, regex, script)
+- [ ] Check scripts run in the correct workdir with correct env vars
+- [ ] stdout/stderr is captured in the result
+- [ ] Timeout kills the subprocess and records failure
+- [ ] Results are stored in the database
+- [ ] Scheduling works (default interval + custom cron)
+- [ ] Toggle persists across restarts (stored in DB)
+- [ ] REST API endpoints return correct responses with proper status codes
+- [ ] `POST /api/checks/{slug}/run?repo=owner/repo` targets only the specified repo
+- [ ] Tests mock subprocess execution and workspace
