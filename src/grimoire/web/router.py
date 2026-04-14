@@ -346,18 +346,59 @@ async def actions_page(request: Request) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
+def _build_sorted_repos(sort: str, direction: str) -> list[RepoViewModel]:
+    """Build and sort repo view models (shared by all dashboard partials)."""
+    repos = _build_repo_viewmodels()
+    return _sort_repos(repos, sort, direction)
+
+
 @router.get("/partials/dashboard-cards", response_class=HTMLResponse)
 async def dashboard_cards_partial(
     request: Request, sort: str = "name", dir: str = "asc"
 ) -> HTMLResponse:
     """Return the repo cards grid for HTMX swap."""
-    repos = _build_repo_viewmodels()
-    repos = _sort_repos(repos, sort, dir)
+    repos = _build_sorted_repos(sort, dir)
     return templates.TemplateResponse(
         request,
         "partials/dashboard_cards.html",
         context={
             "repos": repos,
+            "staleness": _staleness_config,
+            "time_ago": _time_ago,
+        },
+    )
+
+
+@router.get("/partials/dashboard-list", response_class=HTMLResponse)
+async def dashboard_list_partial(
+    request: Request, sort: str = "name", dir: str = "asc"
+) -> HTMLResponse:
+    """Return the compact list view for HTMX swap."""
+    repos = _build_sorted_repos(sort, dir)
+    return templates.TemplateResponse(
+        request,
+        "partials/dashboard_list.html",
+        context={
+            "repos": repos,
+            "staleness": _staleness_config,
+            "time_ago": _time_ago,
+        },
+    )
+
+
+@router.get("/partials/dashboard-table", response_class=HTMLResponse)
+async def dashboard_table_partial(
+    request: Request, sort: str = "name", dir: str = "asc"
+) -> HTMLResponse:
+    """Return the data table view for HTMX swap."""
+    repos = _build_sorted_repos(sort, dir)
+    return templates.TemplateResponse(
+        request,
+        "partials/dashboard_table.html",
+        context={
+            "repos": repos,
+            "sort": sort,
+            "dir": dir,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
         },

@@ -1,0 +1,70 @@
+<div class="flex flex-col gap-2">
+{% for repo in repos %}
+<div class="flex items-center gap-4 bg-base-100 rounded-lg px-4 py-3 shadow-sm hover:shadow-md transition-shadow {% if repo.has_problems %}border-l-4 border-warning{% endif %}">
+
+    {# ── Name + Badges ── #}
+    <div class="min-w-[220px] flex-shrink-0">
+        <a href="/repo/{{ repo.full_name }}" class="link link-hover text-sm font-semibold">
+            <span class="opacity-60">{{ repo.owner }}/</span>{{ repo.name }}
+        </a>
+        <div class="flex flex-wrap gap-1 mt-0.5">
+            <span class="badge badge-outline badge-xs">{{ repo.source }}</span>
+            {% for branch in repo.branches %}
+            <span class="badge badge-ghost badge-xs">{{ branch }}</span>
+            {% endfor %}
+        </div>
+    </div>
+
+    {# ── Stats ── #}
+    <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm font-mono-nums flex-1">
+        <span class="opacity-70">
+            {{ repo.open_issues }} issues
+            {% if repo.stale_issues %}
+            <span class="opacity-40">·</span>
+            <span class="{% if repo.open_issues > 0 and (repo.stale_issues * 100 / repo.open_issues) >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">{{ repo.stale_issues }} stale</span>
+            {% endif %}
+        </span>
+        <span class="opacity-70">
+            {{ repo.open_prs }} PRs
+            {% if repo.stale_prs %}
+            <span class="opacity-40">·</span>
+            <span class="{% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">{{ repo.stale_prs }} stale</span>
+            {% endif %}
+        </span>
+    </div>
+
+    {# ── Workflows ── #}
+    <div class="flex items-center gap-1.5 flex-shrink-0">
+        {% for branch, workflows in repo.workflows_by_branch.items() %}
+            {% for wf in workflows %}
+            <div class="tooltip tooltip-top" data-tip="{{ wf.name }} ({{ branch }}): {{ wf.status }}">
+                <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener">
+                    <span class="dot dot-{{ wf.status }}"></span>
+                </a>
+            </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+
+    {# ── Last Activity ── #}
+    <div class="text-sm opacity-60 flex-shrink-0 w-20 text-right">
+        {% if repo.last_commit_at %}
+        <span title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ time_ago(repo.last_commit_at) }}</span>
+        {% else %}
+        —
+        {% endif %}
+    </div>
+
+    {# ── Warning + GitHub link ── #}
+    <div class="flex items-center gap-2 flex-shrink-0">
+        {% if repo.warnings %}
+        <div class="tooltip tooltip-left" data-tip="{{ repo.warnings | join('; ') }}">
+            <span class="text-warning text-sm">⚠</span>
+        </div>
+        {% endif %}
+        <a href="https://github.com/{{ repo.full_name }}" target="_blank" rel="noopener"
+           class="btn btn-ghost btn-xs opacity-40 hover:opacity-100" title="View on GitHub">↗</a>
+    </div>
+</div>
+{% endfor %}
+</div>
