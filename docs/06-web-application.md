@@ -73,6 +73,20 @@ def create_app() -> FastAPI:
 | **Workflows** | Compact badge grid (see below) | ✓ (by number of failures) |
 | **Checks** | Compact badge grid (see below) | ✓ (by number of failures) |
 
+### View Switcher
+
+The dashboard supports three view modes, selectable via a button group next to the sort controls. The user's preference is persisted in `localStorage` (key: `grimoire-view`). Default: Grid.
+
+| View | Partial Endpoint | Description |
+|------|-----------------|-------------|
+| **Grid** | `GET /partials/dashboard-cards` | Card grid (current default). 3 columns on XL, 2 on MD, 1 on mobile. Best for ≤20 repos. |
+| **List** | `GET /partials/dashboard-list` | Compact one-repo-per-row layout. Horizontal cards spanning full width with inline stats, workflow dots, and last activity. Balanced density/readability. |
+| **Table** | `GET /partials/dashboard-table` | Data table with sortable column headers. Maximum density for 50+ repos. Columns: Repo, Issues, PRs, Workflows, Last Activity, Branches. |
+
+**Extensibility:** Each view is a self-contained Jinja2 partial template that controls its own layout. The `#repo-grid` container is layout-agnostic. Adding a new view requires: (1) creating a partial template, (2) adding a router endpoint, (3) registering the view in the `VIEW_PARTIALS` JS object in `dashboard.html`.
+
+All three views accept the same `sort` and `dir` query parameters. The table view additionally supports clickable column headers for sorting (HTMX `hx-get` on `<th>` elements).
+
 **Staleness highlighting:** Stale issue/PR counts are highlighted in yellow only when the stale percentage (stale/open) meets or exceeds the configured thresholds (`staleness.problematic_stale_issues_pct`, `staleness.problematic_stale_prs_pct`). Below the threshold, stale counts render without warning color.
 
 **Per-repo warnings:** If a repo has warnings (e.g., "Data is 2h stale"), show an amber ⚠ icon in the row. Hover/click reveals the warning text.
@@ -254,7 +268,9 @@ These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 
 | Endpoint | Returns |
 |----------|---------|
-| `GET /partials/dashboard-table?sort=...&dir=...` | `<tbody>` of the dashboard table |
+| `GET /partials/dashboard-cards?sort=...&dir=...` | Grid view: card layout |
+| `GET /partials/dashboard-list?sort=...&dir=...` | List view: compact rows |
+| `GET /partials/dashboard-table?sort=...&dir=...` | Table view: data table |
 | `GET /partials/action-run/{run_id}` | Expanded action run details |
 | `GET /partials/check-output/{result_id}` | Expanded check output text |
 

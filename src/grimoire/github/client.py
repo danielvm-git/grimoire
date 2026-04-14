@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 import httpx
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -312,17 +313,15 @@ class GitHubClient:
 
     async def _save_etag(self, url_key: str, etag: str, last_modified: str) -> None:
         async with AsyncSession(self._engine) as session:
-            result = await session.exec(
-                select(CachedETag).where(CachedETag.endpoint_url == url_key)
+            stmt = (
+                sqlite_insert(CachedETag)
+                .values(endpoint_url=url_key, etag=etag, last_modified=last_modified)
+                .on_conflict_do_update(
+                    index_elements=["endpoint_url"],
+                    set_={"etag": etag, "last_modified": last_modified},
+                )
             )
-            record = result.first()
-            if record is None:
-                record = CachedETag(endpoint_url=url_key, etag=etag, last_modified=last_modified)
-                session.add(record)
-            else:
-                record.etag = etag
-                record.last_modified = last_modified
-                session.add(record)
+            await session.execute(stmt)
             await session.commit()
 
     # -- rate limit ----------------------------------------------------------

@@ -159,6 +159,82 @@ class TestDashboardPartial:
         assert "4 branches" in resp.text
 
 
+class TestDashboardListPartial:
+    """Tests for GET /partials/dashboard-list route."""
+
+    async def test_list_returns_html(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-list?sort=name&dir=asc")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+
+    async def test_list_contains_repos(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-list?sort=name&dir=asc")
+        assert "acme/api" in resp.text
+        assert "acme/frontend" in resp.text
+
+    async def test_list_sort_name_asc(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-list?sort=name&dir=asc")
+        text = resp.text
+        api_pos = text.index("acme/api")
+        frontend_pos = text.index("acme/frontend")
+        assert api_pos < frontend_pos
+
+    async def test_list_sort_issues_desc(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-list?sort=issues&dir=desc")
+        text = resp.text
+        api_pos = text.index("acme/api")
+        frontend_pos = text.index("acme/frontend")
+        assert frontend_pos < api_pos
+
+    async def test_list_shows_warnings(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-list?sort=name&dir=asc")
+        assert "⚠" in resp.text
+
+
+class TestDashboardTablePartial:
+    """Tests for GET /partials/dashboard-table route."""
+
+    async def test_table_returns_html(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+
+    async def test_table_contains_repos(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
+        assert "acme/api" in resp.text
+        assert "acme/frontend" in resp.text
+
+    async def test_table_has_table_structure(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
+        assert "<table" in resp.text
+        assert "<thead>" in resp.text
+        assert "<tbody>" in resp.text
+
+    async def test_table_sort_name_asc(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
+        text = resp.text
+        api_pos = text.index("acme/api")
+        frontend_pos = text.index("acme/frontend")
+        assert api_pos < frontend_pos
+
+    async def test_table_sort_issues_desc(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-table?sort=issues&dir=desc")
+        text = resp.text
+        api_pos = text.index("acme/api")
+        frontend_pos = text.index("acme/frontend")
+        assert frontend_pos < api_pos
+
+    async def test_table_shows_sortable_headers(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
+        assert "hx-get" in resp.text
+        assert "/partials/dashboard-table" in resp.text
+
+    async def test_table_shows_workflow_dots(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
+        assert "dot-success" in resp.text
+        assert "dot-failure" in resp.text
+
+
 class TestActionRunPartial:
     """Tests for GET /partials/action-run/{run_id} route."""
 
