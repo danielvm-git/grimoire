@@ -1,0 +1,45 @@
+{# Per-check latest results table (for HTMX inline expansion) #}
+{% if results %}
+<div class="overflow-x-auto">
+<table class="table table-xs">
+    <thead>
+        <tr>
+            <th>Repository</th>
+            <th>Branch</th>
+            <th>Status</th>
+            <th>Last Run</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in results %}
+        <tr class="hover">
+            <td><a href="/repo/{{ r.repo_full_name }}" class="link link-hover text-sm">{{ r.repo_full_name }}</a></td>
+            <td class="font-mono text-xs">{{ r.branch }}</td>
+            <td>
+                {% if r.passed %}
+                <span class="badge badge-success badge-xs gap-1">✓</span>
+                {% else %}
+                <span class="badge badge-error badge-xs gap-1">✗</span>
+                {% endif %}
+            </td>
+            <td class="text-xs opacity-70">{{ time_ago(r.timestamp) }}</td>
+            <td>
+                <button class="btn btn-ghost btn-xs"
+                        hx-get="/partials/check-output/{{ r.id }}"
+                        hx-target="#inline-check-output-{{ r.id }}"
+                        hx-swap="innerHTML">
+                    Output
+                </button>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="5" id="inline-check-output-{{ r.id }}" class="p-0"></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<div class="text-center py-4 opacity-50 text-sm">No results for this check.</div>
+{% endif %}

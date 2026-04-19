@@ -120,6 +120,22 @@ class ActionRunViewModel:
     results: list[dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass
+class CheckViewModel:
+    """Prepared data for rendering a check definition on the checks page."""
+
+    name: str
+    slug: str
+    description: str
+    schedule: str | None
+    enabled: bool
+    target_summary: str
+    script: str
+    pass_count: int = 0
+    fail_count: int = 0
+    last_run: datetime | str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Sorting
 # ---------------------------------------------------------------------------
@@ -157,8 +173,10 @@ def _sort_repos(repos: list[RepoViewModel], sort: str, direction: str) -> list[R
 # ---------------------------------------------------------------------------
 
 
-def _time_ago(dt: datetime) -> str:
+def _time_ago(dt: datetime | str) -> str:
     """Return a human-readable 'X ago' string."""
+    if isinstance(dt, str):
+        dt = datetime.fromisoformat(dt)
     now = datetime.now(tz=timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -463,6 +481,101 @@ async def actions_page(request: Request) -> HTMLResponse:
     )
 
 
+@router.get("/checks", response_class=HTMLResponse)
+async def checks_page(request: Request) -> HTMLResponse:
+    """Checks page — list defined checks, toggle, run, view results."""
+    from grimoire.checks.router import _checks
+    from grimoire.checks.router import _engine as _checks_engine
+
+    # Build per-check aggregate stats from DB
+    check_stats: dict[str, dict[str, Any]] = {}
+    if _checks_engine is not None and _checks:
+        async with AsyncSession(_checks_engine) as session:
+            result = await session.execute(_LATEST_RESULTS_SQL)
+            rows = result.all()
+        for row in rows:
+            slug = row[2]
+            passed = bool(row[5])
+            ts = row[6]
+            stats = check_stats.setdefault(slug, {"pass": 0, "fail": 0, "last_run": None})
+            if passed:
+                stats["pass"] += 1
+            else:
+                stats["fail"] += 1
+            if stats["last_run"] is None or (ts is not None and ts > stats["last_run"]):
+                stats["last_run"] = ts
+
+    check_vms = []
+    for c in _checks:
+        targets = c.targets
+        if targets.regex is not None:
+            target_summary = f"regex: {targets.regex}"
+        elif targets.list is not None:
+            target_summary = f"list: {len(targets.list)} repos"
+        else:
+            target_summary = "script"
+
+        stats = check_stats.get(c.slug, {})
+        check_vms.append(
+            CheckViewModel(
+                name=c.name,
+                slug=c.slug,
+                description=c.description,
+                schedule=c.schedule,
+                enabled=c.enabled,
+                target_summary=target_summary,
+                script=c.script,
+                pass_count=stats.get("pass", 0),
+                fail_count=stats.get("fail", 0),
+                last_run=stats.get("last_run"),
+            )
+        )
+
+    # Build results list for the table
+    results_list: list[dict[str, Any]] = []
+    if _checks_engine is not None and _checks:
+        async with AsyncSession(_checks_engine) as session:
+            result = await session.execute(
+                text(
+                    "SELECT cr.id, cr.check_name, cr.check_slug, cr.repo_full_name, "
+                    "cr.branch, cr.passed, cr.timestamp "
+                    "FROM check_result cr "
+                    "INNER JOIN ("
+                    "  SELECT check_slug, repo_full_name, branch, MAX(timestamp) AS max_ts "
+                    "  FROM check_result "
+                    "  GROUP BY check_slug, repo_full_name, branch"
+                    ") latest ON cr.check_slug = latest.check_slug "
+                    "AND cr.repo_full_name = latest.repo_full_name "
+                    "AND cr.branch = latest.branch "
+                    "AND cr.timestamp = latest.max_ts "
+                    "ORDER BY cr.timestamp DESC"
+                )
+            )
+            rows = result.all()
+        for row in rows:
+            results_list.append(
+                {
+                    "id": row[0],
+                    "check_name": row[1],
+                    "check_slug": row[2],
+                    "repo_full_name": row[3],
+                    "branch": row[4],
+                    "passed": bool(row[5]),
+                    "timestamp": row[6],
+                }
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "checks.html",
+        context={
+            "checks": check_vms,
+            "results": results_list,
+            "time_ago": _time_ago,
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # HTMX Partial Routes
 # ---------------------------------------------------------------------------
@@ -562,5 +675,52 @@ async def check_output_partial(request: Request, result_id: int) -> HTMLResponse
         context={
             "result_id": result_id,
             "output": output,
+        },
+    )
+
+
+@router.get("/partials/check-results/{slug}", response_class=HTMLResponse)
+async def check_results_partial(request: Request, slug: str) -> HTMLResponse:
+    """Return per-check latest results table for inline expansion."""
+    from grimoire.checks.router import _engine as _checks_engine
+
+    results_list: list[dict[str, Any]] = []
+    if _checks_engine is not None:
+        query = text(
+            "SELECT cr.id, cr.check_name, cr.check_slug, cr.repo_full_name, "
+            "cr.branch, cr.passed, cr.timestamp "
+            "FROM check_result cr "
+            "INNER JOIN ("
+            "  SELECT repo_full_name, branch, MAX(timestamp) AS max_ts "
+            "  FROM check_result WHERE check_slug = :slug "
+            "  GROUP BY repo_full_name, branch"
+            ") latest ON cr.repo_full_name = latest.repo_full_name "
+            "AND cr.branch = latest.branch "
+            "AND cr.timestamp = latest.max_ts "
+            "AND cr.check_slug = :slug "
+            "ORDER BY cr.timestamp DESC"
+        )
+        async with AsyncSession(_checks_engine) as session:
+            result = await session.execute(query, params={"slug": slug})
+            rows = result.all()
+        for row in rows:
+            results_list.append(
+                {
+                    "id": row[0],
+                    "check_name": row[1],
+                    "check_slug": row[2],
+                    "repo_full_name": row[3],
+                    "branch": row[4],
+                    "passed": bool(row[5]),
+                    "timestamp": row[6],
+                }
+            )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/check_results.html",
+        context={
+            "results": results_list,
+            "time_ago": _time_ago,
         },
     )
