@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -10,9 +11,12 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import StalenessConfig
 from grimoire.models import WorkflowStatus
+from grimoire.targeting import TargetSpec
 
 router = APIRouter(tags=["web"])
 
@@ -63,6 +67,10 @@ class RepoViewModel:
         return sum(len(wfs) for wfs in self.workflows_by_branch.values())
 
     @property
+    def total_checks(self) -> int:
+        return sum(len(chks) for chks in self.checks_by_branch.values())
+
+    @property
     def owner(self) -> str:
         return self.full_name.split("/")[0]
 
@@ -82,6 +90,8 @@ class DashboardTotals:
     stale_prs: int = 0
     workflow_failures: int = 0
     total_workflows: int = 0
+    check_failures: int = 0
+    total_checks: int = 0
 
 
 @dataclass
@@ -175,13 +185,125 @@ def _compute_totals(repos: list[RepoViewModel]) -> DashboardTotals:
         totals.stale_prs += r.stale_prs
         totals.workflow_failures += r.workflow_failures
         totals.total_workflows += r.total_workflows
+        totals.check_failures += r.check_failures
+        totals.total_checks += r.total_checks
     return totals
 
 
-def _build_repo_viewmodels() -> list[RepoViewModel]:
-    """Build view models from the in-memory GitHub cache + checks state."""
+def _resolve_targets_sync(targets: TargetSpec, repo_names: list[str]) -> set[str]:
+    """Resolve list/regex targeting without async workspace access.
+
+    Script-based targeting is skipped; those checks appear once they've run.
+    """
+    if targets.list is not None:
+        return set(targets.list) & set(repo_names)
+    if targets.regex is not None:
+        pattern = re.compile(targets.regex)
+        return {name for name in repo_names if pattern.search(name)}
+    return set()
+
+
+_LATEST_RESULTS_SQL = text(
+    "SELECT cr.id, cr.check_name, cr.check_slug, cr.repo_full_name, cr.branch, "
+    "cr.passed, cr.timestamp "
+    "FROM check_result cr "
+    "INNER JOIN ("
+    "  SELECT check_slug, repo_full_name, branch, MAX(timestamp) AS max_ts "
+    "  FROM check_result "
+    "  GROUP BY check_slug, repo_full_name, branch"
+    ") latest ON cr.check_slug = latest.check_slug "
+    "AND cr.repo_full_name = latest.repo_full_name "
+    "AND cr.branch = latest.branch "
+    "AND cr.timestamp = latest.max_ts"
+)
+
+
+async def _load_check_context(
+    repo_names: list[str],
+) -> tuple[dict[str, set[str]], dict[tuple[str, str, str], dict[str, Any]]]:
+    """Load check targeting and latest DB results.
+
+    Returns (check_targets, results_by_key) where:
+    - check_targets: check_slug → set of applicable repo full_names
+    - results_by_key: (check_slug, repo_full_name, branch) → result dict
+    """
     from grimoire.checks.router import _checks
+    from grimoire.checks.router import _engine as _checks_engine
+
+    check_targets: dict[str, set[str]] = {}
+    for check_def in _checks:
+        if not check_def.enabled:
+            continue
+        check_targets[check_def.slug] = _resolve_targets_sync(check_def.targets, repo_names)
+
+    results_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
+    if _checks_engine is not None and _checks:
+        async with AsyncSession(_checks_engine) as session:
+            result = await session.execute(_LATEST_RESULTS_SQL)
+            rows = result.all()
+        for row in rows:
+            key = (row[2], row[3], row[4])  # check_slug, repo_full_name, branch
+            results_by_key[key] = {
+                "id": row[0],
+                "check_name": row[1],
+                "check_slug": row[2],
+                "passed": bool(row[5]),
+                "timestamp": row[6],
+            }
+
+    return check_targets, results_by_key
+
+
+def _build_checks_for_repo(
+    full_name: str,
+    branches: list[str],
+    check_targets: dict[str, set[str]],
+    results_by_key: dict[tuple[str, str, str], dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], int]:
+    """Build checks_by_branch and count failures for a single repo."""
+    from grimoire.checks.router import _checks
+
+    checks_by_branch: dict[str, list[dict[str, Any]]] = {}
+    check_failures = 0
+    for check_def in _checks:
+        if not check_def.enabled:
+            continue
+        applies = full_name in check_targets.get(check_def.slug, set())
+        for branch in branches:
+            key = (check_def.slug, full_name, branch)
+            result = results_by_key.get(key)
+            if result:
+                entry = {
+                    "check_name": check_def.name,
+                    "check_slug": check_def.slug,
+                    "passed": result["passed"],
+                    "status": "pass" if result["passed"] else "fail",
+                    "id": result["id"],
+                    "timestamp": result["timestamp"],
+                }
+                if not result["passed"]:
+                    check_failures += 1
+            elif applies:
+                entry = {
+                    "check_name": check_def.name,
+                    "check_slug": check_def.slug,
+                    "passed": None,
+                    "status": "not-run",
+                    "id": None,
+                    "timestamp": None,
+                }
+            else:
+                continue
+            checks_by_branch.setdefault(branch, []).append(entry)
+    return checks_by_branch, check_failures
+
+
+async def _build_repo_viewmodels() -> list[RepoViewModel]:
+    """Build view models from the in-memory GitHub cache + checks state."""
     from grimoire.github.router import _cache, _repos
+
+    repo_names = list(_cache.keys())
+    check_targets, results_by_key = await _load_check_context(repo_names)
 
     viewmodels: list[RepoViewModel] = []
     for full_name, stats in _cache.items():
@@ -199,14 +321,10 @@ def _build_repo_viewmodels() -> list[RepoViewModel]:
         # Count workflow failures
         workflow_failures = sum(1 for w in stats.workflows if w.status == "failure")
 
-        # Build check results from the in-memory check definitions
-        checks_by_branch: dict[str, list[dict[str, Any]]] = {}
-        check_failures = 0
-        for check_def in _checks:
-            # Check definitions don't carry latest results directly;
-            # the DB holds results. For the dashboard, we skip DB queries
-            # and show checks only if we have cached data.
-            pass
+        # Build check results
+        checks_by_branch, check_failures = _build_checks_for_repo(
+            full_name, branches, check_targets, results_by_key
+        )
 
         viewmodels.append(
             RepoViewModel(
@@ -241,7 +359,7 @@ async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> H
     """Dashboard page — lists all tracked repositories."""
     from grimoire.github.router import _last_refresh
 
-    repos = _build_repo_viewmodels()
+    repos = await _build_repo_viewmodels()
     repos = _sort_repos(repos, sort, dir)
     totals = _compute_totals(repos)
 
@@ -297,7 +415,10 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
 
     workflow_failures = sum(1 for w in stats.workflows if w.status == "failure")
 
-    checks_by_branch: dict[str, list[dict[str, Any]]] = {}
+    check_targets, results_by_key = await _load_check_context([full_name])
+    checks_by_branch, check_failures = _build_checks_for_repo(
+        full_name, branches, check_targets, results_by_key
+    )
 
     return templates.TemplateResponse(
         request,
@@ -310,6 +431,7 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
             "workflows_by_branch": workflows_by_branch,
             "checks_by_branch": checks_by_branch,
             "workflow_failures": workflow_failures,
+            "check_failures": check_failures,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
         },
@@ -346,9 +468,9 @@ async def actions_page(request: Request) -> HTMLResponse:
 # ---------------------------------------------------------------------------
 
 
-def _build_sorted_repos(sort: str, direction: str) -> list[RepoViewModel]:
+async def _build_sorted_repos(sort: str, direction: str) -> list[RepoViewModel]:
     """Build and sort repo view models (shared by all dashboard partials)."""
-    repos = _build_repo_viewmodels()
+    repos = await _build_repo_viewmodels()
     return _sort_repos(repos, sort, direction)
 
 
@@ -357,7 +479,7 @@ async def dashboard_cards_partial(
     request: Request, sort: str = "name", dir: str = "asc"
 ) -> HTMLResponse:
     """Return the repo cards grid for HTMX swap."""
-    repos = _build_sorted_repos(sort, dir)
+    repos = await _build_sorted_repos(sort, dir)
     return templates.TemplateResponse(
         request,
         "partials/dashboard_cards.html",
@@ -374,7 +496,7 @@ async def dashboard_list_partial(
     request: Request, sort: str = "name", dir: str = "asc"
 ) -> HTMLResponse:
     """Return the compact list view for HTMX swap."""
-    repos = _build_sorted_repos(sort, dir)
+    repos = await _build_sorted_repos(sort, dir)
     return templates.TemplateResponse(
         request,
         "partials/dashboard_list.html",
@@ -391,7 +513,7 @@ async def dashboard_table_partial(
     request: Request, sort: str = "name", dir: str = "asc"
 ) -> HTMLResponse:
     """Return the data table view for HTMX swap."""
-    repos = _build_sorted_repos(sort, dir)
+    repos = await _build_sorted_repos(sort, dir)
     return templates.TemplateResponse(
         request,
         "partials/dashboard_table.html",
@@ -421,11 +543,24 @@ async def action_run_partial(request: Request, run_id: int) -> HTMLResponse:
 @router.get("/partials/check-output/{result_id}", response_class=HTMLResponse)
 async def check_output_partial(request: Request, result_id: int) -> HTMLResponse:
     """Return expanded check output."""
+    from grimoire.checks.router import _engine as _checks_engine
+
+    output = ""
+    if _checks_engine is not None:
+        async with AsyncSession(_checks_engine) as session:
+            result = await session.execute(
+                text("SELECT output FROM check_result WHERE id = :id"),
+                params={"id": result_id},
+            )
+            row = result.first()
+            if row:
+                output = row[0]
+
     return templates.TemplateResponse(
         request,
         "partials/check_output.html",
         context={
             "result_id": result_id,
-            "output": "",
+            "output": output,
         },
     )

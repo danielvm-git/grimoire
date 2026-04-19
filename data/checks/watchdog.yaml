@@ -1,0 +1,5 @@
+name: "Watchdog"
+description: "Always-green sentinel check — verifies that checks are running and visible in the UI"
+targets:
+  regex: ".*"
+script: "exit 0"

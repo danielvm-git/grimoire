@@ -362,11 +362,21 @@ async def refresh_all_stats(
     config: GrimoireConfig, client: GitHubClient
 ) -> tuple[list[TrackedRepository], list[RepositoryStats]]:
     """Resolve repos, fetch stats concurrently, persist to DB, return results."""
+    # Load previous data so 304 (Not Modified) responses preserve old values
+    cached_repos, old_stats_list = await load_stats_from_db(client._engine)
+    old_stats_map = {s.full_name: s for s in old_stats_list}
+
     repos = await resolve_repositories(config, client)
 
-    # Load previous stats so 304 (Not Modified) responses preserve old values
-    _, old_stats_list = await load_stats_from_db(client._engine)
-    old_stats_map = {s.full_name: s for s in old_stats_list}
+    # When the GitHub API returns 304 for repo resolution (ETag cache hit),
+    # resolve_repositories returns an empty list because the paginated response
+    # is None.  Fall back to the DB-cached repo list so we don't lose data.
+    if not repos and cached_repos:
+        logger.info(
+            "Repo resolution returned no results (likely 304 cache hit), reusing %d cached repos",
+            len(cached_repos),
+        )
+        repos = cached_repos
 
     sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
 

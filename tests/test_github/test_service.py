@@ -29,6 +29,7 @@ from grimoire.github.client import GitHubClient
 from grimoire.github.service import (
     fetch_repository_stats,
     load_stats_from_db,
+    refresh_all_stats,
     resolve_repositories,
     save_stats_to_db,
 )
@@ -354,3 +355,58 @@ async def test_save_replaces_old_data(engine: AsyncEngine) -> None:
     async with AsyncSession(engine) as session:
         cached = (await session.exec(select(CachedRepository))).all()
         assert len(cached) == 1
+
+
+# ---------------------------------------------------------------------------
+# refresh_all_stats — 304 fallback
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_refresh_falls_back_to_cache_on_304(
+    client: GitHubClient, engine: AsyncEngine
+) -> None:
+    """When repo resolution returns nothing (all 304s), cached repos are used."""
+    # Pre-populate the DB with cached data
+    repos = [TrackedRepository(full_name="myorg/svc", default_branch="main", branches=["main"])]
+    now = datetime.now(UTC)
+    stats_list = [
+        RepositoryStats(
+            full_name="myorg/svc",
+            default_branch="main",
+            open_issues=3,
+            fetched_at=now,
+        )
+    ]
+    await save_stats_to_db(engine, stats_list, repos)
+
+    # Mock team endpoint returning 304 (ETag hit)
+    respx.get("https://api.github.com/orgs/myorg/teams/backend/repos").mock(
+        return_value=httpx.Response(
+            304,
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+
+    # Mock the per-repo endpoints (also 304)
+    for pattern in [
+        "/repos/myorg/svc/issues",
+        "/repos/myorg/svc/pulls",
+        "/repos/myorg/svc/actions/workflows",
+        "/repos/myorg/svc/branches/main",
+        "/repos/myorg/svc/branches",
+    ]:
+        respx.get(f"https://api.github.com{pattern}").mock(
+            return_value=httpx.Response(
+                304,
+                headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+            )
+        )
+
+    config = _make_config(repos=[TeamRepoSource(team="myorg/backend")])
+    result_repos, result_stats = await refresh_all_stats(config, client)
+
+    # Should fall back to cached repos rather than returning empty
+    assert len(result_repos) == 1
+    assert result_repos[0].full_name == "myorg/svc"
+    assert len(result_stats) == 1

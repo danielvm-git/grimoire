@@ -46,6 +46,19 @@
         {% endfor %}
     </div>
 
+    {# ── Checks ── #}
+    {% if repo.checks_by_branch %}
+    <div class="flex items-center gap-1.5 flex-shrink-0">
+        {% for branch, checks in repo.checks_by_branch.items() %}
+            {% for chk in checks %}
+            <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }} ({{ branch }}): {{ chk.status }}">
+                <span class="dot dot-{{ chk.status }}"></span>
+            </div>
+            {% endfor %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {# ── Last Activity ── #}
     <div class="text-sm opacity-60 flex-shrink-0 w-20 text-right">
         {% if repo.last_commit_at %}

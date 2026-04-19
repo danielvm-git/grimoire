@@ -20,6 +20,7 @@
                 PRs {% if sort == 'prs' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
             </th>
             <th class="text-center">Workflows</th>
+            <th class="text-center">Checks</th>
             <th class="cursor-pointer hover:text-primary text-right"
                 hx-get="{{ hx_base }}?sort=last_activity&dir={% if sort == 'last_activity' %}{{ next_dir }}{% else %}desc{% endif %}"
                 hx-target="#repo-grid" hx-swap="innerHTML">
@@ -73,6 +74,21 @@
                         {% endfor %}
                     {% endfor %}
                 </div>
+            </td>
+
+            {# ── Checks ── #}
+            <td class="text-center">
+                {% if repo.checks_by_branch %}
+                <div class="flex items-center justify-center gap-1">
+                    {% for branch, checks in repo.checks_by_branch.items() %}
+                        {% for chk in checks %}
+                        <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }} ({{ branch }}): {{ chk.status }}">
+                            <span class="dot dot-{{ chk.status }}"></span>
+                        </div>
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+                {% endif %}
             </td>
 
             {# ── Last Activity ── #}
