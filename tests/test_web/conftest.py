@@ -7,8 +7,11 @@ from typing import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.app import create_app
+from grimoire.checks.loader import CheckDefinition
+from grimoire.database import CheckResultRecord, create_tables, get_engine
 from grimoire.github.router import update_cache
 from grimoire.models import (
     IssueDetail,
@@ -17,6 +20,7 @@ from grimoire.models import (
     TrackedRepository,
     WorkflowStatus,
 )
+from grimoire.targeting import TargetSpec
 
 
 def _populate_cache() -> None:
@@ -140,3 +144,83 @@ async def web_client() -> AsyncIterator[AsyncClient]:
     _actions.extend(saved_actions)
     _checks.clear()
     _checks.extend(saved_checks)
+
+
+@pytest.fixture
+async def web_client_with_checks(tmp_path: object) -> AsyncIterator[AsyncClient]:
+    """Provide an async HTTP client with check definitions and DB results."""
+    import grimoire.checks.router as checks_router
+    from grimoire.actions.router import _actions
+
+    # Save state
+    saved_actions = _actions[:]
+    saved_checks = checks_router._checks[:]
+    saved_engine = checks_router._engine
+
+    _actions.clear()
+    checks_router._checks.clear()
+
+    _populate_cache()
+
+    # Create a temp DB with check result tables
+    engine = await get_engine(str(tmp_path) + "/test.db")  # type: ignore[arg-type]
+    await create_tables(engine)
+
+    # Set up check definitions
+    watchdog = CheckDefinition(
+        name="Watchdog",
+        slug="watchdog",
+        description="Always green sentinel",
+        targets=TargetSpec(regex=".*"),
+        script="exit 0",
+    )
+    operator_check = CheckDefinition(
+        name="Charm Libraries",
+        slug="charm-libs",
+        description="Check charm libs",
+        targets=TargetSpec(regex="-operator$"),
+        script="exit 0",
+    )
+    checks_router._checks.extend([watchdog, operator_check])
+    checks_router._engine = engine
+
+    # Insert check results
+    async with AsyncSession(engine) as session:
+        # Watchdog passed for acme/api
+        session.add(
+            CheckResultRecord(
+                check_slug="watchdog",
+                check_name="Watchdog",
+                repo_full_name="acme/api",
+                branch="main",
+                passed=True,
+                output="OK",
+                timestamp=datetime(2026, 4, 10, tzinfo=timezone.utc),
+            )
+        )
+        # Watchdog failed for acme/frontend main
+        session.add(
+            CheckResultRecord(
+                check_slug="watchdog",
+                check_name="Watchdog",
+                repo_full_name="acme/frontend",
+                branch="main",
+                passed=False,
+                output="Something went wrong",
+                timestamp=datetime(2026, 4, 10, tzinfo=timezone.utc),
+            )
+        )
+        await session.commit()
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    # Restore state
+    _actions.clear()
+    _actions.extend(saved_actions)
+    checks_router._checks.clear()
+    checks_router._checks.extend(saved_checks)
+    checks_router._engine = saved_engine
+    await engine.dispose()

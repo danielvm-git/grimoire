@@ -84,8 +84,8 @@
                 <span class="text-xs opacity-50 w-20 truncate" title="{{ branch }}">{{ branch }}</span>
                 {% endif %}
                 {% for chk in checks %}
-                <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }}: {{ 'pass' if chk.passed else 'fail' }}">
-                    <span class="dot dot-{{ 'pass' if chk.passed else 'fail' }}"></span>
+                <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }}: {{ chk.status }}">
+                    <span class="dot dot-{{ chk.status }}"></span>
                 </div>
                 {% endfor %}
             </div>

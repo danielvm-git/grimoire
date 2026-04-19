@@ -34,7 +34,7 @@ from grimoire.github.router import (
 from grimoire.github.router import (
     router as repos_router,
 )
-from grimoire.github.service import refresh_all_stats
+from grimoire.github.service import load_stats_from_db, refresh_all_stats
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import router as metrics_router
 from grimoire.web.router import router as web_router
@@ -76,8 +76,16 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         update_cache(repos, stats)
         logger.info("Initial refresh complete — %d repositories loaded", len(repos))
     except Exception:
-        logger.exception("Initial data refresh failed")
+        logger.exception("Initial data refresh failed — falling back to cached data")
         repos, stats = [], []
+        try:
+            cached_repos, cached_stats = await load_stats_from_db(engine)
+            if cached_repos:
+                update_cache(cached_repos, cached_stats)
+                repos = cached_repos
+                logger.info("Loaded %d repositories from cache", len(cached_repos))
+        except Exception:
+            logger.exception("Failed to load cached data from database")
 
     # Workspace manager
     workspace = WorkspaceManager(config)

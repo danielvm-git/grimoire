@@ -91,3 +91,30 @@ class TestLoadChecks:
             )
         checks = load_checks(tmp_path)
         assert [c.slug for c in checks] == ["alpha-check", "beta-check"]
+
+
+class TestBundledCheckDefinitions:
+    """Validate the YAML check definitions shipped in data/checks/."""
+
+    @staticmethod
+    def _data_dir() -> Path:
+        return Path(__file__).resolve().parents[2] / "data"
+
+    def test_watchdog_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        watchdog = next((c for c in checks if c.slug == "watchdog"), None)
+        assert watchdog is not None
+        assert watchdog.name == "Watchdog"
+        assert watchdog.targets.regex == ".*"
+        assert watchdog.schedule is None
+        assert watchdog.enabled is True
+
+    def test_charmcraft_fetch_lib_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        charm = next((c for c in checks if c.slug == "charmcraft-fetch-lib"), None)
+        assert charm is not None
+        assert charm.name == "Charm Libraries up-to-date"
+        assert charm.targets.regex == "-operator$"
+        assert "charmcraft fetch-lib" in charm.script
+        assert charm.schedule is None
+        assert charm.enabled is True

@@ -134,7 +134,20 @@ async def run_check_for_all_targets(
 - On timeout, kill the process and record as failure with "Timed out" in output.
 - **Output size cap:** Store at most 64KB of output. If exceeded, keep the last 64KB and prepend `"[output truncated — showing last 64KB]\n"`.
 
-## 4.5 — Check Scheduling
+## 4.5 — External Tool Dependencies
+
+Check scripts may require tools not bundled in the base Docker image (e.g., `charmcraft`, Go binaries, custom CLIs). These are installed via a user-provided **setup script**:
+
+- Place a `setup.sh` in the `data/` directory (alongside `checks/` and `actions/`).
+- The Docker entrypoint runs `data/setup.sh` on every container start, before grimoire launches.
+- The script can use any installation method: `pip install`, `go install`, `wget` + `chmod`, `apt-get install`, etc.
+- Commands should be idempotent (safe to re-run on each restart).
+
+For non-Docker deployments, install tools directly on the host (e.g., `sudo snap install charmcraft --classic`).
+
+See Module 7 (`docker-entrypoint.sh`) for implementation details.
+
+## 4.6 — Check Scheduling
 
 **File:** `src/grimoire/checks/scheduler.py`
 
@@ -144,7 +157,7 @@ async def run_check_for_all_targets(
 - Toggling a check on/off adds/removes it from the scheduler and updates `CheckToggleRecord` in the DB.
 - Toggle state persists across restarts (read from DB on startup).
 
-## 4.6 — Check REST API
+## 4.7 — Check REST API
 
 **File:** `src/grimoire/checks/router.py`
 

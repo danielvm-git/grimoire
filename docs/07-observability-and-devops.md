@@ -167,6 +167,7 @@ RUN uv sync --no-dev --frozen
 
 # Copy application
 COPY src/ src/
+COPY docker-entrypoint.sh /usr/local/bin/
 COPY config.yaml.example ./
 
 EXPOSE 8000
@@ -174,8 +175,37 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["uv", "run", "uvicorn", "grimoire.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 ```
+
+### `docker-entrypoint.sh`
+
+The entrypoint script runs a user-provided setup script before starting the application. This is the generic mechanism for installing external tools needed by checks or actions (e.g., `charmcraft`, Go binaries, downloaded CLIs):
+
+```sh
+#!/bin/sh
+set -e
+
+# Run user-provided setup script if it exists (install external tools, etc.)
+if [ -f /app/data/setup.sh ]; then
+    echo "Running data/setup.sh ..."
+    sh /app/data/setup.sh
+fi
+
+exec "$@"
+```
+
+Users place a `setup.sh` in their `data/` directory alongside check and action definitions. The script can use any installation method:
+
+```sh
+# data/setup.sh — example
+pip install --no-cache-dir charmcraft
+go install github.com/some/tool@latest
+wget -qO /usr/local/bin/mytool https://example.com/mytool && chmod +x /usr/local/bin/mytool
+```
+
+The script runs on every container start, so commands should be idempotent.
 
 ### `.dockerignore`
 

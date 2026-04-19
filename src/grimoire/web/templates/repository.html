@@ -230,7 +230,14 @@
 {% if checks_by_branch %}
 <div class="card bg-base-100 shadow mb-6">
     <div class="card-body">
-        <h2 class="card-title text-lg">Checks</h2>
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="card-title text-lg">Checks</h2>
+            {% if check_failures %}
+            <span class="badge badge-error font-mono-nums">{{ check_failures }} failing</span>
+            {% else %}
+            <span class="badge badge-success">All passing</span>
+            {% endif %}
+        </div>
 
         {% for branch, checks in checks_by_branch.items() %}
         <details class="collapse collapse-arrow bg-base-200 rounded-box mb-2" {% if loop.first %}open{% endif %}>
@@ -239,7 +246,7 @@
                     {{ branch }}
                     <span class="flex gap-1 ml-2">
                         {% for chk in checks %}
-                        <span class="dot dot-{{ 'pass' if chk.passed else 'fail' }}" style="width:10px;height:10px"></span>
+                        <span class="dot dot-{{ chk.status }}" style="width:10px;height:10px"></span>
                         {% endfor %}
                     </span>
                 </span>
@@ -251,14 +258,16 @@
                         {% for chk in checks %}
                         <tr>
                             <td class="flex items-center gap-2">
-                                <span class="dot dot-{{ 'pass' if chk.passed else 'fail' }}"></span>
+                                <span class="dot dot-{{ chk.status }}"></span>
                                 <div>
                                     <div class="font-medium">{{ chk.check_name }}</div>
-                                    {% if chk.description %}<div class="text-xs opacity-50">{{ chk.description }}</div>{% endif %}
                                 </div>
                             </td>
-                            <td class="text-sm">{{ 'Passed' if chk.passed else 'Failed' }}</td>
+                            <td class="text-sm">
+                                {% if chk.status == 'pass' %}Passed{% elif chk.status == 'fail' %}Failed{% else %}Not run{% endif %}
+                            </td>
                             <td class="text-right">
+                                {% if chk.id %}
                                 <button class="btn btn-ghost btn-xs"
                                         hx-get="/partials/check-output/{{ chk.id }}"
                                         hx-target="#check-output-{{ chk.id }}"
@@ -266,6 +275,7 @@
                                     Output
                                 </button>
                                 <div id="check-output-{{ chk.id }}"></div>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
