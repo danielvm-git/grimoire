@@ -245,7 +245,55 @@ Clicking "Details" expands the run inline (HTMX partial):
 
 HTMX partial endpoint: `GET /partials/action-run/{run_id}`
 
-## 6.5 — Styling
+## 6.5 — Checks Page
+
+**Route:** `GET /checks`
+**Template:** `templates/checks.html`
+
+### Layout
+
+**Section 1: Check Definitions**
+
+A card grid (same layout as Actions) for each defined check:
+
+| Element | Content |
+|---------|---------|
+| **Name** | Check name (e.g., "Watchdog") |
+| **Description** | One-line description |
+| **Schedule badge** | Cron expression or "default interval" |
+| **Target badge** | Pattern summary — e.g., `regex: .*` or `list: 3 repos` |
+| **Enabled toggle** | HTMX toggle (`POST /api/checks/{slug}/toggle`) with visual on/off state |
+| **Run button** | Trigger check (`POST /api/checks/{slug}/run`) |
+| **Script preview** | Collapsible `<pre>` block showing the check script |
+| **Result summary** | Pass/fail counts from latest run, last run timestamp |
+
+```html
+<button hx-post="/api/checks/{slug}/toggle"
+        hx-swap="none"
+        hx-on::after-request="...">
+  Toggle
+</button>
+<button hx-post="/api/checks/{slug}/run"
+        hx-swap="none"
+        hx-on::after-request="...">
+  Run
+</button>
+```
+
+Disabled checks are visually dimmed (reduced opacity) and show a "Disabled" badge.
+
+**Section 2: Latest Results**
+
+Table showing the most recent result for each check × repo × branch:
+
+| Check | Repository | Branch | Status | Last Run | Output |
+|-------|-----------|--------|--------|----------|--------|
+
+Status column uses the same dot colors as the dashboard (🟢 pass, 🔴 fail). Output column has an expandable button using HTMX (`GET /partials/check-output/{result_id}`).
+
+Results can also be expanded per-check inline from the check card via `GET /partials/check-results/{slug}`.
+
+## 6.6 — Styling
 
 **Framework:** Tailwind CSS (via CDN for development, standalone CLI for production build) + DaisyUI for component classes.
 
@@ -261,8 +309,9 @@ HTMX partial endpoint: `GET /partials/action-run/{run_id}`
 - `dashboard.html` extends `base.html`.
 - `repository.html` extends `base.html`.
 - `actions.html` extends `base.html`.
+- `checks.html` extends `base.html`.
 
-## 6.6 — HTMX Partial Endpoints
+## 6.7 — HTMX Partial Endpoints
 
 These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 
@@ -273,8 +322,9 @@ These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 | `GET /partials/dashboard-table?sort=...&dir=...` | Table view: data table |
 | `GET /partials/action-run/{run_id}` | Expanded action run details |
 | `GET /partials/check-output/{result_id}` | Expanded check output text |
+| `GET /partials/check-results/{slug}` | Per-check latest results table |
 
-## 6.7 — Empty States
+## 6.8 — Empty States
 
 Every section must render a helpful message when there's no data:
 
@@ -282,7 +332,8 @@ Every section must render a helpful message when there's no data:
 |-----------|---------|
 | No repos configured | "No repositories configured — edit `config.yaml` to get started." |
 | First startup, no cache | Dashboard shows repos with "Loading..." spinners; data populates as the first refresh completes. |
-| No checks defined | Checks column on dashboard is hidden. Repo detail shows "No checks defined." |
+| No checks defined | Checks column on dashboard is hidden. Repo detail shows "No checks defined." Checks page shows "No checks configured — add YAML files to `data/checks/`." |
+| No check results yet | Checks page result history shows "No check results yet." |
 | No actions exist | Actions page shows "No actions defined — add YAML files to `data/actions/`." |
 | No action runs yet | Run history section shows "No runs yet." |
 | Repo has warnings | Amber ⚠ with hover text; never an empty row. |

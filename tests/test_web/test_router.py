@@ -313,3 +313,86 @@ class TestCheckDisplay:
         assert resp.status_code == 200
         assert "Checks" in resp.text
         assert "1 failing" in resp.text
+
+
+class TestChecksPage:
+    """Tests for GET /checks route."""
+
+    async def test_checks_returns_html(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/checks")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers.get("content-type", "")
+
+    async def test_checks_shows_empty_state(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/checks")
+        assert "No checks configured" in resp.text
+        assert "data/checks/" in resp.text
+
+    async def test_checks_shows_check_definitions(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert resp.status_code == 200
+        assert "Watchdog" in resp.text
+        assert "Charm Libraries" in resp.text
+
+    async def test_checks_shows_descriptions(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert "Always green sentinel" in resp.text
+        assert "Check charm libs" in resp.text
+
+    async def test_checks_shows_target_summaries(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert "regex: .*" in resp.text
+        assert "regex: -operator$" in resp.text
+
+    async def test_checks_shows_toggle_buttons(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert "/api/checks/watchdog/toggle" in resp.text
+        assert "/api/checks/charm-libs/toggle" in resp.text
+
+    async def test_checks_shows_run_buttons(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert "/api/checks/watchdog/run" in resp.text
+        assert "/api/checks/charm-libs/run" in resp.text
+
+    async def test_checks_shows_result_counts(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        # Watchdog has 1 pass + 1 fail from fixture data
+        assert "1 passed" in resp.text
+        assert "1 failed" in resp.text
+
+    async def test_checks_shows_result_history(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert "Latest Results" in resp.text
+        assert "acme/api" in resp.text
+        assert "acme/frontend" in resp.text
+
+    async def test_checks_empty_results_message(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/checks")
+        assert "No check results yet" in resp.text
+
+    async def test_checks_shows_script_preview(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert "exit 0" in resp.text
+
+    async def test_checks_navbar_active(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/checks")
+        assert "Checks" in resp.text
+
+
+class TestCheckResultsPartial:
+    """Tests for GET /partials/check-results/{slug} route."""
+
+    async def test_returns_results_for_slug(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/partials/check-results/watchdog")
+        assert resp.status_code == 200
+        assert "acme/api" in resp.text
+        assert "acme/frontend" in resp.text
+
+    async def test_empty_when_no_results(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/partials/check-results/charm-libs")
+        assert resp.status_code == 200
+        assert "No results for this check" in resp.text
