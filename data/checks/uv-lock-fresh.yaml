@@ -9,7 +9,7 @@ script: |
   for lockfile in $(find . -name 'uv.lock' -type f); do
     dir="$(dirname "$lockfile")"
     echo "Checking $lockfile ..."
-    (cd "$dir" && uv lock)
+    (cd "$dir" && uv lock --upgrade --no-cache)
   done
   changes="$(git diff --name-only -- '*/uv.lock' 'uv.lock')"
   if [ -n "$changes" ]; then
