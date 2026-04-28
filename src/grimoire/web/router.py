@@ -142,6 +142,7 @@ class CheckViewModel:
     enabled: bool
     target_summary: str
     script: str
+    severity: str = "error"
     pass_count: int = 0
     fail_count: int = 0
     last_run: datetime | str | None = None
@@ -549,6 +550,7 @@ async def checks_page(request: Request) -> HTMLResponse:
                 enabled=c.enabled,
                 target_summary=target_summary,
                 script=c.script,
+                severity=c.severity,
                 pass_count=stats.get("pass", 0),
                 fail_count=stats.get("fail", 0),
                 last_run=stats.get("last_run"),
