@@ -33,11 +33,16 @@ async def run_check(
     engine: AsyncEngine,
 ) -> CheckResult:
     """Run a single check script against a repo+branch and persist the result."""
-    workdir = await workspace.reset_workdir(repo.full_name, branch)
-    env = {**os.environ, **workspace.get_env()}
-
     passed = False
     output = ""
+
+    try:
+        workdir = await workspace.reset_workdir(repo.full_name, branch)
+    except Exception as exc:
+        output = f"Workspace setup failed: {exc}"
+        return await _persist_result(check, repo, branch, passed, output, engine)
+
+    env = {**os.environ, **workspace.get_env()}
 
     proc: asyncio.subprocess.Process | None = None
     try:
@@ -65,6 +70,18 @@ async def run_check(
     if len(output) > OUTPUT_SIZE_CAP:
         output = "[output truncated — showing last 64KB]\n" + output[-OUTPUT_SIZE_CAP:]
 
+    return await _persist_result(check, repo, branch, passed, output, engine)
+
+
+async def _persist_result(
+    check: CheckDefinition,
+    repo: TrackedRepository,
+    branch: str,
+    passed: bool,
+    output: str,
+    engine: AsyncEngine,
+) -> CheckResult:
+    """Create a CheckResult, persist it to the database, and return it."""
     now = datetime.now(timezone.utc)
     result = CheckResult(
         check_name=check.name,
@@ -76,7 +93,6 @@ async def run_check(
         timestamp=now,
     )
 
-    # Persist to database
     record = CheckResultRecord(
         check_slug=check.slug,
         check_name=check.name,
