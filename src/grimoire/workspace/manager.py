@@ -28,6 +28,9 @@ class WorkspaceManager:
 
     def __init__(self, config: GrimoireConfig) -> None:
         self._config = config
+        # Resolve to absolute so paths passed to git subprocesses (which may
+        # have a different cwd) are always correct.
+        self._workspace_dir = config.workspace_dir.resolve()
         self._repo_locks: dict[str, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------
@@ -88,7 +91,7 @@ class WorkspaceManager:
     def get_workdir(self, full_name: str, branch: str) -> Path:
         """Return the worktree path for *full_name*/*branch*."""
         owner, repo = full_name.split("/", 1)
-        return self._config.workspace_dir / owner / repo / branch
+        return self._workspace_dir / owner / repo / branch
 
     def get_env(self) -> dict[str, str]:
         """Return environment variables for git/gh sub-processes."""
@@ -117,7 +120,7 @@ class WorkspaceManager:
 
     def _bare_dir(self, full_name: str) -> Path:
         owner, repo = full_name.split("/", 1)
-        return self._config.workspace_dir / owner / repo / ".bare"
+        return self._workspace_dir / owner / repo / ".bare"
 
     def _clone_url(self, full_name: str) -> str:
         token = self._config.github.token
