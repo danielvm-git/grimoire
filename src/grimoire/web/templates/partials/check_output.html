@@ -1,5 +1,5 @@
-{% if output %}
+{% if output and output.strip() %}
 <pre class="text-xs whitespace-pre-wrap bg-neutral text-neutral-content p-3 rounded-box mt-2 max-h-64 overflow-y-auto font-mono">{{ output }}</pre>
 {% else %}
-<pre class="text-xs whitespace-pre-wrap bg-neutral text-neutral-content p-3 rounded-box mt-2 max-h-64 overflow-y-auto font-mono opacity-50">Check completed with no output.</pre>
+<pre class="text-xs whitespace-pre-wrap bg-neutral text-neutral-content p-3 rounded-box mt-2 max-h-64 overflow-y-auto font-mono opacity-50">Script produced no stdout/stderr output.</pre>
 {% endif %}
