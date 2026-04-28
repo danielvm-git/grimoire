@@ -90,7 +90,8 @@
         <span class="text-sm opacity-60">Sort by:</span>
         {% for key, label in sort_labels.items() %}
         <button class="btn btn-xs {% if sort == key %}btn-primary{% else %}btn-ghost{% endif %} sort-btn"
-                data-sort="{{ key }}" data-dir="{% if sort == key and dir == 'asc' %}desc{% else %}asc{% endif %}"
+                data-sort="{{ key }}" data-label="{{ label }}"
+                data-dir="{% if sort == key and dir == 'asc' %}desc{% else %}asc{% endif %}"
                 onclick="loadView(this.dataset.sort, this.dataset.dir)">
             {{ label }}
             {% if sort == key %}
@@ -148,6 +149,19 @@
         });
     }
 
+    function updateSortButtons() {
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            const isActive = btn.dataset.sort === currentSort;
+            btn.classList.toggle('btn-primary', isActive);
+            btn.classList.toggle('btn-ghost', !isActive);
+            // Update data-dir: if this is the active button, next click inverts; otherwise default asc
+            btn.dataset.dir = isActive ? (currentDir === 'asc' ? 'desc' : 'asc') : 'asc';
+            // Update arrow indicator
+            const label = btn.dataset.label;
+            btn.textContent = label + (isActive ? (currentDir === 'asc' ? ' ▲' : ' ▼') : '');
+        });
+    }
+
     function fetchView() {
         const url = VIEW_PARTIALS[currentView] + '?sort=' + currentSort + '&dir=' + currentDir;
         htmx.ajax('GET', url, '#repo-grid');
@@ -162,8 +176,14 @@
     }
 
     function loadView(sort, dir) {
-        currentSort = sort;
-        currentDir = dir;
+        // If clicking the same sort key, toggle direction
+        if (sort === currentSort) {
+            currentDir = currentDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            currentSort = sort;
+            currentDir = dir;
+        }
+        updateSortButtons();
         fetchView();
     }
 
