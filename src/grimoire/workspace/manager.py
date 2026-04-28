@@ -28,10 +28,17 @@ class WorkspaceManager:
 
     def __init__(self, config: GrimoireConfig) -> None:
         self._config = config
+        self._repo_locks: dict[str, asyncio.Lock] = {}
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def _repo_lock(self, full_name: str) -> asyncio.Lock:
+        """Return a per-repo lock, creating it on first access."""
+        if full_name not in self._repo_locks:
+            self._repo_locks[full_name] = asyncio.Lock()
+        return self._repo_locks[full_name]
 
     async def setup(self, repos: list[TrackedRepository]) -> None:
         """Clone/update all repos and configure git identity in each."""
@@ -63,12 +70,15 @@ class WorkspaceManager:
         workdir = self.get_workdir(full_name, branch)
         bare_dir = self._bare_dir(full_name)
 
-        if not bare_dir.exists():
-            await self._clone_bare(full_name)
-            await self._configure_identity(bare_dir)
+        # Serialize clone + worktree creation per repo to prevent races when
+        # multiple branches of the same repo are set up concurrently.
+        async with self._repo_lock(full_name):
+            if not bare_dir.exists():
+                await self._clone_bare(full_name)
+                await self._configure_identity(bare_dir)
 
-        if not workdir.exists():
-            await self._ensure_worktree(full_name, branch, bare_dir)
+            if not workdir.exists():
+                await self._ensure_worktree(full_name, branch, bare_dir)
 
         await self._run_git("checkout", branch, cwd=workdir)
         await self._run_git("reset", "--hard", f"origin/{branch}", cwd=workdir)
