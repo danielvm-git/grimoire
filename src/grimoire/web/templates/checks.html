@@ -47,21 +47,23 @@
                 {# Right: schedule, toggle, run button #}
                 <div class="flex items-center gap-3 shrink-0">
                     <span class="text-xs opacity-40 whitespace-nowrap">
-                        {% if chk.schedule %}⏱ {{ chk.schedule }}{% else %}⏱ default{% endif %}
+                        <i class="fa-regular fa-clock"></i> Scheduled: {% if chk.schedule %}{{ chk.schedule }}{% else %}default{% endif %}
                     </span>
-                    <label class="swap swap-rotate">
-                        <input type="checkbox" {% if chk.enabled %}checked{% endif %}
-                               hx-post="/api/checks/{{ chk.slug }}/toggle"
-                               hx-swap="none"
-                               hx-on::after-request="if(event.detail.successful) { location.reload(); } else { showToast('Toggle failed', 'error'); }" />
-                        <span class="swap-on text-sm text-success">●</span>
-                        <span class="swap-off text-sm text-warning">○</span>
-                    </label>
+                    <button class="btn btn-sm {% if chk.enabled %}btn-outline btn-warning{% else %}btn-outline btn-success{% endif %} gap-1"
+                            hx-post="/api/checks/{{ chk.slug }}/toggle"
+                            hx-swap="none"
+                            hx-on::after-request="if(event.detail.successful) { location.reload(); } else { showToast('Toggle failed', 'error'); }">
+                        {% if chk.enabled %}
+                        <i class="fa-solid fa-pause text-xs"></i> Disable
+                        {% else %}
+                        <i class="fa-solid fa-play text-xs"></i> Enable
+                        {% endif %}
+                    </button>
                     <button class="btn btn-primary btn-sm gap-1"
                             hx-post="/api/checks/{{ chk.slug }}/run"
                             hx-swap="none"
                             hx-on::after-request="if(event.detail.successful) { showToast('Check triggered', 'success'); setTimeout(() => location.reload(), 1500); } else { showToast('Failed to trigger check', 'error'); }">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+                        <i class="fa-solid fa-play text-xs"></i>
                         <span class="btn-label">Run</span>
                         <span class="htmx-indicator loading loading-spinner loading-xs"></span>
                     </button>
