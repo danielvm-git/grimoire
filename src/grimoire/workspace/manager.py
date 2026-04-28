@@ -63,6 +63,10 @@ class WorkspaceManager:
         workdir = self.get_workdir(full_name, branch)
         bare_dir = self._bare_dir(full_name)
 
+        if not bare_dir.exists():
+            await self._clone_bare(full_name)
+            await self._configure_identity(bare_dir)
+
         if not workdir.exists():
             await self._ensure_worktree(full_name, branch, bare_dir)
 

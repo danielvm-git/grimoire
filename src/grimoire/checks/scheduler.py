@@ -6,7 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 
 from grimoire.checks.engine import run_check_for_all_targets
 
@@ -26,21 +25,20 @@ def register_checks(
     repos: list[TrackedRepository],
     workspace: WorkspaceManager,
     engine: AsyncEngine,
-    default_interval_minutes: int,
 ) -> None:
-    """Register enabled checks with the scheduler.
+    """Register checks that have an explicit cron ``schedule`` with the scheduler.
 
-    Checks with a cron ``schedule`` use :class:`CronTrigger`; the rest use
-    :class:`IntervalTrigger` at *default_interval_minutes*.
+    Checks *without* a schedule are driven by the data-refresh cycle instead
+    (see ``_do_refresh`` in ``app.py``).
     """
     for check in checks:
         if not check.enabled:
             continue
 
-        if check.schedule:
-            trigger = CronTrigger.from_crontab(check.schedule)
-        else:
-            trigger = IntervalTrigger(minutes=default_interval_minutes)
+        if not check.schedule:
+            continue
+
+        trigger = CronTrigger.from_crontab(check.schedule)
 
         def _make_job(c: CheckDefinition) -> object:
             """Return an async wrapper that ``AsyncIOScheduler`` can invoke."""

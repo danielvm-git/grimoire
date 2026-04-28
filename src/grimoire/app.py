@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -17,6 +18,7 @@ from grimoire.actions.loader import load_actions
 from grimoire.actions.router import router as actions_router
 from grimoire.actions.router import set_actions_state
 from grimoire.actions.scheduler import register_actions
+from grimoire.checks.engine import run_check_for_all_targets
 from grimoire.checks.loader import load_checks
 from grimoire.checks.router import router as checks_router
 from grimoire.checks.router import set_checks_state
@@ -89,6 +91,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Workspace manager
     workspace = WorkspaceManager(config)
+    try:
+        await workspace.setup(repos)
+        logger.info("Workspace setup complete for %d repositories", len(repos))
+    except Exception:
+        logger.exception("Workspace setup failed — checks/actions may not work")
 
     # Checks & actions
     checks = load_checks(config.data_dir)
@@ -104,6 +111,19 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         set_checks_state(checks, refreshed_repos, workspace, engine)
         set_actions_state(actions, refreshed_repos, workspace, engine)
 
+        # Run default-schedule checks (those without a cron schedule) non-blocking
+        default_checks = [c for c in checks if c.enabled and not c.schedule]
+        if default_checks:
+
+            async def _run_default_checks() -> None:
+                for check in default_checks:
+                    try:
+                        await run_check_for_all_targets(check, refreshed_repos, workspace, engine)
+                    except Exception:
+                        logger.exception("Default-schedule check '%s' failed", check.slug)
+
+            asyncio.create_task(_run_default_checks())
+
     set_refresh_callback(_do_refresh)
 
     # Scheduler
@@ -118,7 +138,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         replace_existing=True,
     )
 
-    register_checks(scheduler, checks, repos, workspace, engine, config.refresh_interval_minutes)
+    register_checks(scheduler, checks, repos, workspace, engine)
     register_actions(scheduler, actions, repos, workspace, engine)
 
     scheduler.start()
