@@ -154,6 +154,7 @@ class CheckViewModel:
 
 SORT_KEYS: dict[str, Any] = {
     "name": lambda r: r.full_name.lower(),
+    "health": lambda r: {"error": 0, "warning": 1, "ok": 2}.get(r.health_status, 2),
     "issues": lambda r: r.open_issues,
     "stale_issues": lambda r: r.stale_issues,
     "prs": lambda r: r.open_prs,
@@ -165,6 +166,7 @@ SORT_KEYS: dict[str, Any] = {
 
 SORT_LABELS: dict[str, str] = {
     "name": "Name",
+    "health": "Health",
     "issues": "Open Issues",
     "stale_issues": "Stale Issues",
     "prs": "Open PRs",
@@ -613,17 +615,19 @@ async def _build_sorted_repos(sort: str, direction: str) -> list[RepoViewModel]:
     return _sort_repos(repos, sort, direction)
 
 
-@router.get("/partials/dashboard-cards", response_class=HTMLResponse)
-async def dashboard_cards_partial(
+@router.get("/partials/dashboard-matrix", response_class=HTMLResponse)
+async def dashboard_matrix_partial(
     request: Request, sort: str = "name", dir: str = "asc"
 ) -> HTMLResponse:
-    """Return the repo cards grid for HTMX swap."""
+    """Return the compact matrix view for HTMX swap."""
     repos = await _build_sorted_repos(sort, dir)
     return templates.TemplateResponse(
         request,
-        "partials/dashboard_cards.html",
+        "partials/dashboard_matrix.html",
         context={
             "repos": repos,
+            "sort": sort,
+            "dir": dir,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
         },
@@ -641,25 +645,6 @@ async def dashboard_list_partial(
         "partials/dashboard_list.html",
         context={
             "repos": repos,
-            "staleness": _staleness_config,
-            "time_ago": _time_ago,
-        },
-    )
-
-
-@router.get("/partials/dashboard-table", response_class=HTMLResponse)
-async def dashboard_table_partial(
-    request: Request, sort: str = "name", dir: str = "asc"
-) -> HTMLResponse:
-    """Return the data table view for HTMX swap."""
-    repos = await _build_sorted_repos(sort, dir)
-    return templates.TemplateResponse(
-        request,
-        "partials/dashboard_table.html",
-        context={
-            "repos": repos,
-            "sort": sort,
-            "dir": dir,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
         },
