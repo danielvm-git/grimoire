@@ -36,7 +36,12 @@ from grimoire.github.router import (
 from grimoire.github.router import (
     router as repos_router,
 )
-from grimoire.github.service import load_stats_from_db, prune_removed_repos, refresh_all_stats
+from grimoire.github.service import (
+    load_stats_from_db,
+    prune_removed_repos,
+    prune_stale_data,
+    refresh_all_stats,
+)
 from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import router as metrics_router
@@ -134,6 +139,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     async def _do_refresh() -> None:
         refreshed_repos, refreshed_stats = await refresh_all_stats(config, client)
         update_cache(refreshed_repos, refreshed_stats)
+        await prune_stale_data(engine, refreshed_repos, config.workspace_dir)
         set_checks_state(checks, refreshed_repos, workspace, engine)
         set_actions_state(actions, refreshed_repos, workspace, engine)
 
