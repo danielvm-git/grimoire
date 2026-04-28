@@ -275,3 +275,54 @@ class TestResetWorkdir:
         assert bare_dir.exists()
         assert result.exists()
         assert (result / "README.md").exists()
+
+    async def test_concurrent_reset_same_repo(self, tmp_path: Path) -> None:
+        """Concurrent reset_workdir calls for the same repo must not race on clone."""
+        await _create_local_origin(tmp_path, branch="main")
+
+        # Create a second branch in the origin
+        src = tmp_path / "_origin_src"
+
+        async def _git(*args: str) -> None:
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                *args,
+                cwd=src,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            assert proc.returncode == 0, stderr.decode()
+
+        await _git("checkout", "-b", "develop")
+        (src / "dev.txt").write_text("dev")
+        await _git("add", ".")
+        await _git("commit", "-m", "dev branch")
+
+        # Update the bare mirror
+        bare_origin = tmp_path / "_origin.git"
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            "fetch",
+            str(src),
+            "develop:develop",
+            cwd=bare_origin,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+
+        cfg = _minimal_config(tmp_path / "ws")
+        mgr = WorkspaceManager(cfg)
+        mgr._clone_url = lambda full_name: str(bare_origin)  # type: ignore[method-assign]  # noqa: SLF001
+
+        # Launch two reset_workdir calls concurrently (no prior setup)
+        main_result, dev_result = await asyncio.gather(
+            mgr.reset_workdir("acme/widgets", "main"),
+            mgr.reset_workdir("acme/widgets", "develop"),
+        )
+
+        assert main_result.exists()
+        assert dev_result.exists()
+        assert (main_result / "README.md").exists()
+        assert (dev_result / "dev.txt").exists()
