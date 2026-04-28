@@ -16,12 +16,12 @@ export UV_FROZEN := "true"
 # Run the application in development mode (with auto-reload)
 [group("dev")]
 dev:
-    uv run uvicorn grimoire.app:create_app --factory --reload --reload-dir src --reload-dir data --reload-include "*.yaml" --port 8000
+    uv run uvicorn grimoire.app:create_app --factory --reload --reload-dir src --reload-dir data --reload-include "*.yaml" --loop asyncio --port 8000
 
 # Run the application in production mode
 [group("dev")]
 run:
-    uv run uvicorn grimoire.app:create_app --factory --port 8000
+    uv run uvicorn grimoire.app:create_app --factory --loop asyncio --port 8000
 
 # Run all quality checks
 [group("dev")]
