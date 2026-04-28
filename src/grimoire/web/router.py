@@ -50,6 +50,7 @@ class RepoViewModel:
     stale_prs: int
     workflow_failures: int
     check_failures: int
+    check_warnings: int
     warnings: list[str]
     workflows_by_branch: dict[str, list[WorkflowStatus]]
     checks_by_branch: dict[str, list[dict[str, Any]]]
@@ -61,6 +62,15 @@ class RepoViewModel:
     @property
     def has_problems(self) -> bool:
         return bool(self.workflow_failures or self.check_failures or self.warnings)
+
+    @property
+    def health_status(self) -> str:
+        """Three-tier health: 'error', 'warning', or 'ok'."""
+        if self.workflow_failures or self.check_failures:
+            return "error"
+        if self.stale_issues or self.stale_prs or self.check_warnings:
+            return "warning"
+        return "ok"
 
     @property
     def total_workflows(self) -> int:
@@ -91,6 +101,7 @@ class DashboardTotals:
     workflow_failures: int = 0
     total_workflows: int = 0
     check_failures: int = 0
+    check_warnings: int = 0
     total_checks: int = 0
 
 
@@ -204,6 +215,7 @@ def _compute_totals(repos: list[RepoViewModel]) -> DashboardTotals:
         totals.workflow_failures += r.workflow_failures
         totals.total_workflows += r.total_workflows
         totals.check_failures += r.check_failures
+        totals.check_warnings += r.check_warnings
         totals.total_checks += r.total_checks
     return totals
 
@@ -277,12 +289,18 @@ def _build_checks_for_repo(
     branches: list[str],
     check_targets: dict[str, set[str]],
     results_by_key: dict[tuple[str, str, str], dict[str, Any]],
-) -> tuple[dict[str, list[dict[str, Any]]], int]:
-    """Build checks_by_branch and count failures for a single repo."""
+) -> tuple[dict[str, list[dict[str, Any]]], int, int]:
+    """Build checks_by_branch and count failures/warnings for a single repo.
+
+    Returns (checks_by_branch, check_failures, check_warnings) where
+    check_failures counts error-severity failures and check_warnings counts
+    warning-severity failures.
+    """
     from grimoire.checks.router import _checks
 
     checks_by_branch: dict[str, list[dict[str, Any]]] = {}
     check_failures = 0
+    check_warnings = 0
     for check_def in _checks:
         if not check_def.enabled:
             continue
@@ -296,24 +314,29 @@ def _build_checks_for_repo(
                     "check_slug": check_def.slug,
                     "passed": result["passed"],
                     "status": "pass" if result["passed"] else "fail",
+                    "severity": check_def.severity,
                     "id": result["id"],
                     "timestamp": result["timestamp"],
                 }
                 if not result["passed"]:
-                    check_failures += 1
+                    if check_def.severity == "error":
+                        check_failures += 1
+                    else:
+                        check_warnings += 1
             elif applies:
                 entry = {
                     "check_name": check_def.name,
                     "check_slug": check_def.slug,
                     "passed": None,
                     "status": "not-run",
+                    "severity": check_def.severity,
                     "id": None,
                     "timestamp": None,
                 }
             else:
                 continue
             checks_by_branch.setdefault(branch, []).append(entry)
-    return checks_by_branch, check_failures
+    return checks_by_branch, check_failures, check_warnings
 
 
 async def _build_repo_viewmodels() -> list[RepoViewModel]:
@@ -340,7 +363,7 @@ async def _build_repo_viewmodels() -> list[RepoViewModel]:
         workflow_failures = sum(1 for w in stats.workflows if w.status == "failure")
 
         # Build check results
-        checks_by_branch, check_failures = _build_checks_for_repo(
+        checks_by_branch, check_failures, check_warnings = _build_checks_for_repo(
             full_name, branches, check_targets, results_by_key
         )
 
@@ -355,6 +378,7 @@ async def _build_repo_viewmodels() -> list[RepoViewModel]:
                 stale_prs=stats.stale_pull_requests,
                 workflow_failures=workflow_failures,
                 check_failures=check_failures,
+                check_warnings=check_warnings,
                 warnings=stats.warnings,
                 workflows_by_branch=workflows_by_branch,
                 checks_by_branch=checks_by_branch,
@@ -434,7 +458,7 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
     workflow_failures = sum(1 for w in stats.workflows if w.status == "failure")
 
     check_targets, results_by_key = await _load_check_context([full_name])
-    checks_by_branch, check_failures = _build_checks_for_repo(
+    checks_by_branch, check_failures, check_warnings = _build_checks_for_repo(
         full_name, branches, check_targets, results_by_key
     )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ class CheckDefinition(BaseModel):
     script: str
     schedule: str | None = None
     enabled: bool = True
+    severity: Literal["warning", "error"] = "error"
 
 
 def load_checks(data_dir: Path) -> list[CheckDefinition]:

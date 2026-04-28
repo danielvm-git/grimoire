@@ -80,7 +80,7 @@ The dashboard supports three view modes, selectable via a button group next to t
 | View | Partial Endpoint | Description |
 |------|-----------------|-------------|
 | **Grid** | `GET /partials/dashboard-cards` | Card grid (current default). 3 columns on XL, 2 on MD, 1 on mobile. Best for ≤20 repos. |
-| **List** | `GET /partials/dashboard-list` | Compact one-repo-per-row layout. Horizontal cards spanning full width with inline stats, workflow dots, and last activity. Balanced density/readability. |
+| **List** | `GET /partials/dashboard-list` | Expanded one-repo-per-row layout. Each item shows: repo name with stats (issues, PRs, staleness), tracked branches, last activity, GitHub link. Below the header, a two-column grid lists workflows (left) and checks (right) by name with status dot and label. |
 | **Table** | `GET /partials/dashboard-table` | Data table with sortable column headers. Maximum density for 50+ repos. Columns: Repo, Issues, PRs, Workflows, Last Activity, Branches. |
 
 **Extensibility:** Each view is a self-contained Jinja2 partial template that controls its own layout. The `#repo-grid` container is layout-agnostic. Adding a new view requires: (1) creating a partial template, (2) adding a router endpoint, (3) registering the view in the `VIEW_PARTIALS` JS object in `dashboard.html`.
@@ -88,6 +88,18 @@ The dashboard supports three view modes, selectable via a button group next to t
 All three views accept the same `sort` and `dir` query parameters. The table view additionally supports clickable column headers for sorting (HTMX `hx-get` on `<th>` elements).
 
 **Staleness highlighting:** Stale issue/PR counts are highlighted in yellow only when the stale percentage (stale/open) meets or exceeds the configured thresholds (`staleness.problematic_stale_issues_pct`, `staleness.problematic_stale_prs_pct`). Below the threshold, stale counts render without warning color.
+
+### Health Status & Accent Colors
+
+Every repo has a computed `health_status` that drives a left-border accent color across **all three views** (grid, list, table):
+
+| Status | Accent | Condition |
+|--------|--------|-----------|
+| **Error** | Red (`border-error`) | At least one workflow failure OR at least one error-severity check failure |
+| **Warning** | Yellow (`border-warning`) | No errors, but stale issues/PRs exist OR at least one warning-severity check failure |
+| **OK** | None (no border) | All workflows and checks pass, no staleness |
+
+Error takes priority over warning. The `severity` field on check definitions (`"error"` or `"warning"`, default `"error"`) controls whether a failing check contributes to the error or warning tier. See Module 4 for details.
 
 **Per-repo warnings:** If a repo has warnings (e.g., "Data is 2h stale"), show an amber ⚠ icon in the row. Hover/click reveals the warning text.
 

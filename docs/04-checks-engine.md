@@ -22,6 +22,7 @@ script: |
   uv lock --check
 schedule: "0 */6 * * *"   # optional cron; omit to use default refresh interval
 enabled: true              # optional; default true
+severity: error            # optional; "error" (red, default) or "warning" (yellow)
 ```
 
 ### Pydantic models
@@ -48,7 +49,15 @@ class CheckDefinition(BaseModel):
     script: str
     schedule: str | None = None  # cron expression
     enabled: bool = True
+    severity: Literal["warning", "error"] = "error"
 ```
+
+### Severity
+
+The `severity` field controls how a failing check affects the repository's health status on the dashboard:
+
+- **`"error"` (default):** A failure turns the repo accent **red**. Use for critical checks (e.g., tests, lock files).
+- **`"warning"`:** A failure turns the repo accent **yellow** (unless an error-severity check or workflow is already failing). Use for advisory checks (e.g., library freshness).
 
 ## 4.2 — Check Loader
 
