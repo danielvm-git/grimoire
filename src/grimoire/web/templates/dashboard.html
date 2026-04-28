@@ -111,7 +111,7 @@
 </div>
 
 {# ── Repo Grid ────────────────────────────────────────────────────── #}
-<div id="repo-grid">
+<div id="repo-grid" class="hidden">
     {% include "partials/dashboard_matrix.html" %}
 </div>
 
@@ -164,7 +164,7 @@
 
     function fetchView() {
         const url = VIEW_PARTIALS[currentView] + '?sort=' + currentSort + '&dir=' + currentDir;
-        htmx.ajax('GET', url, '#repo-grid');
+        return htmx.ajax('GET', url, '#repo-grid');
     }
 
     function switchView(view) {
@@ -190,8 +190,10 @@
     // On page load, apply saved view preference
     document.addEventListener('DOMContentLoaded', function() {
         updateViewButtons();
-        if (currentView !== 'matrix') {
-            fetchView();
+        if (currentView === 'matrix') {
+            document.getElementById('repo-grid').classList.remove('hidden');
+        } else {
+            fetchView().then(() => document.getElementById('repo-grid').classList.remove('hidden'));
         }
     });
 </script>

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('grimoire-theme') || 'dark');</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Grimoire{% endblock %}</title>
@@ -86,7 +87,6 @@
         const toggle = document.getElementById('theme-toggle');
         const saved = localStorage.getItem('grimoire-theme');
         if (saved === 'light') {
-            document.documentElement.setAttribute('data-theme', 'light');
             toggle.checked = true;
         }
         toggle.addEventListener('change', function() {
