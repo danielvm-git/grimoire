@@ -231,8 +231,8 @@ class TestDashboardTablePartial:
 
     async def test_table_shows_workflow_dots(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
-        assert "dot-success" in resp.text
-        assert "dot-failure" in resp.text
+        assert "status-icon-success" in resp.text
+        assert "status-icon-failure" in resp.text
 
 
 class TestActionRunPartial:
@@ -260,33 +260,33 @@ class TestCheckDisplay:
         resp = await web_client_with_checks.get("/partials/dashboard-cards?sort=name&dir=asc")
         assert resp.status_code == 200
         assert "Checks" in resp.text
-        assert "dot-pass" in resp.text
-        assert "dot-fail" in resp.text
+        assert "status-icon-pass" in resp.text
+        assert "status-icon-fail" in resp.text
 
     async def test_cards_show_not_run_checks(self, web_client_with_checks: AsyncClient) -> None:
         """Watchdog targets both repos but only has results for some branches."""
         resp = await web_client_with_checks.get("/partials/dashboard-cards?sort=name&dir=asc")
-        assert "dot-not-run" in resp.text
+        assert "status-icon-not-run" in resp.text
 
     async def test_list_show_check_dots(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/partials/dashboard-list?sort=name&dir=asc")
         assert resp.status_code == 200
-        assert "dot-pass" in resp.text
-        assert "dot-fail" in resp.text
+        assert "status-icon-pass" in resp.text
+        assert "status-icon-fail" in resp.text
 
     async def test_table_show_check_dots(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/partials/dashboard-table?sort=name&dir=asc")
         assert resp.status_code == 200
         assert ">Checks<" in resp.text
-        assert "dot-pass" in resp.text
-        assert "dot-fail" in resp.text
+        assert "status-icon-pass" in resp.text
+        assert "status-icon-fail" in resp.text
 
     async def test_repo_detail_shows_checks(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/repo/acme/api")
         assert resp.status_code == 200
         assert "Checks" in resp.text
         assert "Watchdog" in resp.text
-        assert "dot-pass" in resp.text
+        assert "status-icon-pass" in resp.text
 
     async def test_repo_detail_shows_not_run_for_untargeted(
         self, web_client_with_checks: AsyncClient

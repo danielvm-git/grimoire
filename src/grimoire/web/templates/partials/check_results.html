@@ -18,9 +18,9 @@
             <td class="font-mono text-xs">{{ r.branch }}</td>
             <td>
                 {% if r.passed %}
-                <span class="badge badge-success badge-xs gap-1">✓</span>
+                <span class="badge badge-success badge-xs gap-1"><i class="fa-solid fa-check"></i></span>
                 {% else %}
-                <span class="badge badge-error badge-xs gap-1">✗</span>
+                <span class="badge badge-error badge-xs gap-1"><i class="fa-solid fa-xmark"></i></span>
                 {% endif %}
             </td>
             <td class="text-xs opacity-70">{{ time_ago(r.timestamp) }}</td>

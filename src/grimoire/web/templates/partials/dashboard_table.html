@@ -68,7 +68,10 @@
                         {% for wf in workflows %}
                         <div class="tooltip tooltip-top" data-tip="{{ wf.name }} ({{ branch }}): {{ wf.status }}">
                             <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener">
-                                <span class="dot dot-{{ wf.status }}"></span>
+                                {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
+                                {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
+                                {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
+                                {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
                             </a>
                         </div>
                         {% endfor %}
@@ -83,7 +86,9 @@
                     {% for branch, checks in repo.checks_by_branch.items() %}
                         {% for chk in checks %}
                         <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }} ({{ branch }}): {{ chk.status }}">
-                            <span class="dot dot-{{ chk.status }}"></span>
+                            {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
+                            {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
+                            {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
                         </div>
                         {% endfor %}
                     {% endfor %}
