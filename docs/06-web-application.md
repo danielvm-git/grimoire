@@ -64,9 +64,9 @@ def create_app() -> FastAPI:
 **Stats bar** — horizontal stat cards showing aggregate metrics. Every panel displays its total count as the main value in a neutral theme color, with a color-coded breakdown subtitle (`text-sm`):
 - **Repositories** (`text-primary`) — total count, breakdown: `X failing` (red) · `Y warning` (yellow) · `Z healthy` (green). Counts derived from each repo's `health_status`.
 - **Open Issues** (`text-info`) — total count, breakdown: `X stale` (yellow) if any.
-- **Open PRs** (`text-accent`) — total count, breakdown: `X stale` (yellow) if any.
-- **Workflows** (`text-secondary`) — total count, breakdown: `X failing` (red) · `Y passing` (green).
-- **Checks** (`text-secondary`) — total count, breakdown: `X failing` (red) · `Y warning` (yellow) · `Z passed` (green). Only shown if checks exist.
+- **Open PRs** (`text-info`) — total count, breakdown: `X stale` (yellow) if any.
+- **Workflows** (`text-accent`) — total count, breakdown: `X failing` (red) · `Y passing` (green).
+- **Checks** (`text-accent`) — total count, breakdown: `X failing` (red) · `Y warning` (yellow) · `Z passed` (green). Only shown if checks exist.
 
 **Repository table** — one row per tracked repository:
 
