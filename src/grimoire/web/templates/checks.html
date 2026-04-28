@@ -4,85 +4,97 @@
 {% block content %}
 <h1 class="text-3xl font-bold mb-6">Checks</h1>
 
-{# ── Check Definition Cards ────────────────────────────────────────── #}
 {% if checks %}
-<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
+<div class="flex flex-col gap-3">
     {% for chk in checks %}
-    <div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow {% if not chk.enabled %}opacity-50{% endif %}"
+    <div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow {% if not chk.enabled %}opacity-50{% endif %}"
          id="check-card-{{ chk.slug }}">
-        <div class="card-body p-5">
-            {# Header: name + badges #}
-            <div class="flex justify-between items-start gap-2">
-                <div class="min-w-0">
-                    <h3 class="card-title text-base">{{ chk.name }}</h3>
-                    <p class="text-sm opacity-60 mt-1">{{ chk.description }}</p>
-                </div>
-                <div class="flex flex-col items-end gap-1 shrink-0">
-                    {% if chk.severity == "warning" %}
-                    <div class="badge badge-warning badge-sm whitespace-nowrap" title="Failure results in warning">⚡ warning</div>
-                    {% else %}
-                    <div class="badge badge-error badge-sm whitespace-nowrap" title="Failure results in error">⚡ error</div>
+        <div class="px-5 py-4">
+
+            {# ── Header Row: name, metadata, actions ── #}
+            <div class="flex items-start gap-4">
+                {# Left: name + description + metadata #}
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 class="text-base font-semibold">{{ chk.name }}</h3>
+                        <span class="opacity-40 text-sm">· {{ chk.severity }}</span>
+                        {% if not chk.enabled %}
+                        <span class="opacity-40 text-sm">· disabled</span>
+                        {% endif %}
+                    </div>
+                    {% if chk.description %}
+                    <p class="text-sm opacity-60 mt-0.5">{{ chk.description }}</p>
                     {% endif %}
-                    {% if chk.schedule %}
-                    <div class="badge badge-ghost badge-sm whitespace-nowrap" title="Cron schedule">⏱ {{ chk.schedule }}</div>
-                    {% else %}
-                    <div class="badge badge-ghost badge-sm whitespace-nowrap" title="Default interval">⏱ default</div>
-                    {% endif %}
-                    {% if not chk.enabled %}
-                    <div class="badge badge-warning badge-sm">Disabled</div>
-                    {% endif %}
+                    <div class="flex items-center gap-3 mt-1.5 text-sm">
+                        <span class="font-mono text-xs opacity-50">{{ chk.target_summary }}</span>
+                        {% if chk.pass_count or chk.fail_count %}
+                        <span class="opacity-40">·</span>
+                        {% if chk.pass_count %}
+                        <span class="text-success">✓ {{ chk.pass_count }}</span>
+                        {% endif %}
+                        {% if chk.fail_count %}
+                        <span class="text-error">✗ {{ chk.fail_count }}</span>
+                        {% endif %}
+                        {% if chk.last_run %}
+                        <span class="opacity-40">· {{ time_ago(chk.last_run) }}</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="opacity-40">· no results yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# Right: schedule, toggle, run button #}
+                <div class="flex items-center gap-3 shrink-0">
+                    <span class="text-xs opacity-40 whitespace-nowrap">
+                        {% if chk.schedule %}⏱ {{ chk.schedule }}{% else %}⏱ default{% endif %}
+                    </span>
+                    <label class="swap swap-rotate">
+                        <input type="checkbox" {% if chk.enabled %}checked{% endif %}
+                               hx-post="/api/checks/{{ chk.slug }}/toggle"
+                               hx-swap="none"
+                               hx-on::after-request="if(event.detail.successful) { location.reload(); } else { showToast('Toggle failed', 'error'); }" />
+                        <span class="swap-on text-sm text-success">●</span>
+                        <span class="swap-off text-sm text-warning">○</span>
+                    </label>
+                    <button class="btn btn-primary btn-sm gap-1"
+                            hx-post="/api/checks/{{ chk.slug }}/run"
+                            hx-swap="none"
+                            hx-on::after-request="if(event.detail.successful) { showToast('Check triggered', 'success'); setTimeout(() => location.reload(), 1500); } else { showToast('Failed to trigger check', 'error'); }">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+                        <span class="btn-label">Run</span>
+                        <span class="htmx-indicator loading loading-spinner loading-xs"></span>
+                    </button>
                 </div>
             </div>
 
-            {# Target summary #}
-            <div class="mt-2">
-                <span class="badge badge-outline badge-sm font-mono">{{ chk.target_summary }}</span>
-            </div>
-
-            {# Result summary #}
-            {% if chk.pass_count or chk.fail_count %}
-            <div class="flex items-center gap-3 mt-2 text-sm">
-                {% if chk.pass_count %}
-                <span class="text-success font-medium">✓ {{ chk.pass_count }} passed</span>
-                {% endif %}
-                {% if chk.fail_count %}
-                <span class="text-error font-medium">✗ {{ chk.fail_count }} failed</span>
-                {% endif %}
-                {% if chk.last_run %}
-                <span class="opacity-50">{{ time_ago(chk.last_run) }}</span>
-                {% endif %}
-            </div>
-            {% else %}
-            <div class="text-sm opacity-40 mt-2">No results yet</div>
-            {% endif %}
-
-            {# Script preview (collapsible) #}
-            <div class="collapse collapse-arrow bg-base-200 mt-3">
-                <input type="checkbox" />
-                <div class="collapse-title text-xs font-medium py-2 min-h-0">Script</div>
-                <div class="collapse-content">
-                    <pre class="text-xs whitespace-pre-wrap break-all"><code>{{ chk.script }}</code></pre>
-                </div>
-            </div>
-
-            {# Actions: toggle + run #}
-            <div class="card-actions justify-between items-center mt-3">
-                <label class="swap swap-rotate">
-                    <input type="checkbox" {% if chk.enabled %}checked{% endif %}
-                           hx-post="/api/checks/{{ chk.slug }}/toggle"
-                           hx-swap="none"
-                           hx-on::after-request="if(event.detail.successful) { location.reload(); } else { showToast('Toggle failed', 'error'); }" />
-                    <span class="swap-on text-sm text-success">● Enabled</span>
-                    <span class="swap-off text-sm text-warning">○ Disabled</span>
-                </label>
-                <button class="btn btn-primary btn-sm gap-1"
-                        hx-post="/api/checks/{{ chk.slug }}/run"
-                        hx-swap="none"
-                        hx-on::after-request="if(event.detail.successful) { showToast('Check triggered', 'success'); setTimeout(() => location.reload(), 1500); } else { showToast('Failed to trigger check', 'error'); }">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
-                    Run
+            {# ── Expandable sections ── #}
+            <div class="flex gap-2 mt-2">
+                {# Script preview toggle #}
+                <button class="btn btn-ghost btn-xs opacity-60"
+                        onclick="this.closest('.bg-base-100').querySelector('.check-script').classList.toggle('hidden')">
+                    Script
                 </button>
+                {# Results toggle #}
+                {% if chk.pass_count or chk.fail_count %}
+                <button class="btn btn-ghost btn-xs opacity-60"
+                        hx-get="/partials/check-results/{{ chk.slug }}"
+                        hx-target="#check-results-{{ chk.slug }}"
+                        hx-swap="innerHTML"
+                        hx-on::before-request="var t = document.getElementById('check-results-{{ chk.slug }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
+                    Results
+                </button>
+                {% endif %}
             </div>
+
+            {# Script content (hidden by default) #}
+            <div class="check-script hidden mt-2">
+                <pre class="rounded-box overflow-x-auto text-xs"><code class="language-bash">{{ chk.script }}</code></pre>
+            </div>
+
+            {# Inline results container #}
+            <div id="check-results-{{ chk.slug }}" class="mt-2"></div>
+
         </div>
     </div>
     {% endfor %}
@@ -99,62 +111,9 @@
 </div>
 {% endif %}
 
-{# ── Latest Results ────────────────────────────────────────────────── #}
-<div class="card bg-base-100 shadow">
-    <div class="card-body">
-        <h2 class="card-title text-lg mb-2">Latest Results</h2>
-        {% if results %}
-        <div class="overflow-x-auto">
-        <table class="table table-sm">
-            <thead>
-                <tr>
-                    <th>Check</th>
-                    <th>Repository</th>
-                    <th>Branch</th>
-                    <th>Status</th>
-                    <th>Last Run</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in results %}
-                <tr class="hover">
-                    <td class="font-medium">{{ r.check_name }}</td>
-                    <td>
-                        <a href="/repo/{{ r.repo_full_name }}" class="link link-hover">{{ r.repo_full_name }}</a>
-                    </td>
-                    <td class="font-mono text-sm">{{ r.branch }}</td>
-                    <td>
-                        {% if r.passed %}
-                        <span class="badge badge-success badge-sm gap-1"><i class="fa-solid fa-check"></i> pass</span>
-                        {% else %}
-                        <span class="badge badge-error badge-sm gap-1"><i class="fa-solid fa-xmark"></i> fail</span>
-                        {% endif %}
-                    </td>
-                    <td class="text-sm opacity-70">{{ time_ago(r.timestamp) }}</td>
-                    <td>
-                        <button class="btn btn-ghost btn-xs"
-                                hx-get="/partials/check-output/{{ r.id }}"
-                                hx-target="#check-output-{{ r.id }}"
-                                hx-swap="innerHTML"
-                                hx-on::before-request="var t = document.getElementById('check-output-{{ r.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
-                            Output
-                        </button>
-                    </td>
-                </tr>
-                <tr>
-                    <td colspan="6" id="check-output-{{ r.id }}" class="p-0"></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        </div>
-        {% else %}
-        <div class="text-center py-8 opacity-50">
-            <div class="text-3xl mb-2">📋</div>
-            <p class="text-sm">No check results yet.</p>
-        </div>
-        {% endif %}
-    </div>
-</div>
+{# Highlight.js for bash syntax highlighting #}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+<script>hljs.highlightAll();</script>
 {% endblock %}
