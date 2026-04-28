@@ -37,6 +37,7 @@ from grimoire.github.router import (
     router as repos_router,
 )
 from grimoire.github.service import load_stats_from_db, refresh_all_stats
+from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import router as metrics_router
 from grimoire.web.router import router as web_router
@@ -72,20 +73,42 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # GitHub client
     client = GitHubClient(config.github.token, engine)
 
-    # Initial data refresh
+    # Load data — prefer DB cache if fresh enough, otherwise do API refresh
+    repos: list[TrackedRepository] = []
     try:
-        repos, stats = await refresh_all_stats(config, client)
-        update_cache(repos, stats)
-        logger.info("Initial refresh complete — %d repositories loaded", len(repos))
+        cached_repos, cached_stats = await load_stats_from_db(engine)
+        cache_is_fresh = False
+        if cached_repos:
+            oldest = min(
+                (s.fetched_at for s in cached_stats if s.fetched_at),
+                default=None,
+            )
+            if oldest:
+                age_minutes = (datetime.now(tz=timezone.utc) - oldest).total_seconds() / 60
+                cache_is_fresh = age_minutes < config.refresh_interval_minutes
+                logger.info(
+                    "DB cache: %d repos, oldest data %.1f min ago (%s)",
+                    len(cached_repos),
+                    age_minutes,
+                    "fresh" if cache_is_fresh else "stale",
+                )
+
+        if cached_repos and cache_is_fresh:
+            update_cache(cached_repos, cached_stats)
+            repos = cached_repos
+            logger.info("Using cached data — %d repositories loaded", len(repos))
+        else:
+            repos, stats = await refresh_all_stats(config, client)
+            update_cache(repos, stats)
+            logger.info("Initial refresh complete — %d repositories loaded", len(repos))
     except Exception:
-        logger.exception("Initial data refresh failed — falling back to cached data")
-        repos, stats = [], []
+        logger.exception("Data loading failed — falling back to cached data")
         try:
             cached_repos, cached_stats = await load_stats_from_db(engine)
             if cached_repos:
                 update_cache(cached_repos, cached_stats)
                 repos = cached_repos
-                logger.info("Loaded %d repositories from cache", len(cached_repos))
+                logger.info("Loaded %d repositories from cache (fallback)", len(cached_repos))
         except Exception:
             logger.exception("Failed to load cached data from database")
 
