@@ -1,6 +1,6 @@
 <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
 {% for repo in repos %}
-<div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow {% if repo.has_problems %}card-problem{% endif %}">
+<div class="card bg-base-100 shadow-md hover:shadow-lg transition-shadow {% if repo.health_status == 'error' %}border-l-4 border-error{% elif repo.health_status == 'warning' %}border-l-4 border-warning{% endif %}">
     <div class="card-body p-5">
         {# ── Header ── #}
         <div class="flex justify-between items-start">

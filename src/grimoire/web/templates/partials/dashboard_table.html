@@ -32,7 +32,7 @@
     </thead>
     <tbody>
         {% for repo in repos %}
-        <tr class="hover {% if repo.has_problems %}border-l-4 border-warning{% endif %}">
+        <tr class="hover {% if repo.health_status == 'error' %}border-l-4 border-error{% elif repo.health_status == 'warning' %}border-l-4 border-warning{% endif %}">
             {# ── Name ── #}
             <td>
                 <a href="/repo/{{ repo.full_name }}" class="link link-hover text-sm font-semibold">

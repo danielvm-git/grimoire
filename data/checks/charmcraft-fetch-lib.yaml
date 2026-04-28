@@ -2,6 +2,7 @@ name: "Charm Libraries up-to-date"
 description: "Checks whether running charmcraft fetch-lib would produce any changes"
 targets:
   regex: "-operator$"
+severity: warning
 script: |
   set -e
   charmcraft fetch-lib

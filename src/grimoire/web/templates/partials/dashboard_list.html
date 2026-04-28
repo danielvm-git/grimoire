@@ -1,82 +1,101 @@
-<div class="flex flex-col gap-2">
+<div class="flex flex-col gap-3">
 {% for repo in repos %}
-<div class="flex items-center gap-4 bg-base-100 rounded-lg px-4 py-3 shadow-sm hover:shadow-md transition-shadow {% if repo.has_problems %}border-l-4 border-warning{% endif %}">
+<div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow {% if repo.health_status == 'error' %}border-l-4 border-error{% elif repo.health_status == 'warning' %}border-l-4 border-warning{% endif %}">
+    <div class="px-5 py-4">
 
-    {# ── Name + Badges ── #}
-    <div class="min-w-[220px] flex-shrink-0">
-        <a href="/repo/{{ repo.full_name }}" class="link link-hover text-sm font-semibold">
-            <span class="opacity-60">{{ repo.owner }}/</span>{{ repo.name }}
-        </a>
-        <div class="flex flex-wrap gap-1 mt-0.5">
-            <span class="badge badge-outline badge-xs">{{ repo.source }}</span>
+        {# ── Header Row: name, issues, PRs, last activity, link ── #}
+        <div class="flex items-center gap-4 flex-wrap">
+            <a href="/repo/{{ repo.full_name }}" class="link link-hover text-base font-semibold min-w-[200px]">
+                <span class="opacity-60">{{ repo.owner }}/</span>{{ repo.name }}
+            </a>
+
+            <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm font-mono-nums flex-1">
+                <span class="opacity-70">
+                    {{ repo.open_issues }} issues
+                    {% if repo.stale_issues %}
+                    <span class="opacity-40">·</span>
+                    <span class="{% if repo.open_issues > 0 and (repo.stale_issues * 100 / repo.open_issues) >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">({{ repo.stale_issues }} stale)</span>
+                    {% endif %}
+                </span>
+                <span class="opacity-70">
+                    {{ repo.open_prs }} PRs
+                    {% if repo.stale_prs %}
+                    <span class="opacity-40">·</span>
+                    <span class="{% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">({{ repo.stale_prs }} stale)</span>
+                    {% endif %}
+                </span>
+                {% if repo.last_commit_at %}
+                <span class="opacity-60" title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">
+                    Last activity: {{ time_ago(repo.last_commit_at) }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="flex items-center gap-2 flex-shrink-0">
+                {% if repo.warnings %}
+                <div class="tooltip tooltip-left" data-tip="{{ repo.warnings | join('; ') }}">
+                    <span class="text-warning text-sm">⚠</span>
+                </div>
+                {% endif %}
+                <a href="https://github.com/{{ repo.full_name }}" target="_blank" rel="noopener"
+                   class="btn btn-ghost btn-xs opacity-40 hover:opacity-100" title="View on GitHub">↗</a>
+            </div>
+        </div>
+
+        {# ── Branches ── #}
+        <div class="flex flex-wrap gap-1 mt-1.5">
             {% for branch in repo.branches %}
-            <span class="badge badge-ghost badge-xs">{{ branch }}</span>
+            <span class="badge badge-ghost badge-sm">{{ branch }}</span>
             {% endfor %}
         </div>
-    </div>
 
-    {# ── Stats ── #}
-    <div class="flex flex-wrap gap-x-5 gap-y-1 text-sm font-mono-nums flex-1">
-        <span class="opacity-70">
-            {{ repo.open_issues }} issues
-            {% if repo.stale_issues %}
-            <span class="opacity-40">·</span>
-            <span class="{% if repo.open_issues > 0 and (repo.stale_issues * 100 / repo.open_issues) >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">{{ repo.stale_issues }} stale</span>
-            {% endif %}
-        </span>
-        <span class="opacity-70">
-            {{ repo.open_prs }} PRs
-            {% if repo.stale_prs %}
-            <span class="opacity-40">·</span>
-            <span class="{% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">{{ repo.stale_prs }} stale</span>
-            {% endif %}
-        </span>
-    </div>
+        {# ── Workflows & Checks (two-column) ── #}
+        {% if repo.workflows_by_branch or repo.checks_by_branch %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 mt-3">
 
-    {# ── Workflows ── #}
-    <div class="flex items-center gap-1.5 flex-shrink-0">
-        {% for branch, workflows in repo.workflows_by_branch.items() %}
-            {% for wf in workflows %}
-            <div class="tooltip tooltip-top" data-tip="{{ wf.name }} ({{ branch }}): {{ wf.status }}">
-                <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener">
-                    <span class="dot dot-{{ wf.status }}"></span>
-                </a>
+            {# ── Workflows Column ── #}
+            <div>
+                {% if repo.workflows_by_branch %}
+                <div class="text-xs font-semibold opacity-50 uppercase tracking-wider mb-1">Workflows</div>
+                {% for branch, workflows in repo.workflows_by_branch.items() %}
+                    {% if repo.branches | length > 1 %}
+                    <div class="text-xs opacity-40 mt-1 mb-0.5">{{ branch }}</div>
+                    {% endif %}
+                    {% for wf in workflows %}
+                    <div class="flex items-center gap-2 py-0.5">
+                        <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener" class="flex items-center gap-2 hover:opacity-80">
+                            <span class="dot dot-{{ wf.status }}" style="width: 10px; height: 10px;"></span>
+                            <span class="text-sm">{{ wf.name }}</span>
+                        </a>
+                        <span class="text-xs opacity-40">{{ wf.status }}</span>
+                    </div>
+                    {% endfor %}
+                {% endfor %}
+                {% endif %}
             </div>
-            {% endfor %}
-        {% endfor %}
-    </div>
 
-    {# ── Checks ── #}
-    {% if repo.checks_by_branch %}
-    <div class="flex items-center gap-1.5 flex-shrink-0">
-        {% for branch, checks in repo.checks_by_branch.items() %}
-            {% for chk in checks %}
-            <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }} ({{ branch }}): {{ chk.status }}">
-                <span class="dot dot-{{ chk.status }}"></span>
+            {# ── Checks Column ── #}
+            <div>
+                {% if repo.checks_by_branch %}
+                <div class="text-xs font-semibold opacity-50 uppercase tracking-wider mb-1">Checks</div>
+                {% for branch, checks in repo.checks_by_branch.items() %}
+                    {% if repo.branches | length > 1 %}
+                    <div class="text-xs opacity-40 mt-1 mb-0.5">{{ branch }}</div>
+                    {% endif %}
+                    {% for chk in checks %}
+                    <div class="flex items-center gap-2 py-0.5">
+                        <span class="dot dot-{{ chk.status }}" style="width: 10px; height: 10px;"></span>
+                        <span class="text-sm">{{ chk.check_name }}</span>
+                        <span class="text-xs opacity-40">{{ chk.status }}</span>
+                    </div>
+                    {% endfor %}
+                {% endfor %}
+                {% endif %}
             </div>
-            {% endfor %}
-        {% endfor %}
-    </div>
-    {% endif %}
 
-    {# ── Last Activity ── #}
-    <div class="text-sm opacity-60 flex-shrink-0 w-20 text-right">
-        {% if repo.last_commit_at %}
-        <span title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ time_ago(repo.last_commit_at) }}</span>
-        {% else %}
-        —
-        {% endif %}
-    </div>
-
-    {# ── Warning + GitHub link ── #}
-    <div class="flex items-center gap-2 flex-shrink-0">
-        {% if repo.warnings %}
-        <div class="tooltip tooltip-left" data-tip="{{ repo.warnings | join('; ') }}">
-            <span class="text-warning text-sm">⚠</span>
         </div>
         {% endif %}
-        <a href="https://github.com/{{ repo.full_name }}" target="_blank" rel="noopener"
-           class="btn btn-ghost btn-xs opacity-40 hover:opacity-100" title="View on GitHub">↗</a>
+
     </div>
 </div>
 {% endfor %}
