@@ -65,10 +65,14 @@ class RepoViewModel:
 
     @property
     def health_status(self) -> str:
-        """Three-tier health: 'error', 'warning', or 'ok'."""
+        """Three-tier health: 'error', 'warning', or 'ok'.
+
+        Only error-severity check failures affect health.
+        Warning-severity failures are reported but do not influence status.
+        """
         if self.workflow_failures or self.check_failures:
             return "error"
-        if self.stale_issues or self.stale_prs or self.check_warnings:
+        if self.stale_issues or self.stale_prs:
             return "warning"
         return "ok"
 

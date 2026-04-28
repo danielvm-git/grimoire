@@ -91,15 +91,15 @@ All three views accept the same `sort` and `dir` query parameters. The table vie
 
 ### Health Status & Accent Colors
 
-Every repo has a computed `health_status` that drives a left-border accent color across **all three views** (grid, list, table):
+Every repo has a computed `health_status` that drives a left-border accent color across **all views** (matrix, list):
 
 | Status | Accent | Condition |
 |--------|--------|-----------|
 | **Error** | Red (`border-error`) | At least one workflow failure OR at least one error-severity check failure |
-| **Warning** | Yellow (`border-warning`) | No errors, but stale issues/PRs exist OR at least one warning-severity check failure |
+| **Warning** | Yellow (`border-warning`) | No errors, but stale issues/PRs exist |
 | **OK** | None (no border) | All workflows and checks pass, no staleness |
 
-Error takes priority over warning. The `severity` field on check definitions (`"error"` or `"warning"`, default `"error"`) controls whether a failing check contributes to the error or warning tier. See Module 4 for details.
+Error takes priority over warning. The `severity` field on check definitions (`"error"` or `"warning"`, default `"error"`) controls whether a failing check affects health. Only `"error"`-severity failures contribute to the error tier; `"warning"`-severity failures are reported but do not influence repo health. See Module 4 for details.
 
 **Per-repo warnings:** If a repo has warnings (e.g., "Data is 2h stale"), show an amber ⚠ icon in the row. Hover/click reveals the warning text.
 

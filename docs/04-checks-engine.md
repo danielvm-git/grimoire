@@ -57,7 +57,7 @@ class CheckDefinition(BaseModel):
 The `severity` field controls how a failing check affects the repository's health status on the dashboard:
 
 - **`"error"` (default):** A failure turns the repo accent **red**. Use for critical checks (e.g., tests, lock files).
-- **`"warning"`:** A failure turns the repo accent **yellow** (unless an error-severity check or workflow is already failing). Use for advisory checks (e.g., library freshness).
+- **`"warning"`:** A failure is **reported** but does **not** affect the repository's health status. Shown with a yellow ⚠ icon instead of a red ✗. Use for advisory checks (e.g., library freshness).
 
 ## 4.2 — Check Loader
 
