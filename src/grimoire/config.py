@@ -71,11 +71,19 @@ class GitConfig(BaseModel):
     ssh_known_hosts: Path | None = None
 
 
+class WorkflowFilter(BaseModel):
+    """Include/exclude filter for GitHub Actions workflows (glob patterns on name)."""
+
+    include: list[str] = Field(default_factory=list)
+    exclude: list[str] = Field(default_factory=list)
+
+
 class StaticRepoSource(BaseModel):
     """A single repository specified by full name, with optional branch list."""
 
     repo: str
     branches: list[str] = Field(default_factory=list)
+    workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
 
 
 class TeamRepoSource(BaseModel):
@@ -83,6 +91,7 @@ class TeamRepoSource(BaseModel):
 
     team: str
     exclude: list[str] = Field(default_factory=list)
+    workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
 
 
 RepoSource = Annotated[Union[StaticRepoSource, TeamRepoSource], Field(discriminator=None)]

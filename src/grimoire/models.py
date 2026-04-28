@@ -18,6 +18,8 @@ class TrackedRepository(BaseModel):
     default_branch: str = "main"
     branches: list[str] = []  # branches to observe; empty → default branch only
     source: str = "static"  # "static" | "team:org/team-name"
+    workflow_include: list[str] = []  # glob patterns; empty → include all
+    workflow_exclude: list[str] = []  # glob patterns; empty → exclude none
 
 
 class WorkflowStatus(BaseModel):
