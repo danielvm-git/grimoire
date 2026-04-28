@@ -126,9 +126,9 @@
                     <td class="font-mono text-sm">{{ r.branch }}</td>
                     <td>
                         {% if r.passed %}
-                        <span class="badge badge-success badge-sm gap-1">✓ pass</span>
+                        <span class="badge badge-success badge-sm gap-1"><i class="fa-solid fa-check"></i> pass</span>
                         {% else %}
-                        <span class="badge badge-error badge-sm gap-1">✗ fail</span>
+                        <span class="badge badge-error badge-sm gap-1"><i class="fa-solid fa-xmark"></i> fail</span>
                         {% endif %}
                     </td>
                     <td class="text-sm opacity-70">{{ time_ago(r.timestamp) }}</td>

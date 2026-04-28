@@ -64,7 +64,10 @@
                     {% for wf in workflows %}
                     <div class="flex items-center gap-2 py-0.5">
                         <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener" class="flex items-center gap-2 hover:opacity-80">
-                            <span class="dot dot-{{ wf.status }}" style="width: 10px; height: 10px;"></span>
+                            {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
+                            {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
+                            {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
+                            {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
                             <span class="text-sm">{{ wf.name }}</span>
                         </a>
                         <span class="text-xs opacity-40">{{ wf.status }}</span>
@@ -84,7 +87,9 @@
                     {% endif %}
                     {% for chk in checks %}
                     <div class="flex items-center gap-2 py-0.5">
-                        <span class="dot dot-{{ chk.status }}" style="width: 10px; height: 10px;"></span>
+                        {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
+                        {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
+                        {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
                         <span class="text-sm">{{ chk.check_name }}</span>
                         <span class="text-xs opacity-40">{{ chk.status }}</span>
                     </div>

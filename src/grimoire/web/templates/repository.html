@@ -186,7 +186,10 @@
                     {{ branch }}
                     <span class="flex gap-1 ml-2">
                         {% for wf in workflows %}
-                        <span class="dot dot-{{ wf.status }}" style="width:10px;height:10px"></span>
+                        {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success" style="font-size:10px"></i>
+                        {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure" style="font-size:10px"></i>
+                        {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending" style="font-size:10px"></i>
+                        {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown" style="font-size:10px"></i>{% endif %}
                         {% endfor %}
                     </span>
                 </span>
@@ -198,7 +201,10 @@
                         {% for wf in workflows %}
                         <tr>
                             <td class="flex items-center gap-2">
-                                <span class="dot dot-{{ wf.status }}"></span>
+                                {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
+                                {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
+                                {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
+                                {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
                                 {{ wf.name }}
                             </td>
                             <td class="text-sm opacity-70">{{ wf.status }}</td>
@@ -246,7 +252,9 @@
                     {{ branch }}
                     <span class="flex gap-1 ml-2">
                         {% for chk in checks %}
-                        <span class="dot dot-{{ chk.status }}" style="width:10px;height:10px"></span>
+                        {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass" style="font-size:10px"></i>
+                        {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail" style="font-size:10px"></i>
+                        {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run" style="font-size:10px"></i>{% endif %}
                         {% endfor %}
                     </span>
                 </span>
@@ -258,7 +266,9 @@
                         {% for chk in checks %}
                         <tr>
                             <td class="flex items-center gap-2">
-                                <span class="dot dot-{{ chk.status }}"></span>
+                                {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
+                                {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
+                                {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
                                 <div>
                                     <div class="font-medium">{{ chk.check_name }}</div>
                                 </div>

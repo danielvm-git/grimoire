@@ -105,26 +105,33 @@ Error takes priority over warning. The `severity` field on check definitions (`"
 
 ### Workflow visualization (compact)
 
-For each repo, show workflow statuses as a grid of small colored dots/badges:
+For each repo, show workflow statuses as FontAwesome icons with semantic colors:
 
 ```
-● ● ●      (single branch — just dots)
+✓ ✗ ◷      (single branch — just icons)
 
-main:    ● ● ●
-develop: ● ●        (multi-branch — grouped with labels)
+main:    ✓ ✓ ✗
+develop: ✓ ✓        (multi-branch — grouped with labels)
 ```
 
-Colors: 🟢 success, 🔴 failure, 🟡 pending, ⚪ unknown.
+Icons (FontAwesome 6):
+- `fa-check` (green `#22c55e`) — success
+- `fa-xmark` (red `#ef4444`) — failure
+- `fa-clock` (yellow `#eab308`) — pending
+- `fa-minus` (gray `#6b7280`) — unknown
 
-Each dot represents one workflow. Hover shows the workflow name. Click links to the GitHub run.
+Each icon represents one workflow. Hover shows the workflow name. Click links to the GitHub run.
 
 When a repo has a single observed branch, omit the branch label for compactness.
 
 ### Check visualization (compact)
 
-Same visual style as workflows: colored dots, one per applicable check.
+Same visual style as workflows: colored FontAwesome icons, one per applicable check.
 
-Colors: 🟢 pass, 🔴 fail, ⚪ not yet run.
+Icons:
+- `fa-check` (green) — pass
+- `fa-xmark` (red) — fail
+- `fa-minus` (gray) — not yet run
 
 Hover shows the check name + description. For multi-branch repos, show per-branch results grouped with branch labels (same pattern as workflows).
 
@@ -301,17 +308,17 @@ Table showing the most recent result for each check × repo × branch:
 | Check | Repository | Branch | Status | Last Run | Output |
 |-------|-----------|--------|--------|----------|--------|
 
-Status column uses the same dot colors as the dashboard (🟢 pass, 🔴 fail). Output column has an expandable button using HTMX (`GET /partials/check-output/{result_id}`).
+Status column uses the same FontAwesome icons as the dashboard (✓ pass, ✗ fail). Output column has an expandable button using HTMX (`GET /partials/check-output/{result_id}`).
 
 Results can also be expanded per-check inline from the check card via `GET /partials/check-results/{slug}`.
 
 ## 6.6 — Styling
 
-**Framework:** Tailwind CSS (via CDN for development, standalone CLI for production build) + DaisyUI for component classes.
+**Framework:** Tailwind CSS (via CDN for development, standalone CLI for production build) + DaisyUI for component classes + FontAwesome 6 for status icons (via CDN).
 
 **Design principles:**
 - **Compact and data-dense** — dashboard is a control panel, not a marketing page.
-- **Color-coded status** — green/red/yellow/gray consistently across all status indicators.
+- **Accessible status indicators** — FontAwesome icons (✓ check, ✗ xmark, ◷ clock, — minus) with semantic colors; status is conveyed by both shape and color.
 - **Monospace for counts** — numbers in the table use monospace font for alignment.
 - **Dark mode** — DaisyUI theme support. Default to system preference.
 - **Responsive** — table scrolls horizontally on small screens; key info visible on mobile.

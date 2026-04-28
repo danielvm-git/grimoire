@@ -70,9 +70,9 @@
                     <td><span class="badge badge-ghost badge-sm">{{ run.triggered_by }}</span></td>
                     <td>
                         {% if run.status == 'completed' %}
-                        <span class="badge badge-success badge-sm gap-1">✓ completed</span>
+                        <span class="badge badge-success badge-sm gap-1"><i class="fa-solid fa-check"></i> completed</span>
                         {% elif run.status == 'failed' %}
-                        <span class="badge badge-error badge-sm gap-1">✗ failed</span>
+                        <span class="badge badge-error badge-sm gap-1"><i class="fa-solid fa-xmark"></i> failed</span>
                         {% else %}
                         <span class="badge badge-warning badge-sm gap-1">
                             <span class="loading loading-spinner loading-xs"></span>
