@@ -257,3 +257,21 @@ class TestResetWorkdir:
         assert result == workdir
         assert not (workdir / "junk.txt").exists()
         assert (workdir / "README.md").exists()
+
+    async def test_reset_auto_clones_when_bare_missing(self, tmp_path: Path) -> None:
+        """reset_workdir should clone the bare repo if it doesn't exist yet."""
+        origin = await _create_local_origin(tmp_path, branch="main")
+
+        cfg = _minimal_config(tmp_path / "ws")
+        mgr = WorkspaceManager(cfg)
+        mgr._clone_url = lambda full_name: str(origin)  # type: ignore[method-assign]  # noqa: SLF001
+
+        # Do NOT call setup() — reset_workdir must handle missing bare repo
+        bare_dir = tmp_path / "ws" / "acme" / "widgets" / ".bare"
+        assert not bare_dir.exists()
+
+        result = await mgr.reset_workdir("acme/widgets", "main")
+
+        assert bare_dir.exists()
+        assert result.exists()
+        assert (result / "README.md").exists()
