@@ -9,29 +9,26 @@
                 <span class="opacity-60">{{ repo.owner }}/</span>{{ repo.name }}
             </a>
 
-            <div class="flex flex-wrap gap-x-6 gap-y-1 text-sm font-mono-nums flex-1">
+            <div class="flex flex-wrap gap-x-1 gap-y-1 text-sm font-mono-nums flex-1">
                 <span class="opacity-70">
                     {{ repo.open_issues }} issues
                     {% if repo.stale_issues %}
-                    <span class="opacity-40">·</span>
                     <span class="{% if repo.open_issues > 0 and (repo.stale_issues * 100 / repo.open_issues) >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">({{ repo.stale_issues }} stale)</span>
                     {% endif %}
                 </span>
+                <span class="opacity-40 mx-1">·</span>
                 <span class="opacity-70">
                     {{ repo.open_prs }} PRs
                     {% if repo.stale_prs %}
-                    <span class="opacity-40">·</span>
                     <span class="{% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">({{ repo.stale_prs }} stale)</span>
                     {% endif %}
                 </span>
-                {% if repo.last_commit_at %}
-                <span class="opacity-60" title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">
-                    Last activity: {{ time_ago(repo.last_commit_at) }}
-                </span>
-                {% endif %}
             </div>
 
             <div class="flex items-center gap-2 flex-shrink-0">
+                {% if repo.last_commit_at %}
+                <span class="opacity-60 text-sm whitespace-nowrap" title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">Last activity: <span class="font-mono-nums inline-block text-right" style="min-width: 8ch">{{ time_ago(repo.last_commit_at) }}</span></span>
+                {% endif %}
                 {% if repo.warnings %}
                 <div class="tooltip tooltip-left" data-tip="{{ repo.warnings | join('; ') }}">
                     <span class="text-warning text-sm">⚠</span>
