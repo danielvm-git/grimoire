@@ -61,6 +61,13 @@ def create_app() -> FastAPI:
 - Manual "Refresh" button.
 - Global warning banner (if applicable): rate limit warning, degraded mode notice.
 
+**Stats bar** — horizontal stat cards showing aggregate metrics:
+- **Repositories** — total count, with a health breakdown subtitle: `X healthy · Y warning · Z failing` (colored green/yellow/red respectively). Counts are derived from each repo's `health_status`.
+- **Open Issues** — total count, with stale count in yellow if any.
+- **Open PRs** — total count, with stale count in yellow if any.
+- **Workflows** — failure count (red) or ✓ (green), with total count.
+- **Checks** — failure count (red) or ✓ (green), with total count. Only shown if checks exist.
+
 **Repository table** — one row per tracked repository:
 
 | Column | Content | Sortable? |

@@ -98,6 +98,9 @@ class DashboardTotals:
     """Aggregate stats for the dashboard stats bar."""
 
     repos: int = 0
+    repos_ok: int = 0
+    repos_warning: int = 0
+    repos_error: int = 0
     open_issues: int = 0
     open_prs: int = 0
     stale_issues: int = 0
@@ -215,6 +218,14 @@ def _time_ago(dt: datetime | str) -> str:
 def _compute_totals(repos: list[RepoViewModel]) -> DashboardTotals:
     totals = DashboardTotals(repos=len(repos))
     for r in repos:
+        # Health distribution
+        status = r.health_status
+        if status == "error":
+            totals.repos_error += 1
+        elif status == "warning":
+            totals.repos_warning += 1
+        else:
+            totals.repos_ok += 1
         totals.open_issues += r.open_issues
         totals.open_prs += r.open_prs
         totals.stale_issues += r.stale_issues
