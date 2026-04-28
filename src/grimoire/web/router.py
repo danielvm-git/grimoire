@@ -574,46 +574,11 @@ async def checks_page(request: Request) -> HTMLResponse:
             )
         )
 
-    # Build results list for the table
-    results_list: list[dict[str, Any]] = []
-    if _checks_engine is not None and _checks:
-        async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(
-                text(
-                    "SELECT cr.id, cr.check_name, cr.check_slug, cr.repo_full_name, "
-                    "cr.branch, cr.passed, cr.timestamp "
-                    "FROM check_result cr "
-                    "INNER JOIN ("
-                    "  SELECT check_slug, repo_full_name, branch, MAX(timestamp) AS max_ts "
-                    "  FROM check_result "
-                    "  GROUP BY check_slug, repo_full_name, branch"
-                    ") latest ON cr.check_slug = latest.check_slug "
-                    "AND cr.repo_full_name = latest.repo_full_name "
-                    "AND cr.branch = latest.branch "
-                    "AND cr.timestamp = latest.max_ts "
-                    "ORDER BY cr.timestamp DESC"
-                )
-            )
-            rows = result.all()
-        for row in rows:
-            results_list.append(
-                {
-                    "id": row[0],
-                    "check_name": row[1],
-                    "check_slug": row[2],
-                    "repo_full_name": row[3],
-                    "branch": row[4],
-                    "passed": bool(row[5]),
-                    "timestamp": row[6],
-                }
-            )
-
     return templates.TemplateResponse(
         request,
         "checks.html",
         context={
             "checks": check_vms,
-            "results": results_list,
             "time_ago": _time_ago,
         },
     )

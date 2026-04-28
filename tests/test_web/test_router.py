@@ -324,19 +324,21 @@ class TestChecksPage:
 
     async def test_checks_shows_result_counts(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/checks")
-        # Watchdog has 1 pass + 1 fail from fixture data
-        assert "1 passed" in resp.text
-        assert "1 failed" in resp.text
+        # Watchdog has 1 pass + 1 fail from fixture data — shown as compact counts
+        assert "✓ 1" in resp.text
+        assert "✗ 1" in resp.text
 
-    async def test_checks_shows_result_history(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_checks_has_inline_results_button(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/checks")
-        assert "Latest Results" in resp.text
-        assert "acme/api" in resp.text
-        assert "acme/frontend" in resp.text
+        # Results are loaded inline per-check via HTMX
+        assert "/partials/check-results/watchdog" in resp.text
 
-    async def test_checks_empty_results_message(self, web_client: AsyncClient) -> None:
+    async def test_checks_empty_shows_no_results_hint(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/checks")
-        assert "No check results yet" in resp.text
+        # Empty state — no checks configured message
+        assert "No checks configured" in resp.text
 
     async def test_checks_shows_script_preview(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/checks")

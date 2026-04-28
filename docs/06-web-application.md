@@ -278,46 +278,30 @@ HTMX partial endpoint: `GET /partials/action-run/{run_id}`
 
 ### Layout
 
-**Section 1: Check Definitions**
+One check per row in a vertical list (similar to dashboard List view). Each row contains:
 
-A card grid (same layout as Actions) for each defined check:
+| Element | Position | Style |
+|---------|----------|-------|
+| **Name** | Left, bold | Semibold text |
+| **Severity** | Inline after name | Muted text: `· error` or `· warning` |
+| **Description** | Below name | Small muted text |
+| **Target summary** | Below description, inline | Monospace, muted (e.g., `regex: .*`, `list: 3 repos`) |
+| **Result summary** | Inline after target | Green ✓ / red ✗ counts + last run time |
+| **Schedule** | Right-aligned | Small muted text: `⏱ cron` or `⏱ default` |
+| **Enabled toggle** | Right side | Swap toggle (● / ○) |
+| **Run button** | Far right | Primary button with play icon |
 
-| Element | Content |
-|---------|---------|
-| **Name** | Check name (e.g., "Watchdog") |
-| **Description** | One-line description |
-| **Schedule badge** | Cron expression or "default interval" |
-| **Target badge** | Pattern summary — e.g., `regex: .*` or `list: 3 repos` |
-| **Enabled toggle** | HTMX toggle (`POST /api/checks/{slug}/toggle`) with visual on/off state |
-| **Run button** | Trigger check (`POST /api/checks/{slug}/run`) |
-| **Script preview** | Collapsible `<pre>` block showing the check script |
-| **Result summary** | Pass/fail counts from latest run, last run timestamp |
+Disabled checks are visually dimmed (reduced opacity) and show `· disabled` inline.
+
+**Expandable sections** below each row:
+- **Script** — toggle button reveals a collapsible `<pre><code class="language-bash">` block with highlight.js syntax highlighting (loaded from CDN on the checks page only).
+- **Results** — toggle button loads per-check results inline via HTMX (`GET /partials/check-results/{slug}`), showing repo/branch/status/output for the latest run of each target.
 
 ```html
-<button hx-post="/api/checks/{slug}/toggle"
-        hx-swap="none"
-        hx-on::after-request="...">
-  Toggle
-</button>
-<button hx-post="/api/checks/{slug}/run"
-        hx-swap="none"
-        hx-on::after-request="...">
-  Run
-</button>
+<button hx-post="/api/checks/{slug}/toggle" hx-swap="none" ...>Toggle</button>
+<button hx-post="/api/checks/{slug}/run" hx-swap="none" ...>Run</button>
+<button hx-get="/partials/check-results/{slug}" hx-target="#check-results-{slug}" ...>Results</button>
 ```
-
-Disabled checks are visually dimmed (reduced opacity) and show a "Disabled" badge.
-
-**Section 2: Latest Results**
-
-Table showing the most recent result for each check × repo × branch:
-
-| Check | Repository | Branch | Status | Last Run | Output |
-|-------|-----------|--------|--------|----------|--------|
-
-Status column uses the same FontAwesome icons as the dashboard (✓ pass, ✗ fail). Output column has an expandable button using HTMX (`GET /partials/check-output/{result_id}`).
-
-Results can also be expanded per-check inline from the check card via `GET /partials/check-results/{slug}`.
 
 ## 6.6 — Styling
 
