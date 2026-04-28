@@ -271,7 +271,8 @@
                                 <button class="btn btn-ghost btn-xs"
                                         hx-get="/partials/check-output/{{ chk.id }}"
                                         hx-target="#check-output-{{ chk.id }}"
-                                        hx-swap="innerHTML">
+                                        hx-swap="innerHTML"
+                                        hx-on::before-request="var t = document.getElementById('check-output-{{ chk.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
                                     Output
                                 </button>
                                 <div id="check-output-{{ chk.id }}"></div>

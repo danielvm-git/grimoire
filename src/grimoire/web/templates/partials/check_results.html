@@ -28,7 +28,8 @@
                 <button class="btn btn-ghost btn-xs"
                         hx-get="/partials/check-output/{{ r.id }}"
                         hx-target="#inline-check-output-{{ r.id }}"
-                        hx-swap="innerHTML">
+                        hx-swap="innerHTML"
+                        hx-on::before-request="var t = document.getElementById('inline-check-output-{{ r.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
                     Output
                 </button>
             </td>
