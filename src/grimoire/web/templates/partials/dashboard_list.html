@@ -84,11 +84,13 @@
                     {% endif %}
                     {% for chk in checks %}
                     <div class="flex items-center gap-2 py-0.5">
+                        <a href="/checks?expand={{ chk.check_slug }}{% if chk.id %}&result={{ chk.id }}{% endif %}#check-card-{{ chk.check_slug }}" class="flex items-center gap-2 hover:opacity-80">
                         {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
                         {% elif chk.status == "fail" and chk.severity == "warning" %}<i class="fa-solid fa-triangle-exclamation status-icon status-icon-pending"></i>
                         {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
                         {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
                         <span class="text-sm">{{ chk.check_name }}</span>
+                        </a>
                         <span class="text-xs opacity-40">{{ chk.status }}</span>
                     </div>
                     {% endfor %}

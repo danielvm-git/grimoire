@@ -118,4 +118,35 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
 <script>hljs.highlightAll();</script>
+<script>
+// Auto-expand check results when navigated from dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    const params = new URLSearchParams(window.location.search);
+    const expandSlug = params.get('expand');
+    const resultId = params.get('result');
+    if (!expandSlug) return;
+
+    const card = document.getElementById('check-card-' + expandSlug);
+    if (!card) return;
+
+    // Scroll to the card
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    card.classList.add('ring', 'ring-primary', 'ring-1');
+    setTimeout(() => card.classList.remove('ring', 'ring-primary', 'ring-1'), 3000);
+
+    // Auto-load results via HTMX
+    const target = document.getElementById('check-results-' + expandSlug);
+    if (target) {
+        htmx.ajax('GET', '/partials/check-results/' + expandSlug, target).then(function() {
+            // After results load, auto-expand the specific result's output
+            if (resultId) {
+                setTimeout(function() {
+                    var outputBtn = target.querySelector('button[hx-get="/partials/check-output/' + resultId + '"]');
+                    if (outputBtn) outputBtn.click();
+                }, 200);
+            }
+        });
+    }
+});
+</script>
 {% endblock %}
