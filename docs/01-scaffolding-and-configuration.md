@@ -64,10 +64,18 @@ repositories:
   - repo: "lucabello/other-repo"
     # omitting branches → default branch only
 
+  # Workflow filtering (glob patterns on workflow name)
+  - repo: "lucabello/filtered-repo"
+    workflows:
+      include: ["CI", "Tests *"]   # only track matching workflows
+      exclude: ["Publish *"]       # then exclude matching (applied after include)
+
   # From a GitHub team
   - team: "my-org/my-team"
     exclude:
       - "my-org/deprecated-repo"
+    workflows:
+      exclude: ["Nightly *"]      # applies to all repos from this team
 
 staleness:
   pull_requests_days: 30   # default: 30
@@ -90,8 +98,9 @@ log_file: "./grimoire.log"
 - `GitUserConfig(name: str, email: str)`
 - `SigningConfig(key_path: Path, format: Literal["ssh", "gpg"])`
 - `GitConfig(user: GitUserConfig, signing: SigningConfig | None = None, ssh_known_hosts: Path | None = None)`
-- `StaticRepoSource(repo: str, branches: list[str] = [])`
-- `TeamRepoSource(team: str, exclude: list[str] = [])`
+- `StaticRepoSource(repo: str, branches: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
+- `TeamRepoSource(team: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
+- `WorkflowFilter(include: list[str] = [], exclude: list[str] = [])` — glob patterns (fnmatch) on workflow name
 - `RepoSource` — discriminated union of the above (by field presence)
 - `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, branches_days: int = 90, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
 - `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional)

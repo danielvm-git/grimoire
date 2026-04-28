@@ -225,3 +225,89 @@ class TestLoadConfig:
         config_file.write_text("just a plain string")
         with pytest.raises(ValueError, match="mapping"):
             load_config(config_file)
+
+    def test_static_repo_with_workflow_filter(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "test"
+            repositories:
+              - repo: "owner/repo"
+                workflows:
+                  include: ["CI", "Tests *"]
+                  exclude: ["Publish *"]
+            """)
+        )
+        config = load_config(config_file)
+        repo = config.repositories[0]
+        assert isinstance(repo, StaticRepoSource)
+        assert repo.workflows.include == ["CI", "Tests *"]
+        assert repo.workflows.exclude == ["Publish *"]
+
+    def test_team_repo_with_workflow_filter(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "test"
+            repositories:
+              - team: "org/my-team"
+                workflows:
+                  exclude: ["Nightly *"]
+            """)
+        )
+        config = load_config(config_file)
+        repo = config.repositories[0]
+        assert isinstance(repo, TeamRepoSource)
+        assert repo.workflows.include == []
+        assert repo.workflows.exclude == ["Nightly *"]
+
+    def test_workflow_filter_defaults_empty(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "test"
+            repositories:
+              - repo: "owner/repo"
+            """)
+        )
+        config = load_config(config_file)
+        repo = config.repositories[0]
+        assert isinstance(repo, StaticRepoSource)
+        assert repo.workflows.include == []
+        assert repo.workflows.exclude == []
+
+
+class TestWorkflowMatchesFilter:
+    """Tests for the workflow include/exclude filter logic."""
+
+    def test_no_filters_allows_all(self) -> None:
+        from grimoire.github.service import _workflow_matches_filter
+
+        assert _workflow_matches_filter("CI", [], []) is True
+        assert _workflow_matches_filter("Publish", [], []) is True
+
+    def test_include_only(self) -> None:
+        from grimoire.github.service import _workflow_matches_filter
+
+        assert _workflow_matches_filter("CI", ["CI", "Tests *"], []) is True
+        assert _workflow_matches_filter("Tests nightly", ["CI", "Tests *"], []) is True
+        assert _workflow_matches_filter("Publish", ["CI", "Tests *"], []) is False
+
+    def test_exclude_only(self) -> None:
+        from grimoire.github.service import _workflow_matches_filter
+
+        assert _workflow_matches_filter("CI", [], ["Publish *"]) is True
+        assert _workflow_matches_filter("Publish release", [], ["Publish *"]) is False
+
+    def test_include_and_exclude(self) -> None:
+        from grimoire.github.service import _workflow_matches_filter
+
+        # "Tests CI" matches include, doesn't match exclude → allowed
+        assert _workflow_matches_filter("Tests CI", ["Tests *"], ["Tests nightly"]) is True
+        # "Tests nightly" matches include AND exclude → excluded
+        assert _workflow_matches_filter("Tests nightly", ["Tests *"], ["Tests nightly"]) is False
+        # "Publish" doesn't match include → excluded
+        assert _workflow_matches_filter("Publish", ["Tests *"], ["Publish"]) is False

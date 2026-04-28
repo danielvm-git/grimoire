@@ -126,10 +126,18 @@ repositories:
   # Individual repo (default branch only)
   - repo: "owner/another-repo"
 
+  # Workflow filtering (include/exclude with glob patterns)
+  - repo: "owner/filtered-repo"
+    workflows:
+      include: ["CI", "Tests *"]   # only track these workflows
+      exclude: ["Publish *"]       # exclude these (applied after include)
+
   # All repos from a GitHub team (archived repos are always excluded)
   - team: "org-name/team-slug"
     exclude:
       - "org-name/excluded-repo"
+    workflows:
+      exclude: ["Release *"]       # applies to all repos from this team
 
 # Staleness thresholds
 staleness:

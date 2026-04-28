@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from fnmatch import fnmatch
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -31,6 +32,20 @@ from grimoire.models import (
 logger = logging.getLogger(__name__)
 
 _CONCURRENCY_LIMIT = 10
+
+
+def _workflow_matches_filter(wf_name: str, include: list[str], exclude: list[str]) -> bool:
+    """Return True if the workflow should be tracked after applying filters.
+
+    * If *include* is non-empty, the name must match at least one include pattern.
+    * If *exclude* is non-empty, the name must NOT match any exclude pattern.
+    * Both use ``fnmatch`` glob matching (case-sensitive).
+    """
+    if include and not any(fnmatch(wf_name, pat) for pat in include):
+        return False
+    if exclude and any(fnmatch(wf_name, pat) for pat in exclude):
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +99,8 @@ async def _resolve_static(
                 default_branch=default_branch,
                 branches=branches,
                 source="static",
+                workflow_include=source.workflows.include,
+                workflow_exclude=source.workflows.exclude,
             )
     except Exception:
         logger.warning("Failed to resolve static repo %s, skipping", source.repo, exc_info=True)
@@ -130,6 +147,8 @@ async def _resolve_team(
                 default_branch=default_branch,
                 branches=branches,
                 source=source_label,
+                workflow_include=source.workflows.include,
+                workflow_exclude=source.workflows.exclude,
             )
 
 
@@ -223,6 +242,10 @@ async def fetch_repository_stats(
                     wf_id = wf.get("id")
                     wf_name = wf.get("name", "unknown")
                     if wf_id is None:
+                        continue
+                    if not _workflow_matches_filter(
+                        wf_name, repo.workflow_include, repo.workflow_exclude
+                    ):
                         continue
                     try:
                         runs = await client.get_workflow_runs(repo.full_name, wf_id, branch)
@@ -451,6 +474,8 @@ async def save_stats_to_db(
                     last_commit_at=stats.last_commit_at,
                     total_branches=stats.total_branches,
                     stale_branches=stats.stale_branches,
+                    workflow_include_json=json.dumps(repo.workflow_include),
+                    workflow_exclude_json=json.dumps(repo.workflow_exclude),
                     fetched_at=stats.fetched_at or now,
                 )
             )
@@ -518,6 +543,12 @@ async def load_stats_from_db(
                 default_branch=cr.default_branch,
                 branches=branches,
                 source=cr.source,
+                workflow_include=json.loads(cr.workflow_include_json)
+                if cr.workflow_include_json
+                else [],
+                workflow_exclude=json.loads(cr.workflow_exclude_json)
+                if cr.workflow_exclude_json
+                else [],
             )
             repos.append(repo)
 
