@@ -72,14 +72,21 @@
     </div>
     {% if totals.total_checks %}
     <div class="stat">
-        <div class="stat-figure {% if totals.check_failures %}text-error{% else %}text-success{% endif %}">
+        <div class="stat-figure {% if totals.check_failures %}text-error{% elif totals.check_warnings %}text-warning{% else %}text-success{% endif %}">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
         </div>
         <div class="stat-title">Checks</div>
-        <div class="stat-value font-mono-nums {% if totals.check_failures %}text-error{% else %}text-success{% endif %}">
-            {% if totals.check_failures %}{{ totals.check_failures }} failing{% else %}✓{% endif %}
+        <div class="stat-value font-mono-nums {% if totals.check_failures %}text-error{% elif totals.check_warnings %}text-warning{% else %}text-success{% endif %}">
+            {{ totals.total_checks }}
         </div>
-        <div class="stat-desc">{{ totals.total_checks }} total</div>
+        <div class="stat-desc">
+            {%- set checks_passed = totals.total_checks - totals.check_failures - totals.check_warnings -%}
+            {%- if totals.check_failures %}<span class="text-error">{{ totals.check_failures }} failing</span>{% endif -%}
+            {%- if totals.check_failures and totals.check_warnings %} · {% endif -%}
+            {%- if totals.check_warnings %}<span class="text-warning">{{ totals.check_warnings }} warning</span>{% endif -%}
+            {%- if (totals.check_failures or totals.check_warnings) and checks_passed %} · {% endif -%}
+            {%- if checks_passed %}<span class="text-success">{{ checks_passed }} passed</span>{% endif -%}
+        </div>
     </div>
     {% endif %}
 </div>
