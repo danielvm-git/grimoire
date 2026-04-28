@@ -50,12 +50,27 @@ async def run_check(
             check.script,
             cwd=workdir,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout_bytes, _ = await asyncio.wait_for(proc.communicate(), timeout=_DEFAULT_TIMEOUT)
-        output = stdout_bytes.decode(errors="replace")
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(
+            proc.communicate(), timeout=_DEFAULT_TIMEOUT
+        )
+        stdout_text = stdout_bytes.decode(errors="replace").rstrip()
+        stderr_text = stderr_bytes.decode(errors="replace").rstrip()
         passed = proc.returncode == 0
+
+        # Build combined output with clear sections
+        parts: list[str] = []
+        if stdout_text:
+            parts.append(stdout_text)
+        if stderr_text:
+            if stdout_text:
+                parts.append("")
+            parts.append(f"[stderr]\n{stderr_text}")
+        if not passed:
+            parts.append(f"\n[exit code {proc.returncode}]")
+        output = "\n".join(parts)
     except asyncio.TimeoutError:
         output = f"Timed out after {_DEFAULT_TIMEOUT}s"
         passed = False

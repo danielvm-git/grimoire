@@ -72,6 +72,25 @@ class TestRunCheck:
         result = await run_check(_check("exit 1"), _repo(), "main", ws, engine)  # type: ignore[arg-type]
 
         assert result.passed is False
+        assert "[exit code 1]" in result.output
+
+    async def test_failed_check_stderr_labeled(self, tmp_path: Path) -> None:
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        result = await run_check(
+            _check("echo oops >&2 && exit 2"),
+            _repo(),
+            "main",
+            ws,
+            engine,  # type: ignore[arg-type]
+        )
+
+        assert result.passed is False
+        assert "[stderr]" in result.output
+        assert "oops" in result.output
+        assert "[exit code 2]" in result.output
 
     async def test_output_capture(self, tmp_path: Path) -> None:
         engine = await get_engine(str(tmp_path / "test.db"))
