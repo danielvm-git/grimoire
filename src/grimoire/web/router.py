@@ -675,7 +675,15 @@ async def check_results_partial(
     request: Request, slug: str, sort: str = "repo", dir: str = "asc"
 ) -> HTMLResponse:
     """Return per-check latest results table for inline expansion."""
+    from grimoire.checks.router import _checks
     from grimoire.checks.router import _engine as _checks_engine
+
+    # Determine severity for this check
+    severity = "error"
+    for c in _checks:
+        if c.slug == slug:
+            severity = c.severity
+            break
 
     results_list: list[dict[str, Any]] = []
     if _checks_engine is not None:
@@ -725,6 +733,7 @@ async def check_results_partial(
         context={
             "results": results_list,
             "slug": slug,
+            "severity": severity,
             "sort": sort,
             "dir": dir,
             "time_ago": _time_ago,
