@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -143,18 +142,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         set_checks_state(checks, refreshed_repos, workspace, engine)
         set_actions_state(actions, refreshed_repos, workspace, engine)
 
-        # Run default-schedule checks (those without a cron schedule) non-blocking
+        # Run default-schedule checks (those without a cron schedule)
         default_checks = [c for c in checks if c.enabled and not c.schedule]
-        if default_checks:
-
-            async def _run_default_checks() -> None:
-                for check in default_checks:
-                    try:
-                        await run_check_for_all_targets(check, refreshed_repos, workspace, engine)
-                    except Exception:
-                        logger.exception("Default-schedule check '%s' failed", check.slug)
-
-            asyncio.create_task(_run_default_checks())
+        for check in default_checks:
+            try:
+                await run_check_for_all_targets(check, refreshed_repos, workspace, engine)
+            except Exception:
+                logger.exception("Default-schedule check '%s' failed", check.slug)
 
     set_refresh_callback(_do_refresh)
 
