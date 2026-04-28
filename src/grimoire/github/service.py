@@ -7,6 +7,7 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from fnmatch import fnmatch
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -19,6 +20,7 @@ from grimoire.database import (
     CachedPullRequest,
     CachedRepository,
     CachedWorkflowStatus,
+    CheckResultRecord,
 )
 from grimoire.github.client import GitHubClient
 from grimoire.models import (
@@ -649,10 +651,59 @@ async def prune_removed_repos(engine: AsyncEngine, config: GrimoireConfig) -> in
     if not configured_names:
         return 0
 
+    return await _prune_repos_from_db(engine, configured_names)
+
+
+async def prune_stale_data(
+    engine: AsyncEngine,
+    repos: list[TrackedRepository],
+    workspace_dir: Path | None = None,
+) -> int:
+    """Remove DB and disk data for repos/workflows no longer in the resolved set.
+
+    Unlike ``prune_removed_repos``, this works after resolution (including
+    team sources) because the caller provides the authoritative repo list.
+    Also cleans up excluded workflow statuses from the DB and removes
+    workspace directories for pruned repos.
+
+    Returns the number of repos pruned.
+    """
+    active_names = {r.full_name for r in repos}
+    pruned = await _prune_repos_from_db(engine, active_names)
+
+    # Clean up excluded workflows: for each active repo, delete cached
+    # workflow statuses that no longer pass the include/exclude filter.
+    async with AsyncSession(engine) as session:
+        for repo in repos:
+            if not repo.workflow_include and not repo.workflow_exclude:
+                continue
+            wf_rows = (
+                await session.exec(
+                    select(CachedWorkflowStatus).where(
+                        CachedWorkflowStatus.repo_full_name == repo.full_name
+                    )
+                )
+            ).all()
+            for wf in wf_rows:
+                if not _workflow_matches_filter(
+                    wf.workflow_name, repo.workflow_include, repo.workflow_exclude
+                ):
+                    await session.delete(wf)
+        await session.commit()
+
+    # Clean up workspace directories for pruned repos
+    if workspace_dir and pruned:
+        _prune_workspace_dirs(workspace_dir, active_names)
+
+    return pruned
+
+
+async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> int:
+    """Delete DB rows for repos not in *active_names*.  Returns count pruned."""
     pruned = 0
     async with AsyncSession(engine) as session:
         cached = (await session.exec(select(CachedRepository.full_name))).all()
-        stale_names = [name for name in cached if name not in configured_names]
+        stale_names = [name for name in cached if name not in active_names]
 
         for fn in stale_names:
             await session.exec(  # type: ignore[call-overload]
@@ -665,12 +716,42 @@ async def prune_removed_repos(engine: AsyncEngine, config: GrimoireConfig) -> in
                 delete(CachedWorkflowStatus).where(CachedWorkflowStatus.repo_full_name == fn)  # type: ignore[arg-type]
             )
             await session.exec(  # type: ignore[call-overload]
+                delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn)  # type: ignore[arg-type]
+            )
+            await session.exec(  # type: ignore[call-overload]
                 delete(CachedRepository).where(CachedRepository.full_name == fn)  # type: ignore[arg-type]
             )
             pruned += 1
 
         if pruned:
             await session.commit()
-            logger.info("Pruned %d repos no longer in config: %s", pruned, stale_names)
+            logger.info("Pruned %d repos no longer tracked: %s", pruned, stale_names)
 
     return pruned
+
+
+def _prune_workspace_dirs(workspace_dir: Path, active_names: set[str]) -> None:
+    """Remove workspace directories for repos no longer tracked."""
+    import shutil
+
+    active_owners: dict[str, set[str]] = {}
+    for name in active_names:
+        owner, repo = name.split("/", 1)
+        active_owners.setdefault(owner, set()).add(repo)
+
+    if not workspace_dir.is_dir():
+        return
+
+    for owner_dir in workspace_dir.iterdir():
+        if not owner_dir.is_dir() or owner_dir.name.startswith("."):
+            continue
+        for repo_dir in owner_dir.iterdir():
+            if not repo_dir.is_dir() or repo_dir.name.startswith("."):
+                continue
+            full_name = f"{owner_dir.name}/{repo_dir.name}"
+            if full_name not in active_names:
+                logger.info("Removing workspace for pruned repo: %s", full_name)
+                shutil.rmtree(repo_dir, ignore_errors=True)
+        # Remove empty owner directories
+        if owner_dir.is_dir() and not any(owner_dir.iterdir()):
+            owner_dir.rmdir()

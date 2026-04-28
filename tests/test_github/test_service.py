@@ -20,8 +20,11 @@ from grimoire.config import (
     TeamRepoSource,
 )
 from grimoire.database import (
+    CachedIssue,
+    CachedPullRequest,
     CachedRepository,
     CachedWorkflowStatus,
+    CheckResultRecord,
     create_tables,
     get_engine,
 )
@@ -29,6 +32,7 @@ from grimoire.github.client import GitHubClient
 from grimoire.github.service import (
     fetch_repository_stats,
     load_stats_from_db,
+    prune_stale_data,
     refresh_all_stats,
     resolve_repositories,
     save_stats_to_db,
@@ -458,3 +462,162 @@ async def test_prune_skipped_with_team_sources(engine: AsyncEngine) -> None:
     # Repo should still be there
     repos, _ = await load_stats_from_db(engine)
     assert len(repos) == 1
+
+
+# ---------------------------------------------------------------------------
+# prune_stale_data
+# ---------------------------------------------------------------------------
+
+
+async def test_prune_stale_data_removes_repos(engine: AsyncEngine) -> None:
+    """Repos not in the active set are fully removed from the DB."""
+    # Seed two repos
+    for name in ("org/keep", "org/stale"):
+        repo = TrackedRepository(full_name=name, default_branch="main", branches=["main"])
+        await save_stats_to_db(
+            engine,
+            [RepositoryStats(full_name=name, default_branch="main")],
+            [repo],
+        )
+
+    # Only org/keep is active
+    active = [TrackedRepository(full_name="org/keep", default_branch="main", branches=["main"])]
+    pruned = await prune_stale_data(engine, active)
+    assert pruned == 1
+
+    repos, _ = await load_stats_from_db(engine)
+    assert [r.full_name for r in repos] == ["org/keep"]
+
+
+async def test_prune_stale_data_cleans_related_rows(engine: AsyncEngine) -> None:
+    """Issues, PRs, workflows, and check results for stale repos are cleaned."""
+    repo_name = "org/stale"
+    repo = TrackedRepository(full_name=repo_name, default_branch="main", branches=["main"])
+    await save_stats_to_db(
+        engine,
+        [RepositoryStats(full_name=repo_name, default_branch="main")],
+        [repo],
+    )
+
+    # Insert related rows
+    now = datetime(2025, 1, 1, tzinfo=UTC)
+    async with AsyncSession(engine) as session:
+        session.add(
+            CachedIssue(
+                repo_full_name=repo_name,
+                number=1,
+                title="Issue",
+                url="https://example.com/1",
+                created_at=now,
+            )
+        )
+        session.add(
+            CachedPullRequest(
+                repo_full_name=repo_name,
+                number=2,
+                title="PR",
+                url="https://example.com/2",
+                created_at=now,
+            )
+        )
+        session.add(
+            CachedWorkflowStatus(
+                repo_full_name=repo_name,
+                branch="main",
+                workflow_name="CI",
+                status="success",
+            )
+        )
+        session.add(
+            CheckResultRecord(
+                repo_full_name=repo_name,
+                check_slug="test-check",
+                check_name="Test Check",
+                branch="main",
+                passed=True,
+            )
+        )
+        await session.commit()
+
+    # Prune with empty active list
+    pruned = await prune_stale_data(engine, [])
+    assert pruned == 1
+
+    # All related rows should be gone
+    async with AsyncSession(engine) as session:
+        assert (await session.exec(select(CachedIssue))).all() == []
+        assert (await session.exec(select(CachedPullRequest))).all() == []
+        assert (await session.exec(select(CachedWorkflowStatus))).all() == []
+        assert (await session.exec(select(CheckResultRecord))).all() == []
+        assert (await session.exec(select(CachedRepository))).all() == []
+
+
+async def test_prune_stale_data_removes_excluded_workflows(engine: AsyncEngine) -> None:
+    """Workflow statuses excluded by filters are pruned even for active repos."""
+    repo_name = "org/repo"
+    repo = TrackedRepository(
+        full_name=repo_name,
+        default_branch="main",
+        branches=["main"],
+        workflow_exclude=["Nightly *"],
+    )
+    await save_stats_to_db(
+        engine,
+        [RepositoryStats(full_name=repo_name, default_branch="main")],
+        [repo],
+    )
+
+    # Insert workflow rows — one matching exclude, one not
+    async with AsyncSession(engine) as session:
+        session.add(
+            CachedWorkflowStatus(
+                repo_full_name=repo_name,
+                branch="main",
+                workflow_name="CI",
+                status="success",
+            )
+        )
+        session.add(
+            CachedWorkflowStatus(
+                repo_full_name=repo_name,
+                branch="main",
+                workflow_name="Nightly Tests",
+                status="failure",
+            )
+        )
+        await session.commit()
+
+    await prune_stale_data(engine, [repo])
+
+    async with AsyncSession(engine) as session:
+        wfs = (await session.exec(select(CachedWorkflowStatus))).all()
+        assert len(wfs) == 1
+        assert wfs[0].workflow_name == "CI"
+
+
+async def test_prune_workspace_dirs(engine: AsyncEngine, tmp_path) -> None:
+    """Workspace directories for pruned repos are removed from disk."""
+    workspace = tmp_path / "workspace"
+    # Create dirs for two repos
+    (workspace / "org" / "keep").mkdir(parents=True)
+    (workspace / "org" / "stale").mkdir(parents=True)
+    (workspace / "other" / "gone").mkdir(parents=True)
+
+    active = [TrackedRepository(full_name="org/keep", default_branch="main", branches=["main"])]
+
+    # Seed the stale repos in DB so prune counts them
+    for name in ("org/stale", "other/gone"):
+        repo = TrackedRepository(full_name=name, default_branch="main", branches=["main"])
+        await save_stats_to_db(
+            engine,
+            [RepositoryStats(full_name=name, default_branch="main")],
+            [repo],
+        )
+
+    pruned = await prune_stale_data(engine, active, workspace_dir=workspace)
+    assert pruned == 2
+
+    # Stale dirs should be gone
+    assert (workspace / "org" / "keep").is_dir()
+    assert not (workspace / "org" / "stale").exists()
+    assert not (workspace / "other").exists()  # empty owner dir removed
