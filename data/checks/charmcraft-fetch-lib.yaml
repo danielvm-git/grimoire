@@ -5,5 +5,11 @@ targets:
 severity: warning
 script: |
   set -e
+  export CRAFT_VERBOSITY=verbose
   charmcraft fetch-lib
-  test -z "$(git status --porcelain)"
+  changes="$(git status --porcelain)"
+  if [ -n "$changes" ]; then
+    echo "Libraries are outdated:"
+    echo "$changes"
+    exit 1
+  fi

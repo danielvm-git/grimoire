@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
+import tempfile
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -44,6 +46,12 @@ async def run_check(
 
     env = {**os.environ, **workspace.get_env()}
 
+    # Give each check subprocess its own temp/runtime directory to avoid
+    # conflicts when tools (e.g. charmcraft) use shared state files.
+    tmpdir = tempfile.mkdtemp(prefix="grimoire-check-")
+    env["TMPDIR"] = tmpdir
+    env["XDG_RUNTIME_DIR"] = tmpdir
+
     proc: asyncio.subprocess.Process | None = None
     try:
         proc = await asyncio.create_subprocess_shell(
@@ -80,6 +88,8 @@ async def run_check(
     except OSError as exc:
         output = f"Failed to execute: {exc}"
         passed = False
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
     # Cap output
     if len(output) > OUTPUT_SIZE_CAP:
