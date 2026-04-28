@@ -56,7 +56,7 @@ async def run_check(
     try:
         proc = await asyncio.create_subprocess_shell(
             check.script,
-            cwd=workdir,
+            cwd=str(workdir),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
