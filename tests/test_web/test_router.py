@@ -106,34 +106,34 @@ class TestActionsPage:
 
 
 class TestDashboardPartial:
-    """Tests for GET /partials/dashboard-cards route."""
+    """Tests for GET /partials/dashboard-matrix route."""
 
     async def test_partial_returns_html(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=asc")
+        resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
         assert resp.status_code == 200
         assert "text/html" in resp.headers.get("content-type", "")
 
     async def test_partial_contains_repos(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=asc")
-        assert "acme/api" in resp.text
-        assert "acme/frontend" in resp.text
+        resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
+        assert "api" in resp.text
+        assert "frontend" in resp.text
 
     async def test_sort_name_asc(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=asc")
+        resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
         text = resp.text
         api_pos = text.index("acme/api")
         frontend_pos = text.index("acme/frontend")
         assert api_pos < frontend_pos
 
     async def test_sort_name_desc(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=desc")
+        resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=desc")
         text = resp.text
         api_pos = text.index("acme/api")
         frontend_pos = text.index("acme/frontend")
         assert frontend_pos < api_pos
 
     async def test_sort_issues(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=issues&dir=desc")
+        resp = await web_client.get("/partials/dashboard-matrix?sort=issues&dir=desc")
         text = resp.text
         # acme/frontend has 10 issues, acme/api has 5 — frontend should come first
         api_pos = text.index("acme/api")
@@ -141,22 +141,28 @@ class TestDashboardPartial:
         assert frontend_pos < api_pos
 
     async def test_sort_last_activity(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=last_activity&dir=desc")
+        resp = await web_client.get("/partials/dashboard-matrix?sort=last_activity&dir=desc")
         text = resp.text
         # acme/frontend has 2026-04-12, acme/api has 2026-04-10 — frontend should come first
         api_pos = text.index("acme/api")
         frontend_pos = text.index("acme/frontend")
         assert frontend_pos < api_pos
 
-    async def test_dashboard_shows_last_activity(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=asc")
-        assert "Last activity:" in resp.text
+    async def test_matrix_has_table_structure(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
+        assert "<table" in resp.text
+        assert "<thead>" in resp.text
+        assert "<tbody>" in resp.text
 
-    async def test_dashboard_shows_branches(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-cards?sort=name&dir=asc")
-        assert "8 branches" in resp.text
-        assert "3 stale" in resp.text
-        assert "4 branches" in resp.text
+    async def test_matrix_shows_sortable_headers(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
+        assert "hx-get" in resp.text
+        assert "/partials/dashboard-matrix" in resp.text
+
+    async def test_matrix_shows_workflow_icons(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
+        assert "status-icon-success" in resp.text
+        assert "status-icon-failure" in resp.text
 
 
 class TestDashboardListPartial:
@@ -191,50 +197,6 @@ class TestDashboardListPartial:
         assert "⚠" in resp.text
 
 
-class TestDashboardTablePartial:
-    """Tests for GET /partials/dashboard-table route."""
-
-    async def test_table_returns_html(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
-        assert resp.status_code == 200
-        assert "text/html" in resp.headers.get("content-type", "")
-
-    async def test_table_contains_repos(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
-        assert "acme/api" in resp.text
-        assert "acme/frontend" in resp.text
-
-    async def test_table_has_table_structure(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
-        assert "<table" in resp.text
-        assert "<thead>" in resp.text
-        assert "<tbody>" in resp.text
-
-    async def test_table_sort_name_asc(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
-        text = resp.text
-        api_pos = text.index("acme/api")
-        frontend_pos = text.index("acme/frontend")
-        assert api_pos < frontend_pos
-
-    async def test_table_sort_issues_desc(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-table?sort=issues&dir=desc")
-        text = resp.text
-        api_pos = text.index("acme/api")
-        frontend_pos = text.index("acme/frontend")
-        assert frontend_pos < api_pos
-
-    async def test_table_shows_sortable_headers(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
-        assert "hx-get" in resp.text
-        assert "/partials/dashboard-table" in resp.text
-
-    async def test_table_shows_workflow_dots(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-table?sort=name&dir=asc")
-        assert "status-icon-success" in resp.text
-        assert "status-icon-failure" in resp.text
-
-
 class TestActionRunPartial:
     """Tests for GET /partials/action-run/{run_id} route."""
 
@@ -256,16 +218,16 @@ class TestCheckOutputPartial:
 class TestCheckDisplay:
     """Tests for check display across dashboard views."""
 
-    async def test_cards_show_check_dots(self, web_client_with_checks: AsyncClient) -> None:
-        resp = await web_client_with_checks.get("/partials/dashboard-cards?sort=name&dir=asc")
+    async def test_matrix_show_check_icons(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/partials/dashboard-matrix?sort=name&dir=asc")
         assert resp.status_code == 200
         assert "Checks" in resp.text
         assert "status-icon-pass" in resp.text
         assert "status-icon-fail" in resp.text
 
-    async def test_cards_show_not_run_checks(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_matrix_show_not_run_checks(self, web_client_with_checks: AsyncClient) -> None:
         """Watchdog targets both repos but only has results for some branches."""
-        resp = await web_client_with_checks.get("/partials/dashboard-cards?sort=name&dir=asc")
+        resp = await web_client_with_checks.get("/partials/dashboard-matrix?sort=name&dir=asc")
         assert "status-icon-not-run" in resp.text
 
     async def test_list_show_check_dots(self, web_client_with_checks: AsyncClient) -> None:
@@ -274,8 +236,10 @@ class TestCheckDisplay:
         assert "status-icon-pass" in resp.text
         assert "status-icon-fail" in resp.text
 
-    async def test_table_show_check_dots(self, web_client_with_checks: AsyncClient) -> None:
-        resp = await web_client_with_checks.get("/partials/dashboard-table?sort=name&dir=asc")
+    async def test_matrix_show_check_icons_for_checks(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get("/partials/dashboard-matrix?sort=name&dir=asc")
         assert resp.status_code == 200
         assert ">Checks<" in resp.text
         assert "status-icon-pass" in resp.text
