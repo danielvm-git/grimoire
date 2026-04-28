@@ -671,7 +671,9 @@ async def check_output_partial(request: Request, result_id: int) -> HTMLResponse
 
 
 @router.get("/partials/check-results/{slug}", response_class=HTMLResponse)
-async def check_results_partial(request: Request, slug: str) -> HTMLResponse:
+async def check_results_partial(
+    request: Request, slug: str, sort: str = "repo", dir: str = "asc"
+) -> HTMLResponse:
     """Return per-check latest results table for inline expansion."""
     from grimoire.checks.router import _engine as _checks_engine
 
@@ -707,11 +709,24 @@ async def check_results_partial(request: Request, slug: str) -> HTMLResponse:
                 }
             )
 
+    # Sort results
+    sort_keys: dict[str, Any] = {
+        "repo": lambda r: r["repo_full_name"].lower(),
+        "branch": lambda r: r["branch"].lower(),
+        "status": lambda r: 0 if r["passed"] else 1,
+        "time": lambda r: r["timestamp"] or "",
+    }
+    key_fn = sort_keys.get(sort, sort_keys["repo"])
+    results_list.sort(key=key_fn, reverse=(dir == "desc"))
+
     return templates.TemplateResponse(
         request,
         "partials/check_results.html",
         context={
             "results": results_list,
+            "slug": slug,
+            "sort": sort,
+            "dir": dir,
             "time_ago": _time_ago,
         },
     )
