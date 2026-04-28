@@ -71,6 +71,7 @@
                             </a>
                         </div>
                         {% endfor %}
+                        {% if not loop.last %}<span class="opacity-30 mx-0.5">|</span>{% endif %}
                     {% endfor %}
                 </div>
             </td>
@@ -88,6 +89,7 @@
                             {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
                         </div>
                         {% endfor %}
+                        {% if not loop.last %}<span class="opacity-30 mx-0.5">|</span>{% endif %}
                     {% endfor %}
                 </div>
                 {% endif %}
