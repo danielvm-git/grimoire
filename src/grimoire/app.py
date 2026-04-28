@@ -36,7 +36,7 @@ from grimoire.github.router import (
 from grimoire.github.router import (
     router as repos_router,
 )
-from grimoire.github.service import load_stats_from_db, refresh_all_stats
+from grimoire.github.service import load_stats_from_db, prune_removed_repos, refresh_all_stats
 from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import router as metrics_router
@@ -69,6 +69,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Expose staleness thresholds to web layer
     set_staleness_config(config.staleness)
+
+    # Prune DB-cached repos that are no longer in the config
+    await prune_removed_repos(engine, config)
 
     # GitHub client
     client = GitHubClient(config.github.token, engine)

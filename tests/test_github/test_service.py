@@ -410,3 +410,51 @@ async def test_refresh_falls_back_to_cache_on_304(
     assert len(result_repos) == 1
     assert result_repos[0].full_name == "myorg/svc"
     assert len(result_stats) == 1
+
+
+# ---------------------------------------------------------------------------
+# prune_removed_repos
+# ---------------------------------------------------------------------------
+
+
+async def test_prune_removes_repos_not_in_config(engine: AsyncEngine) -> None:
+    """Repos in DB but not in config should be deleted."""
+    from grimoire.github.service import prune_removed_repos
+
+    # Seed DB with two repos
+    repo_a = TrackedRepository(full_name="org/keep", default_branch="main", branches=["main"])
+    repo_b = TrackedRepository(full_name="org/remove", default_branch="main", branches=["main"])
+    stats = [
+        RepositoryStats(full_name="org/keep", default_branch="main"),
+        RepositoryStats(full_name="org/remove", default_branch="main"),
+    ]
+    await save_stats_to_db(engine, stats, [repo_a, repo_b])
+
+    # Config only has org/keep
+    config = _make_config(repos=[StaticRepoSource(repo="org/keep")])
+    pruned = await prune_removed_repos(engine, config)
+    assert pruned == 1
+
+    # Verify only org/keep remains
+    repos, _ = await load_stats_from_db(engine)
+    assert [r.full_name for r in repos] == ["org/keep"]
+
+
+async def test_prune_skipped_with_team_sources(engine: AsyncEngine) -> None:
+    """Pruning should be skipped when team sources are present."""
+    from grimoire.github.service import prune_removed_repos
+
+    # Seed DB with a repo
+    repo = TrackedRepository(full_name="org/repo", default_branch="main", branches=["main"])
+    await save_stats_to_db(
+        engine, [RepositoryStats(full_name="org/repo", default_branch="main")], [repo]
+    )
+
+    # Config has a team source — can't know full set, so skip pruning
+    config = _make_config(repos=[TeamRepoSource(team="org/myteam")])
+    pruned = await prune_removed_repos(engine, config)
+    assert pruned == 0
+
+    # Repo should still be there
+    repos, _ = await load_stats_from_db(engine)
+    assert len(repos) == 1
