@@ -596,3 +596,50 @@ async def load_stats_from_db(
             )
 
     return repos, stats_list
+
+
+async def prune_removed_repos(engine: AsyncEngine, config: GrimoireConfig) -> int:
+    """Delete DB-cached data for repos no longer present in the config.
+
+    Only performs pruning when the config contains exclusively static repo
+    sources (``repo:`` entries) so the full set of expected names is known
+    without making API calls.  Returns the number of repos pruned.
+    """
+    has_team_sources = any(isinstance(s, TeamRepoSource) for s in config.repositories)
+    if has_team_sources:
+        logger.debug("Config contains team sources — skipping DB prune")
+        return 0
+
+    configured_names: set[str] = set()
+    for source in config.repositories:
+        if isinstance(source, StaticRepoSource):
+            configured_names.add(source.repo)
+
+    if not configured_names:
+        return 0
+
+    pruned = 0
+    async with AsyncSession(engine) as session:
+        cached = (await session.exec(select(CachedRepository.full_name))).all()
+        stale_names = [name for name in cached if name not in configured_names]
+
+        for fn in stale_names:
+            await session.exec(  # type: ignore[call-overload]
+                delete(CachedIssue).where(CachedIssue.repo_full_name == fn)  # type: ignore[arg-type]
+            )
+            await session.exec(  # type: ignore[call-overload]
+                delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn)  # type: ignore[arg-type]
+            )
+            await session.exec(  # type: ignore[call-overload]
+                delete(CachedWorkflowStatus).where(CachedWorkflowStatus.repo_full_name == fn)  # type: ignore[arg-type]
+            )
+            await session.exec(  # type: ignore[call-overload]
+                delete(CachedRepository).where(CachedRepository.full_name == fn)  # type: ignore[arg-type]
+            )
+            pruned += 1
+
+        if pruned:
+            await session.commit()
+            logger.info("Pruned %d repos no longer in config: %s", pruned, stale_names)
+
+    return pruned
