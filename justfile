@@ -16,7 +16,7 @@ export UV_FROZEN := "true"
 # Run the application in development mode (with auto-reload)
 [group("dev")]
 dev:
-    uv run uvicorn grimoire.app:create_app --factory --reload --reload-exclude "workspace/*" --port 8000
+    uv run uvicorn grimoire.app:create_app --factory --reload --reload-dir src --reload-dir data --reload-include "*.yaml" --port 8000
 
 # Run the application in production mode
 [group("dev")]
