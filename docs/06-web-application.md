@@ -227,49 +227,36 @@ The "Output" column has an expandable/collapsible section (HTMX `hx-get` to fetc
 
 ### Layout
 
+The actions page follows the same vertical-list layout as the checks page.
+
 **Section 1: Available Actions**
 
-A card or table for each defined action:
+One action per row in a vertical list. Each row contains:
 
-| Name | Description | Targets | Schedule | |
-|------|-------------|---------|----------|----|
-| Update UV Lock | Updates uv.lock and opens a PR | 12 repos (regex: `lucabello/.*`) | Mon 00:00 | [Run] |
+| Element | Position | Style |
+|---------|----------|-------|
+| **Name** | Left, bold | Semibold text |
+| **Description** | Below name | Small muted text |
+| **Target summary** | Below description, inline | Monospace, muted (e.g., `regex: .*`, `list: 3 repos`) |
+| **Result summary** | Inline after target | Green ✓ / red ✗ counts + last run time |
+| **Schedule** | Right-aligned | Small muted text: `⏱ cron` or `manual` |
+| **Run button** | Far right | Primary button with play icon |
 
-The "Run" button triggers the action via HTMX:
+**Expandable sections** below each row:
+- **Script** — toggle button reveals a collapsible `<pre><code class="language-bash">` block with highlight.js syntax highlighting.
+- **Results** — toggle button loads per-action results inline via HTMX (`GET /partials/action-results/{slug}`), showing repo/branch/status for the latest run. Each result row has an "Output" button that lazy-loads the log via `GET /partials/action-output/{result_id}`.
+
+The results table mirrors the checks results partial — sortable columns (Repository, Branch, Status) and per-row output expansion.
+
+The "Run" button triggers the action via HTMX and reloads the page after 1.5s:
 
 ```html
-<button hx-post="/api/actions/update-uv-lock/run"
-        hx-target="#run-history"
-        hx-swap="afterbegin">
+<button hx-post="/api/actions/{slug}/run"
+        hx-swap="none"
+        hx-on::after-request="if(event.detail.successful) { showToast('Action triggered', 'success'); setTimeout(() => location.reload(), 1500); }">
   Run
 </button>
 ```
-
-**Section 2: Run History**
-
-Reverse-chronological list of all action runs (across all actions):
-
-| Action | Triggered By | Started | Duration | Result | |
-|--------|-------------|---------|----------|--------|----|
-| Update UV Lock | cron | 2025-04-10 00:00 | 3m 12s | 10/12 passed | [Details] |
-
-Clicking "Details" expands the run inline (HTMX partial):
-
-```
-┌─────────────────────────────────────────────────────┐
-│ lucabello/grimoire (main)        ✅ passed           │
-│ ┌─── Output ──────────────────────────────────────┐ │
-│ │ Resolving dependencies...                       │ │
-│ │ uv.lock is up to date.                          │ │
-│ └─────────────────────────────────────────────────┘ │
-│ lucabello/other-repo (main)      ❌ failed           │
-│ ┌─── Output ──────────────────────────────────────┐ │
-│ │ error: pyproject.toml not found                 │ │
-│ └─────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────┘
-```
-
-HTMX partial endpoint: `GET /partials/action-run/{run_id}`
 
 ## 6.5 — Checks Page
 
@@ -331,6 +318,8 @@ These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 | `GET /partials/dashboard-list?sort=...&dir=...` | List view: compact rows |
 | `GET /partials/dashboard-table?sort=...&dir=...` | Table view: data table |
 | `GET /partials/action-run/{run_id}` | Expanded action run details |
+| `GET /partials/action-results/{slug}?sort=...&dir=...` | Per-action latest results table |
+| `GET /partials/action-output/{result_id}` | Expanded action output text |
 | `GET /partials/check-output/{result_id}` | Expanded check output text |
 | `GET /partials/check-results/{slug}` | Per-check latest results table |
 
@@ -345,7 +334,7 @@ Every section must render a helpful message when there's no data:
 | No checks defined | Checks column on dashboard is hidden. Repo detail shows "No checks defined." Checks page shows "No checks configured — add YAML files to `data/checks/`." |
 | No check results yet | Checks page result history shows "No check results yet." |
 | No actions exist | Actions page shows "No actions defined — add YAML files to `data/actions/`." |
-| No action runs yet | Run history section shows "No runs yet." |
+| No action results yet | Per-action "Results" button hidden; inline text shows "no runs yet". |
 | Repo has warnings | Amber ⚠ with hover text; never an empty row. |
 
 ## Acceptance Criteria

@@ -28,6 +28,18 @@ script: |
 schedule: "0 0 * * 1"   # optional cron; omit for manual-only
 ```
 
+A minimal action for testing workspace setup:
+
+```yaml
+# data/actions/test.yaml
+name: "Test"
+description: "Runs pwd in each repository workspace to verify workspace setup"
+targets:
+  regex: ".*"
+script: |
+  pwd
+```
+
 ### Pydantic model
 
 ```python

@@ -416,6 +416,74 @@ async def test_refresh_falls_back_to_cache_on_304(
     assert len(result_stats) == 1
 
 
+@respx.mock
+async def test_workflow_runs_304_preserves_previous_status(client: GitHubClient) -> None:
+    """When get_workflow_runs returns 304, preserve previous workflow status."""
+    # Mock endpoints for a repo with one workflow
+    respx.get("https://api.github.com/repos/owner/repo1/issues").mock(
+        return_value=httpx.Response(200, json=[], headers=_rl_headers())
+    )
+    respx.get("https://api.github.com/repos/owner/repo1/pulls").mock(
+        return_value=httpx.Response(200, json=[], headers=_rl_headers())
+    )
+    respx.get("https://api.github.com/repos/owner/repo1/actions/workflows").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "total_count": 1,
+                "workflows": [{"id": 42, "name": "CI", "html_url": "https://github.com/wf"}],
+            },
+            headers=_rl_headers(),
+        )
+    )
+    # Workflow runs returns 304 (cache hit)
+    respx.get("https://api.github.com/repos/owner/repo1/actions/workflows/42/runs").mock(
+        return_value=httpx.Response(304, headers=_rl_headers())
+    )
+    respx.get("https://api.github.com/repos/owner/repo1/branches/main").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "main",
+                "commit": {
+                    "sha": "abc",
+                    "commit": {"committer": {"date": datetime.now(UTC).isoformat()}},
+                },
+            },
+            headers=_rl_headers(),
+        )
+    )
+    respx.get("https://api.github.com/repos/owner/repo1/branches").mock(
+        return_value=httpx.Response(200, json=[], headers=_rl_headers())
+    )
+
+    repo = TrackedRepository(full_name="owner/repo1", default_branch="main", branches=["main"])
+    previous = RepositoryStats(
+        full_name="owner/repo1",
+        default_branch="main",
+        workflows=[
+            WorkflowStatus(
+                name="CI",
+                branch="main",
+                status="success",
+                url="https://github.com/wf",
+                run_url="https://github.com/run/1",
+            )
+        ],
+    )
+    staleness = StalenessConfig()
+    stats = await fetch_repository_stats(repo, client, staleness, previous=previous)
+
+    # The previous workflow status should be preserved (not dropped)
+    assert len(stats.workflows) == 1
+    assert stats.workflows[0].name == "CI"
+    assert stats.workflows[0].status == "success"
+
+
+def _rl_headers() -> dict[str, str]:
+    return {"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"}
+
+
 # ---------------------------------------------------------------------------
 # prune_removed_repos
 # ---------------------------------------------------------------------------

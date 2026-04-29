@@ -104,16 +104,27 @@ router = APIRouter(prefix="/actions", tags=["actions"])
 @router.get("/", response_model=list[ActionListItem])
 async def list_actions() -> list[ActionListItem]:
     """List all action definitions."""
-    return [
-        ActionListItem(
-            name=a.name,
-            slug=a.slug,
-            description=a.description,
-            schedule=a.schedule,
-            target_count=0,
+    import re
+
+    items: list[ActionListItem] = []
+    for a in _actions:
+        count = 0
+        if a.targets.list is not None:
+            count = len(a.targets.list)
+        elif a.targets.regex is not None:
+            pattern = re.compile(a.targets.regex)
+            count = sum(1 for r in _repos if pattern.search(r.full_name))
+        # script-based targeting: count stays 0 (requires workspace execution)
+        items.append(
+            ActionListItem(
+                name=a.name,
+                slug=a.slug,
+                description=a.description,
+                schedule=a.schedule,
+                target_count=count,
+            )
         )
-        for a in _actions
-    ]
+    return items
 
 
 @router.get("/{slug}/runs", response_model=list[ActionRunSummary])

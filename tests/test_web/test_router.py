@@ -104,6 +104,43 @@ class TestActionsPage:
         resp = await web_client.get("/actions")
         assert "No actions configured" in resp.text
 
+    async def test_actions_shows_action_definitions(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert resp.status_code == 200
+        assert "Test" in resp.text
+        assert "Runs pwd in each workspace" in resp.text
+
+    async def test_actions_shows_target_summary(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert "regex: .*" in resp.text
+
+    async def test_actions_shows_script_preview(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert "pwd" in resp.text
+
+    async def test_actions_shows_run_button(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert "/api/actions/test/run" in resp.text
+
+    async def test_actions_shows_result_counts(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert "✓ 2" in resp.text
+
+    async def test_actions_has_results_button(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert "/partials/action-results/test" in resp.text
+        assert "Results" in resp.text
+
+    async def test_actions_navbar_active(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert "Actions" in resp.text
+
 
 class TestDashboardPartial:
     """Tests for GET /partials/dashboard-matrix route."""
@@ -204,6 +241,77 @@ class TestActionRunPartial:
         resp = await web_client.get("/partials/action-run/1")
         assert resp.status_code == 200
         assert "text/html" in resp.headers.get("content-type", "")
+
+    async def test_action_run_partial_shows_no_results_when_empty(
+        self, web_client: AsyncClient
+    ) -> None:
+        resp = await web_client.get("/partials/action-run/999")
+        assert "No per-repo results" in resp.text
+
+    async def test_action_run_partial_shows_repo_results(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/partials/action-run/1")
+        assert resp.status_code == 200
+        assert "acme/api" in resp.text
+        assert "acme/frontend" in resp.text
+
+    async def test_action_run_partial_shows_status_badges(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/partials/action-run/1")
+        assert "pass" in resp.text
+        assert "badge-success" in resp.text
+
+    async def test_action_run_partial_has_output_toggle(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/partials/action-run/1")
+        assert "Output" in resp.text
+        assert "/workspace/acme/api" in resp.text
+
+
+class TestActionResultsPartial:
+    """Tests for GET /partials/action-results/{slug} route."""
+
+    async def test_returns_results_for_slug(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-results/test")
+        assert resp.status_code == 200
+        assert "acme/api" in resp.text
+        assert "acme/frontend" in resp.text
+
+    async def test_empty_when_no_results(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-results/nonexistent")
+        assert resp.status_code == 200
+        assert "No results for this action" in resp.text
+
+    async def test_shows_status_icons(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-results/test")
+        assert "status-icon-pass" in resp.text
+
+    async def test_has_output_buttons(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-results/test")
+        assert "/partials/action-output/" in resp.text
+        assert "Output" in resp.text
+
+    async def test_sortable_headers(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-results/test?sort=repo&dir=asc")
+        assert "hx-get" in resp.text
+        assert "/partials/action-results/test" in resp.text
+
+
+class TestActionOutputPartial:
+    """Tests for GET /partials/action-output/{result_id} route."""
+
+    async def test_returns_output(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-output/1")
+        assert resp.status_code == 200
+        assert "/workspace/acme/api" in resp.text
+
+    async def test_empty_output(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/action-output/999")
+        assert resp.status_code == 200
+        assert "no stdout/stderr" in resp.text.lower() or "output" in resp.text.lower()
 
 
 class TestCheckOutputPartial:
