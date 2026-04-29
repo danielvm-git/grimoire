@@ -137,8 +137,14 @@ class GitHubClient:
 
     async def get_workflows(self, full_name: str) -> list[dict[str, Any]] | None:
         owner, repo = full_name.split("/", 1)
+        # Skip ETag caching: the workflow *list* rarely changes, but caching it
+        # prevents us from fetching updated *run* statuses for individual
+        # workflows (we need the IDs from this response to call get_workflow_runs).
         data = await self._request(
-            "GET", f"/repos/{owner}/{repo}/actions/workflows", params={"per_page": 100}
+            "GET",
+            f"/repos/{owner}/{repo}/actions/workflows",
+            params={"per_page": 100},
+            use_etag=False,
         )
         if data is None:
             return None

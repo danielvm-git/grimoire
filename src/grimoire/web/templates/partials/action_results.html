@@ -1,0 +1,58 @@
+{# Per-action latest results table (for HTMX inline expansion) #}
+{% if results %}
+{% set hx_base = "/partials/action-results/" ~ slug %}
+{% set next_dir = "desc" if (dir == "asc") else "asc" %}
+<div class="max-h-72 overflow-y-auto border border-base-300 rounded-box">
+<table class="table table-xs w-full">
+    <thead class="sticky top-0 bg-base-200 z-10">
+        <tr class="text-xs uppercase tracking-wider">
+            <th class="cursor-pointer hover:text-primary"
+                hx-get="{{ hx_base }}?sort=repo&dir={% if sort == 'repo' %}{{ next_dir }}{% else %}asc{% endif %}"
+                hx-target="closest div[id^='action-results-']" hx-swap="innerHTML">
+                Repository {% if sort == 'repo' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th class="cursor-pointer hover:text-primary"
+                hx-get="{{ hx_base }}?sort=branch&dir={% if sort == 'branch' %}{{ next_dir }}{% else %}asc{% endif %}"
+                hx-target="closest div[id^='action-results-']" hx-swap="innerHTML">
+                Branch {% if sort == 'branch' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th class="cursor-pointer hover:text-primary text-center"
+                hx-get="{{ hx_base }}?sort=status&dir={% if sort == 'status' %}{{ next_dir }}{% else %}asc{% endif %}"
+                hx-target="closest div[id^='action-results-']" hx-swap="innerHTML">
+                Status {% if sort == 'status' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in results %}
+        <tr class="hover">
+            <td><a href="/repo/{{ r.repo_full_name }}" class="link link-hover text-sm">{{ r.repo_full_name }}</a></td>
+            <td class="font-mono text-xs">{{ r.branch }}</td>
+            <td class="text-center">
+                {% if r.passed %}
+                <i class="fa-solid fa-check status-icon status-icon-pass" title="pass"></i>
+                {% else %}
+                <i class="fa-solid fa-xmark status-icon status-icon-fail" title="fail"></i>
+                {% endif %}
+            </td>
+            <td>
+                <button class="btn btn-ghost btn-xs"
+                        hx-get="/partials/action-output/{{ r.id }}"
+                        hx-target="#inline-action-output-{{ r.id }}"
+                        hx-swap="innerHTML"
+                        hx-on::before-request="var t = document.getElementById('inline-action-output-{{ r.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
+                    Output
+                </button>
+            </td>
+        </tr>
+        <tr>
+            <td colspan="4" id="inline-action-output-{{ r.id }}" class="p-0"></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% else %}
+<div class="text-center py-4 opacity-50 text-sm">No results for this action.</div>
+{% endif %}

@@ -235,6 +235,11 @@ async def fetch_repository_stats(
 
     # -- Workflows -----------------------------------------------------------
     workflow_statuses: list[WorkflowStatus] = list(previous.workflows) if previous else []
+    # Build lookup of previous statuses so we can fall back on 304 cache hits
+    prev_wf_map: dict[tuple[str, str], WorkflowStatus] = {}
+    if previous:
+        for pw in previous.workflows:
+            prev_wf_map[(pw.name, pw.branch)] = pw
     try:
         workflows = await client.get_workflows(repo.full_name)
         if workflows is not None:
@@ -264,6 +269,11 @@ async def fetch_repository_stats(
                                     run_url=run.get("html_url", ""),
                                 )
                             )
+                        elif runs is None:
+                            # 304 cache hit — preserve previous status if available
+                            prev = prev_wf_map.get((wf_name, branch))
+                            if prev is not None:
+                                workflow_statuses.append(prev)
                     except Exception as exc:
                         warnings.append(
                             f"Failed to fetch runs for workflow {wf_name} on {branch}: {exc}"

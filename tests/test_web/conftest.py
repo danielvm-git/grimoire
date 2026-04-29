@@ -224,3 +224,83 @@ async def web_client_with_checks(tmp_path: object) -> AsyncIterator[AsyncClient]
     checks_router._checks.extend(saved_checks)
     checks_router._engine = saved_engine
     await engine.dispose()
+
+
+@pytest.fixture
+async def web_client_with_actions(tmp_path: object) -> AsyncIterator[AsyncClient]:
+    """Provide an async HTTP client with action definitions and DB run history."""
+    import grimoire.actions.router as actions_router
+    from grimoire.actions.loader import ActionDefinition
+    from grimoire.checks.router import _checks
+    from grimoire.database import ActionRunRecord, ActionRunRepoRecord
+
+    # Save state
+    saved_actions = actions_router._actions[:]
+    saved_engine = actions_router._engine
+    saved_checks = _checks[:]
+
+    actions_router._actions.clear()
+    _checks.clear()
+
+    _populate_cache()
+
+    # Create a temp DB with action run tables
+    engine = await get_engine(str(tmp_path) + "/test_actions.db")  # type: ignore[arg-type]
+    await create_tables(engine)
+
+    # Set up action definitions
+    test_action = ActionDefinition(
+        name="Test",
+        slug="test",
+        description="Runs pwd in each workspace",
+        targets=TargetSpec(regex=".*"),
+        script="pwd\n",
+    )
+    actions_router._actions.append(test_action)
+    actions_router._engine = engine
+
+    # Insert action run records
+    async with AsyncSession(engine) as session:
+        run = ActionRunRecord(
+            action_slug="test",
+            action_name="Test",
+            triggered_by="manual",
+            status="completed",
+            started_at=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 4, 10, 12, 1, tzinfo=timezone.utc),
+        )
+        session.add(run)
+        await session.flush()
+
+        session.add(
+            ActionRunRepoRecord(
+                run_id=run.id,  # type: ignore[arg-type]
+                repo_full_name="acme/api",
+                branch="main",
+                passed=True,
+                output="/workspace/acme/api",
+            )
+        )
+        session.add(
+            ActionRunRepoRecord(
+                run_id=run.id,  # type: ignore[arg-type]
+                repo_full_name="acme/frontend",
+                branch="main",
+                passed=True,
+                output="/workspace/acme/frontend",
+            )
+        )
+        await session.commit()
+
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    # Restore state
+    actions_router._actions.clear()
+    actions_router._actions.extend(saved_actions)
+    actions_router._engine = saved_engine
+    _checks.clear()
+    _checks.extend(saved_checks)
+    await engine.dispose()

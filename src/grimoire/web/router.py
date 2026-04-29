@@ -120,6 +120,11 @@ class ActionViewModel:
     slug: str
     description: str
     schedule: str | None
+    target_summary: str = ""
+    script: str = ""
+    pass_count: int = 0
+    fail_count: int = 0
+    last_run: datetime | str | None = None
 
 
 @dataclass
@@ -500,25 +505,73 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
 
 @router.get("/actions", response_class=HTMLResponse)
 async def actions_page(request: Request) -> HTMLResponse:
-    """Actions page — list available actions and run history."""
+    """Actions page — list available actions with per-action results."""
     from grimoire.actions.router import _actions
+    from grimoire.actions.router import _engine as _actions_engine
 
-    action_vms = [
-        ActionViewModel(
-            name=a.name,
-            slug=a.slug,
-            description=a.description,
-            schedule=a.schedule,
+    # Build per-action aggregate stats from DB (latest run's repo results)
+    action_stats: dict[str, dict[str, Any]] = {}
+    if _actions_engine is not None:
+        async with AsyncSession(_actions_engine) as session:
+            # For each action, find the latest completed run and aggregate its repo results
+            run_rows = (
+                await session.execute(
+                    text(
+                        "SELECT ar.id, ar.action_slug, ar.started_at, arrr.passed "
+                        "FROM action_run ar "
+                        "JOIN action_run_repo arrr ON arrr.run_id = ar.id "
+                        "WHERE ar.id IN ("
+                        "  SELECT id FROM action_run sub "
+                        "  WHERE sub.action_slug = ar.action_slug "
+                        "  ORDER BY sub.started_at DESC LIMIT 1"
+                        ")"
+                    )
+                )
+            ).all()
+
+            for row in run_rows:
+                slug = row[1]
+                started_at = row[2]
+                passed = bool(row[3])
+                stats = action_stats.setdefault(slug, {"pass": 0, "fail": 0, "last_run": None})
+                if passed:
+                    stats["pass"] += 1
+                else:
+                    stats["fail"] += 1
+                if stats["last_run"] is None:
+                    stats["last_run"] = started_at
+
+    action_vms = []
+    for a in _actions:
+        targets = a.targets
+        if targets.regex is not None:
+            target_summary = f"regex: {targets.regex}"
+        elif targets.list is not None:
+            target_summary = f"list: {len(targets.list)} repos"
+        else:
+            target_summary = "script"
+
+        stats = action_stats.get(a.slug, {})
+        action_vms.append(
+            ActionViewModel(
+                name=a.name,
+                slug=a.slug,
+                description=a.description,
+                schedule=a.schedule,
+                target_summary=target_summary,
+                script=a.script,
+                pass_count=stats.get("pass", 0),
+                fail_count=stats.get("fail", 0),
+                last_run=stats.get("last_run"),
+            )
         )
-        for a in _actions
-    ]
 
     return templates.TemplateResponse(
         request,
         "actions.html",
         context={
             "actions": action_vms,
-            "runs": [],
+            "time_ago": _time_ago,
         },
     )
 
@@ -634,12 +687,117 @@ async def dashboard_list_partial(
 @router.get("/partials/action-run/{run_id}", response_class=HTMLResponse)
 async def action_run_partial(request: Request, run_id: int) -> HTMLResponse:
     """Return expanded action run details for inline expansion."""
+    from grimoire.actions.router import _engine as _actions_engine
+
+    results_list: list[dict[str, Any]] = []
+    if _actions_engine is not None:
+        async with AsyncSession(_actions_engine) as session:
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT id, repo_full_name, branch, passed, output "
+                        "FROM action_run_repo WHERE run_id = :run_id"
+                    ),
+                    params={"run_id": run_id},
+                )
+            ).all()
+        for row in rows:
+            results_list.append(
+                {
+                    "id": row[0],
+                    "repo_full_name": row[1],
+                    "branch": row[2],
+                    "passed": bool(row[3]),
+                    "output": row[4],
+                }
+            )
+
     return templates.TemplateResponse(
         request,
         "partials/action_run_detail.html",
         context={
             "run_id": run_id,
-            "results": [],
+            "results": results_list,
+        },
+    )
+
+
+@router.get("/partials/action-results/{slug}", response_class=HTMLResponse)
+async def action_results_partial(
+    request: Request, slug: str, sort: str = "repo", dir: str = "asc"
+) -> HTMLResponse:
+    """Return per-action latest results table for inline expansion."""
+    from grimoire.actions.router import _engine as _actions_engine
+
+    results_list: list[dict[str, Any]] = []
+    if _actions_engine is not None:
+        # Find the latest run for this action and return its per-repo results
+        query = text(
+            "SELECT arrr.id, arrr.repo_full_name, arrr.branch, arrr.passed "
+            "FROM action_run_repo arrr "
+            "JOIN action_run ar ON ar.id = arrr.run_id "
+            "WHERE ar.action_slug = :slug "
+            "AND ar.id = ("
+            "  SELECT id FROM action_run "
+            "  WHERE action_slug = :slug "
+            "  ORDER BY started_at DESC LIMIT 1"
+            ")"
+        )
+        async with AsyncSession(_actions_engine) as session:
+            rows = (await session.execute(query, params={"slug": slug})).all()
+        for row in rows:
+            results_list.append(
+                {
+                    "id": row[0],
+                    "repo_full_name": row[1],
+                    "branch": row[2],
+                    "passed": bool(row[3]),
+                }
+            )
+
+    # Sort results
+    sort_keys: dict[str, Any] = {
+        "repo": lambda r: r["repo_full_name"].lower(),
+        "branch": lambda r: r["branch"].lower(),
+        "status": lambda r: 0 if r["passed"] else 1,
+    }
+    key_fn = sort_keys.get(sort, sort_keys["repo"])
+    results_list.sort(key=key_fn, reverse=(dir == "desc"))
+
+    return templates.TemplateResponse(
+        request,
+        "partials/action_results.html",
+        context={
+            "results": results_list,
+            "slug": slug,
+            "sort": sort,
+            "dir": dir,
+        },
+    )
+
+
+@router.get("/partials/action-output/{result_id}", response_class=HTMLResponse)
+async def action_output_partial(request: Request, result_id: int) -> HTMLResponse:
+    """Return expanded action output for a single repo result."""
+    from grimoire.actions.router import _engine as _actions_engine
+
+    output = ""
+    if _actions_engine is not None:
+        async with AsyncSession(_actions_engine) as session:
+            result = await session.execute(
+                text("SELECT output FROM action_run_repo WHERE id = :id"),
+                params={"id": result_id},
+            )
+            row = result.first()
+            if row:
+                output = row[0]
+
+    return templates.TemplateResponse(
+        request,
+        "partials/check_output.html",
+        context={
+            "result_id": result_id,
+            "output": output,
         },
     )
 

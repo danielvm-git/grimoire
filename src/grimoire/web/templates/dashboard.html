@@ -12,7 +12,7 @@
         {% endif %}
     </div>
     <button class="btn btn-primary btn-sm gap-2" hx-post="/api/refresh" hx-swap="none"
-            hx-on::after-request="if(event.detail.successful) { showToast('Refresh complete', 'success'); fetchView(); } else { showToast('Refresh failed', 'error'); }">
+            hx-on::after-request="if(event.detail.successful) { showToast('Refresh complete', 'success'); setTimeout(() => location.reload(), 600); } else { showToast('Refresh failed', 'error'); }">
         <span class="btn-label">↻ Refresh</span>
         <span class="htmx-indicator loading loading-spinner loading-xs"></span>
     </button>
