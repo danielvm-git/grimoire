@@ -478,7 +478,7 @@ class TestCheckRunStatusPartial:
     async def test_idle_state_shows_run_button(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/partials/check-run-status/watchdog")
         assert resp.status_code == 200
-        assert "/api/checks/watchdog/run" in resp.text
+        assert "/partials/check-run/watchdog" in resp.text
         assert "Running" not in resp.text
 
     async def test_running_state_shows_spinner(self, web_client_with_checks: AsyncClient) -> None:

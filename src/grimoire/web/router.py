@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
@@ -948,6 +948,58 @@ async def check_run_status_partial(
     if was_running and not running:
         resp.headers["HX-Trigger"] = "checkRunCompleted"
     return resp
+
+
+@router.post("/partials/check-run/{slug}", response_class=HTMLResponse)
+async def check_run_trigger(
+    request: Request, slug: str, background_tasks: BackgroundTasks
+) -> HTMLResponse:
+    """Trigger a check run and return the 'Running...' button partial.
+
+    The check is started as a background task — the response is immediate.
+    The returned partial includes polling to detect completion.
+    """
+    from grimoire.checks.engine import is_check_running, run_check_for_all_targets
+    from grimoire.checks.router import (
+        _checks,
+        _update_snapshot_checks,
+    )
+    from grimoire.checks.router import (
+        _engine as checks_engine,
+    )
+    from grimoire.checks.router import (
+        _repos as checks_repos,
+    )
+    from grimoire.checks.router import (
+        _workspace as checks_workspace,
+    )
+
+    # Find the check definition
+    check = None
+    for c in _checks:
+        if c.slug == slug:
+            check = c
+            break
+    if check is None:
+        raise HTTPException(status_code=404, detail=f"Check '{slug}' not found")
+
+    if is_check_running(slug):
+        raise HTTPException(status_code=409, detail="Check is already running")
+
+    assert checks_workspace is not None
+    assert checks_engine is not None
+
+    async def _run_in_background() -> None:
+        await run_check_for_all_targets(check, checks_repos, checks_workspace, checks_engine)
+        await _update_snapshot_checks()
+
+    background_tasks.add_task(_run_in_background)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/check_run_button.html",
+        context={"slug": slug, "running": True},
+    )
 
 
 @router.get("/partials/action-run-status/{slug}", response_class=HTMLResponse)

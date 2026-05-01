@@ -13,9 +13,10 @@
 {% else %}
 <div id="check-run-btn-{{ slug }}">
     <button class="btn btn-primary btn-sm gap-1"
-            hx-post="/api/checks/{{ slug }}/run"
-            hx-swap="none"
-            hx-on::after-request="if(event.detail.successful) { document.body.dispatchEvent(new CustomEvent('checkRunCompleted')); } else { showToast(event.detail.xhr?.status === 409 ? 'Check is already running' : 'Failed to trigger check', 'error'); }">
+            hx-post="/partials/check-run/{{ slug }}"
+            hx-target="#check-run-btn-{{ slug }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(!event.detail.successful) { showToast(event.detail.xhr?.status === 409 ? 'Check is already running' : 'Failed to trigger check', 'error'); }">
         <i class="fa-solid fa-play text-xs"></i>
         <span class="btn-label">Run</span>
         <span class="htmx-indicator loading loading-spinner loading-xs"></span>
