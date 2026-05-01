@@ -173,6 +173,7 @@
         makeChart('chart-checks', 'Checks', ts, [
             { label: 'Total', data: s.check_total, borderColor: CHART_COLORS.muted, backgroundColor: CHART_COLORS.muted + '20', fill: true },
             { label: 'Failures', data: s.check_failures, borderColor: CHART_COLORS.danger, backgroundColor: CHART_COLORS.danger + '20', fill: true },
+            { label: 'Warnings', data: s.check_warnings, borderColor: CHART_COLORS.warning, backgroundColor: CHART_COLORS.warning + '20', fill: true },
         ]);
     }
 

@@ -662,17 +662,17 @@ async def _upsert_snapshot(
 
 async def update_snapshot_checks(
     engine: AsyncEngine,
-    check_counts: dict[str, tuple[int, int]],
+    check_counts: dict[str, tuple[int, int, int]],
 ) -> None:
     """Update today's snapshots with check totals after checks complete.
 
     Args:
         engine: Database engine.
-        check_counts: Mapping of repo_full_name → (total_checks, failed_checks).
+        check_counts: Mapping of repo_full_name → (total, failures, warnings).
     """
     today = date.today()
     async with AsyncSession(engine) as session:
-        for repo_name, (total, failures) in check_counts.items():
+        for repo_name, (total, failures, warnings) in check_counts.items():
             stmt = (
                 select(StatsSnapshot)
                 .where(StatsSnapshot.repo_full_name == repo_name)
@@ -682,19 +682,34 @@ async def update_snapshot_checks(
             if snap:
                 snap.check_total = total
                 snap.check_failures = failures
+                snap.check_warnings = warnings
                 session.add(snap)
         await session.commit()
 
 
-async def compute_check_counts(engine: AsyncEngine) -> dict[str, tuple[int, int]]:
+async def compute_check_counts(
+    engine: AsyncEngine,
+    checks: list | None = None,
+) -> dict[str, tuple[int, int, int]]:
     """Compute per-repo check totals from latest check results in the DB.
 
-    Returns mapping of repo_full_name → (total_checks, failed_checks).
+    Args:
+        engine: Database engine.
+        checks: Optional list of CheckDefinition objects for severity lookup.
+            If not provided, all failures count as errors.
+
+    Returns mapping of repo_full_name → (total, failures, warnings).
     """
     from sqlalchemy import text
 
+    # Build severity lookup: slug → severity
+    severity_map: dict[str, str] = {}
+    if checks:
+        for c in checks:
+            severity_map[c.slug] = c.severity
+
     query = text(
-        "SELECT cr.repo_full_name, cr.passed "
+        "SELECT cr.check_slug, cr.repo_full_name, cr.passed "
         "FROM check_result cr "
         "INNER JOIN ("
         "  SELECT check_slug, repo_full_name, branch, MAX(timestamp) AS max_ts "
@@ -705,17 +720,22 @@ async def compute_check_counts(engine: AsyncEngine) -> dict[str, tuple[int, int]
         "AND cr.branch = latest.branch "
         "AND cr.timestamp = latest.max_ts"
     )
-    counts: dict[str, tuple[int, int]] = {}
+    counts: dict[str, tuple[int, int, int]] = {}
     async with AsyncSession(engine) as session:
         result = await session.execute(query)
         for row in result.all():
-            repo_name = row[0]
-            passed = bool(row[1])
-            total, failures = counts.get(repo_name, (0, 0))
+            slug = row[0]
+            repo_name = row[1]
+            passed = bool(row[2])
+            total, failures, warnings = counts.get(repo_name, (0, 0, 0))
             total += 1
             if not passed:
-                failures += 1
-            counts[repo_name] = (total, failures)
+                severity = severity_map.get(slug, "error")
+                if severity == "warning":
+                    warnings += 1
+                else:
+                    failures += 1
+            counts[repo_name] = (total, failures, warnings)
     return counts
 
 
