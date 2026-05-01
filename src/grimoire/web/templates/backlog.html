@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Backlog — Grimoire{% endblock %}
+{% block nav_backlog %}active{% endblock %}
+{% block content %}
+
+{# ── Header ────────────────────────────────────────────────────────── #}
+<div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+    <div>
+        <h1 class="text-3xl font-bold">Backlog</h1>
+        <p class="text-sm opacity-60 mt-1">
+            {{ total_items }} item{{ 's' if total_items != 1 else '' }}
+            across {{ repos_with_items }} repo{{ 's' if repos_with_items != 1 else '' }}
+            {% if tier_counts %}
+            —
+            {% if tier_counts.get('critical', 0) %}<span class="text-error">{{ tier_counts.critical }} critical</span>{% endif %}
+            {% if tier_counts.get('critical', 0) and tier_counts.get('high', 0) %} · {% endif %}
+            {% if tier_counts.get('high', 0) %}<span class="text-warning">{{ tier_counts.high }} high</span>{% endif %}
+            {% if (tier_counts.get('critical', 0) or tier_counts.get('high', 0)) and (tier_counts.get('medium', 0) + tier_counts.get('low', 0)) %} · {% endif %}
+            {% if tier_counts.get('medium', 0) + tier_counts.get('low', 0) %}<span class="opacity-60">{{ tier_counts.get('medium', 0) + tier_counts.get('low', 0) }} other</span>{% endif %}
+            {% endif %}
+        </p>
+    </div>
+    <div class="flex gap-2">
+        <div class="dropdown dropdown-end">
+            <label tabindex="0" class="btn btn-outline btn-sm gap-2">
+                <i class="fa-solid fa-file-export"></i> Export
+            </label>
+            <ul tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-56">
+                <li><a id="export-md" href="#">Copy as Markdown</a></li>
+                <li><a id="export-download" href="/api/backlog/export" target="_blank">Download .md file</a></li>
+            </ul>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="document.getElementById('filters-panel').classList.toggle('hidden')">
+            <i class="fa-solid fa-filter"></i> Filters
+        </button>
+    </div>
+</div>
+
+{# ── Filters Panel ─────────────────────────────────────────────────── #}
+<div id="filters-panel" class="hidden bg-base-100 rounded-lg shadow-sm p-5 mb-6">
+    <div class="flex flex-wrap gap-6">
+        {# Category toggles #}
+        <div>
+            <label class="label pb-1"><span class="label-text text-xs opacity-60">Categories</span></label>
+            <div class="flex flex-wrap gap-2">
+                {% for cat in categories %}
+                <label class="label cursor-pointer gap-2">
+                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="{{ cat }}" checked />
+                    <span class="label-text text-sm">{{ category_labels[cat] }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        {# Repo filter #}
+        <div class="flex-1 min-w-[200px] max-w-sm">
+            <label class="label pb-1"><span class="label-text text-xs opacity-60">Repository</span></label>
+            <select id="repo-filter" class="select select-bordered select-sm w-full">
+                <option value="">All repositories</option>
+                {% for name in repo_names %}
+                <option value="{{ name }}">{{ name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        {# Min priority #}
+        <div>
+            <label class="label pb-1"><span class="label-text text-xs opacity-60">Min priority: <span id="min-score-label">0</span></span></label>
+            <input type="range" id="min-score-slider" min="0" max="200" value="0" step="5" class="range range-sm range-primary w-48" />
+        </div>
+    </div>
+
+    {# Advanced: category weight sliders #}
+    <div class="mt-4">
+        <button class="btn btn-ghost btn-xs opacity-60" onclick="document.getElementById('weight-panel').classList.toggle('hidden')">
+            <i class="fa-solid fa-sliders"></i> Category weights (advanced)
+        </button>
+        <div id="weight-panel" class="hidden mt-3 bg-base-200 rounded-lg p-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                    <label class="label pb-0"><span class="label-text text-xs">Failing Workflow: <span class="weight-val" data-key="failing_workflow">{{ backlog_config.category_weights.failing_workflow | int }}</span></span></label>
+                    <input type="range" class="range range-xs range-error weight-slider" data-key="failing_workflow" min="0" max="200" value="{{ backlog_config.category_weights.failing_workflow | int }}" />
+                </div>
+                <div>
+                    <label class="label pb-0"><span class="label-text text-xs">Failing Check (error): <span class="weight-val" data-key="failing_check_error">{{ backlog_config.category_weights.failing_check_error | int }}</span></span></label>
+                    <input type="range" class="range range-xs range-error weight-slider" data-key="failing_check_error" min="0" max="200" value="{{ backlog_config.category_weights.failing_check_error | int }}" />
+                </div>
+                <div>
+                    <label class="label pb-0"><span class="label-text text-xs">Failing Check (warning): <span class="weight-val" data-key="failing_check_warning">{{ backlog_config.category_weights.failing_check_warning | int }}</span></span></label>
+                    <input type="range" class="range range-xs range-warning weight-slider" data-key="failing_check_warning" min="0" max="200" value="{{ backlog_config.category_weights.failing_check_warning | int }}" />
+                </div>
+                <div>
+                    <label class="label pb-0"><span class="label-text text-xs">Stale PR: <span class="weight-val" data-key="stale_pr">{{ backlog_config.category_weights.stale_pr | int }}</span></span></label>
+                    <input type="range" class="range range-xs range-info weight-slider" data-key="stale_pr" min="0" max="200" value="{{ backlog_config.category_weights.stale_pr | int }}" />
+                </div>
+                <div>
+                    <label class="label pb-0"><span class="label-text text-xs">Stale Issue: <span class="weight-val" data-key="stale_issue">{{ backlog_config.category_weights.stale_issue | int }}</span></span></label>
+                    <input type="range" class="range range-xs range-info weight-slider" data-key="stale_issue" min="0" max="200" value="{{ backlog_config.category_weights.stale_issue | int }}" />
+                </div>
+                <div>
+                    <label class="label pb-0"><span class="label-text text-xs">Stale Branches: <span class="weight-val" data-key="stale_branches">{{ backlog_config.category_weights.stale_branches | int }}</span></span></label>
+                    <input type="range" class="range range-xs weight-slider" data-key="stale_branches" min="0" max="200" value="{{ backlog_config.category_weights.stale_branches | int }}" />
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-3">
+                <button id="save-weights-btn" class="btn btn-primary btn-sm gap-1">
+                    <i class="fa-solid fa-floppy-disk"></i> Save to config
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── Item List ─────────────────────────────────────────────────────── #}
+{% if items %}
+<div id="backlog-items">
+    {% include "partials/backlog_items.html" %}
+</div>
+{% else %}
+<div class="text-center py-12 opacity-50">
+    <i class="fa-solid fa-clipboard-check text-4xl mb-3"></i>
+    <p class="text-lg">No problems found — all repos are healthy!</p>
+</div>
+{% endif %}
+
+<script>
+(function() {
+    // --- Filtering via HTMX ---
+    function applyFilters() {
+        const cats = Array.from(document.querySelectorAll('.category-filter:checked')).map(c => c.value);
+        const repo = document.getElementById('repo-filter').value;
+        const minScore = document.getElementById('min-score-slider').value;
+        const params = new URLSearchParams();
+        if (cats.length < {{ categories | length }}) params.set('categories', cats.join(','));
+        if (repo) params.set('repos', repo);
+        if (parseFloat(minScore) > 0) params.set('min_score', minScore);
+        const url = '/partials/backlog-items?' + params.toString();
+        htmx.ajax('GET', url, {target: '#backlog-items', swap: 'innerHTML'});
+    }
+
+    document.querySelectorAll('.category-filter').forEach(cb => cb.addEventListener('change', applyFilters));
+    document.getElementById('repo-filter').addEventListener('change', applyFilters);
+    const slider = document.getElementById('min-score-slider');
+    slider.addEventListener('input', function() {
+        document.getElementById('min-score-label').textContent = this.value;
+    });
+    slider.addEventListener('change', applyFilters);
+
+    // --- Weight slider labels ---
+    document.querySelectorAll('.weight-slider').forEach(s => {
+        s.addEventListener('input', function() {
+            const label = document.querySelector('.weight-val[data-key="' + this.dataset.key + '"]');
+            if (label) label.textContent = this.value;
+        });
+    });
+
+    // --- Save weights to config ---
+    document.getElementById('save-weights-btn').addEventListener('click', async function() {
+        const weights = {};
+        document.querySelectorAll('.weight-slider').forEach(s => {
+            weights[s.dataset.key] = parseFloat(s.value);
+        });
+        try {
+            const resp = await fetch('/api/backlog/save-weights', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({category_weights: weights})
+            });
+            if (resp.ok) {
+                showToast('Weights saved to config', 'success');
+                setTimeout(() => location.reload(), 600);
+            } else {
+                showToast('Failed to save weights', 'error');
+            }
+        } catch (e) {
+            showToast('Failed to save weights', 'error');
+        }
+    });
+
+    // --- Export as Markdown ---
+    document.getElementById('export-md').addEventListener('click', async function(e) {
+        e.preventDefault();
+        try {
+            const resp = await fetch('/api/backlog/export');
+            const text = await resp.text();
+            await navigator.clipboard.writeText(text);
+            showToast('Backlog copied to clipboard', 'success');
+        } catch (err) {
+            showToast('Failed to copy', 'error');
+        }
+    });
+
+    // --- Copy single item ---
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.copy-item-btn');
+        if (!btn) return;
+        const md = btn.dataset.markdown;
+        navigator.clipboard.writeText(md).then(
+            () => showToast('Copied to clipboard', 'success'),
+            () => showToast('Failed to copy', 'error')
+        );
+    });
+})();
+</script>
+
+{% endblock %}

@@ -61,6 +61,7 @@ repositories:
   # Static list with optional branches
   - repo: "lucabello/grimoire"
     branches: ["main", "develop"]
+    priority: 3.0              # optional — repo multiplier for backlog scoring (default: 1.0)
   - repo: "lucabello/other-repo"
     # omitting branches → default branch only
 
@@ -76,6 +77,18 @@ repositories:
       - "my-org/deprecated-repo"
     workflows:
       exclude: ["Nightly *"]      # applies to all repos from this team
+
+backlog:                        # optional — backlog tab priority weights
+  category_weights:
+    failing_workflow: 100
+    failing_check_error: 80
+    failing_check_warning: 30
+    stale_pr: 50
+    stale_issue: 20
+    stale_branches: 10
+  workflow_weights:             # glob pattern → multiplier
+    "Release *": 2.0
+    "Lint": 0.5
 
 staleness:
   pull_requests_days: 30   # default: 30
@@ -101,13 +114,15 @@ log_file: "./grimoire.log"
 - `GitUserConfig(name: str, email: str)`
 - `SigningConfig(key_path: Path, format: Literal["ssh", "gpg"])`
 - `GitConfig(user: GitUserConfig, signing: SigningConfig | None = None, ssh_known_hosts: Path | None = None)`
-- `StaticRepoSource(repo: str, branches: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
-- `TeamRepoSource(team: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
+- `StaticRepoSource(repo: str, branches: list[str] = [], workflows: WorkflowFilter = WorkflowFilter(), priority: float = 1.0)`
+- `TeamRepoSource(team: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter(), priority: float = 1.0)`
 - `WorkflowFilter(include: list[str] = [], exclude: list[str] = [])` — glob patterns (fnmatch) on workflow name
 - `RepoSource` — discriminated union of the above (by field presence)
 - `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, branches_days: int = 90, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
 - `HistoryConfig(retention_days: int = 90)`
-- `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional); `history: HistoryConfig = HistoryConfig()` (optional)
+- `BacklogCategoryWeights(failing_workflow: float = 100, failing_check_error: float = 80, failing_check_warning: float = 30, stale_pr: float = 50, stale_issue: float = 20, stale_branches: float = 10)`
+- `BacklogConfig(category_weights: BacklogCategoryWeights = BacklogCategoryWeights(), workflow_weights: dict[str, float] = {})` — `workflow_weights` maps glob patterns on workflow name to multipliers
+- `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional); `history: HistoryConfig = HistoryConfig()` (optional); `backlog: BacklogConfig = BacklogConfig()` (optional)
 
 ### Config loading
 
@@ -139,6 +154,7 @@ class TrackedRepository(BaseModel):
     full_name: str          # "owner/repo"
     branches: list[str]     # branches to observe; empty = default branch only
     source: str             # "static" | "team:org/team-name"
+    priority: float = 1.0   # repo multiplier for backlog scoring
 
 class WorkflowStatus(BaseModel):
     name: str
