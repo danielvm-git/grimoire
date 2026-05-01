@@ -71,6 +71,11 @@ class RepositoryStats(BaseModel):
     last_commit_at: datetime | None = None
     total_branches: int = 0
     stale_branches: int = 0
+    # Age-bucketed counts for history snapshots (retroactive staleness).
+    # Keys are day thresholds, values are count of items with age >= that threshold.
+    issues_by_age: dict[int, int] = {}
+    prs_by_age: dict[int, int] = {}
+    branches_by_age: dict[int, int] = {}
 
 
 class CheckResult(BaseModel):

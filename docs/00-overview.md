@@ -47,6 +47,9 @@ grimoire/
 │   │   ├── engine.py             # Execute actions, capture output
 │   │   ├── scheduler.py          # Schedule action runs
 │   │   └── router.py             # REST API: trigger, list, get run details
+│   ├── history/
+│   │   ├── __init__.py
+│   │   └── router.py             # REST API: time-series history data
 │   ├── web/
 │   │   ├── __init__.py
 │   │   ├── router.py             # HTML page routes
@@ -68,6 +71,7 @@ grimoire/
 │   ├── test_workspace/
 │   ├── test_checks/
 │   ├── test_actions/
+│   ├── test_history/
 │   └── test_web/
 ├── data/                          # User-populated, mounted in Docker
 │   ├── checks/                    # Check definition YAML files
@@ -94,9 +98,11 @@ Module 1: Scaffolding & Configuration  ──(no deps)
     │        │
     ├──► Module 5: Actions Engine  ◄── Module 3, Module 4 (shared targeting)
     │
-    └──► Module 6: Web Application  ◄── Modules 2, 4, 5
-             │
-             └──► Module 7: Observability & DevOps
+    ├──► Module 6: Web Application  ◄── Modules 2, 4, 5
+    │        │
+    │        └──► Module 7: Observability & DevOps
+    │
+    └──► Module 8: History  ◄── Modules 1, 2, 6
 ```
 
 ## Configuration File (`config.yaml`)
@@ -144,6 +150,10 @@ staleness:
   pull_requests_days: 30   # PRs with no push/comment for this many days
   issues_days: 365         # Issues with no comment for this many days
 
+# History snapshot retention
+history:
+  retention_days: 90       # Keep daily snapshots for this many days (default: 90)
+
 # Data refresh interval (also default check/action frequency)
 refresh_interval_minutes: 5
 
@@ -169,6 +179,8 @@ log_file: "./grimoire.log"
 | `GET` | `/api/actions/{slug}/runs` | List run history |
 | `GET` | `/api/actions/{slug}/runs/{id}` | Get specific run details + logs |
 | `POST` | `/api/actions/{slug}/run` | Trigger action (optional `?repo=`); 409 if running |
+| `GET` | `/api/history/global` | Aggregated time-series across all repos (`?days=30`) |
+| `GET` | `/api/history/{repo}` | Time-series for a single repo (`?days=30`) |
 | `GET` | `/health` | Health check (for Docker HEALTHCHECK / k8s probes) |
 
 Auto-generated OpenAPI docs are available at `/docs` (Swagger UI) and `/redoc`.

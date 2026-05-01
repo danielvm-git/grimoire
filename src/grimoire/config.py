@@ -110,6 +110,12 @@ class StalenessConfig(BaseModel):
     problematic_stale_prs_pct: int = 20
 
 
+class HistoryConfig(BaseModel):
+    """Configuration for historical snapshot retention."""
+
+    retention_days: int = 90
+
+
 class GrimoireConfig(BaseModel):
     """Top-level application configuration."""
 
@@ -119,6 +125,7 @@ class GrimoireConfig(BaseModel):
     repositories: list[RepoSource]
 
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)
+    history: HistoryConfig = Field(default_factory=HistoryConfig)
     refresh_interval_minutes: int = 5
 
     data_dir: Path = Path("./data")
