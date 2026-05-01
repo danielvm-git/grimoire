@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.checks.engine import is_check_running, run_check_for_all_targets
 from grimoire.database import CheckToggleRecord
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -143,7 +146,11 @@ async def get_check_results(slug: str) -> list[CheckResultResponse]:
 
 
 @router.post("/{slug}/run", response_model=CheckRunResponse)
-async def run_check_endpoint(slug: str, repo: str | None = None) -> CheckRunResponse:
+async def run_check_endpoint(
+    slug: str,
+    repo: str | None = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> CheckRunResponse:
     """Trigger a check run. Optionally filter to a single repo."""
     check = _find_check(slug)
     assert _workspace is not None
@@ -152,6 +159,10 @@ async def run_check_endpoint(slug: str, repo: str | None = None) -> CheckRunResp
     results = await run_check_for_all_targets(
         check, _repos, _workspace, _engine, specific_repo=repo
     )
+
+    # Update today's history snapshot with latest check metrics
+    background_tasks.add_task(_update_snapshot_checks)
+
     return CheckRunResponse(
         check_slug=slug,
         results=[
@@ -167,6 +178,18 @@ async def run_check_endpoint(slug: str, repo: str | None = None) -> CheckRunResp
             for r in results
         ],
     )
+
+
+async def _update_snapshot_checks() -> None:
+    """Update today's snapshot with latest check counts."""
+    from grimoire.github.service import compute_check_counts, update_snapshot_checks
+
+    assert _engine is not None
+    try:
+        check_counts = await compute_check_counts(_engine)
+        await update_snapshot_checks(_engine, check_counts)
+    except Exception:
+        logger.exception("Failed to update snapshot check metrics after manual run")
 
 
 @router.post("/{slug}/toggle")
