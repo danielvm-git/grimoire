@@ -80,6 +80,8 @@ def _build_series(
         "stale_prs": [s.stale_prs for s in snapshots],
         "workflow_total": [s.workflow_total for s in snapshots],
         "workflow_failures": [s.workflow_failures for s in snapshots],
+        "check_total": [s.check_total for s in snapshots],
+        "check_failures": [s.check_failures for s in snapshots],
         "total_branches": [s.total_branches for s in snapshots],
         "stale_branches": [s.stale_branches for s in snapshots],
     }
@@ -146,6 +148,8 @@ async def history_global(
                 stale_prs=sum(s.stale_prs for s in group),
                 workflow_total=sum(s.workflow_total for s in group),
                 workflow_failures=sum(s.workflow_failures for s in group),
+                check_total=sum(s.check_total for s in group),
+                check_failures=sum(s.check_failures for s in group),
                 total_branches=sum(s.total_branches for s in group),
                 stale_branches=sum(s.stale_branches for s in group),
                 issues_by_age_json=json.dumps(merged_issues_age),

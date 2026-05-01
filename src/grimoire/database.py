@@ -183,6 +183,8 @@ class StatsSnapshot(SQLModel, table=True):
     stale_prs: int = 0
     workflow_total: int = 0
     workflow_failures: int = 0
+    check_total: int = 0
+    check_failures: int = 0
     total_branches: int = 0
     stale_branches: int = 0
     # Age-bucketed counts: JSON {"7": n, "14": n, "30": n, ...}
