@@ -27,7 +27,13 @@
     <tbody>
         {% for r in results %}
         <tr class="hover">
-            <td><a href="/repo/{{ r.repo_full_name }}" class="link link-hover text-sm">{{ r.repo_full_name }}</a></td>
+            <td>
+                {% if r.repo_full_name == "(global)" %}
+                <span class="text-sm opacity-40">None</span>
+                {% else %}
+                <a href="/repo/{{ r.repo_full_name }}" class="link link-hover text-sm">{{ r.repo_full_name }}</a>
+                {% endif %}
+            </td>
             <td class="font-mono text-xs">{{ r.branch }}</td>
             <td class="text-center">
                 {% if r.passed %}
