@@ -1,6 +1,6 @@
-# Module 6: Web Application (Dashboard, Repo Detail, Actions Page)
+# Module 6: Web Application (Dashboard, Repo Detail, Actions, Checks, Backlog Pages)
 
-Build the HTMX-powered web frontend with three pages: dashboard overview, individual repository detail, and actions management.
+Build the HTMX-powered web frontend with five pages: dashboard overview, individual repository detail, actions management, checks management, and backlog prioritization.
 
 **Dependencies:** Modules 1–5 (all backend services).
 
@@ -290,7 +290,88 @@ Disabled checks are visually dimmed (reduced opacity) and show `· disabled` inl
 <button hx-get="/partials/check-results/{slug}" hx-target="#check-results-{slug}" ...>Results</button>
 ```
 
-## 6.6 — Styling
+## 6.6 — Backlog Page
+
+**Route:** `GET /backlog`
+**Template:** `templates/backlog.html`
+**Engine:** `src/grimoire/web/backlog.py`
+
+The backlog page flattens every problem across all repos into a single prioritized list, answering: "What is the most important thing I should fix right now?"
+
+### Data Model
+
+**`BacklogCategory`** — enum of item types: `FAILING_WORKFLOW`, `FAILING_CHECK_ERROR`, `FAILING_CHECK_WARNING`, `STALE_PR`, `STALE_ISSUE`, `STALE_BRANCHES`.
+
+**`BacklogItem`** — dataclass with: `category`, `repo_full_name`, `description`, `url`, `age_days` (optional), `score` (computed), `repo_priority`, `workflow_multiplier`.
+
+### Priority Scoring
+
+Each item gets a priority score: `score = category_weight × repo_multiplier × workflow_multiplier × age_factor`.
+
+- **`category_weight`** — base weight from `backlog.category_weights` config.
+- **`repo_multiplier`** — per-repo `priority` field (default 1.0). Set to 0.0 to hide a repo from the backlog.
+- **`workflow_multiplier`** — per-workflow-name weight from `backlog.workflow_weights` (glob patterns, default 1.0). Only applies to workflow/check items.
+- **`age_factor`** — automatic boost for older problems. Stale items use excess age over threshold: `1.0 + log2(1 + max(0, age_days - threshold))`. Workflows/checks use flat factor (1.0) since failure start time is not tracked. Stale branches use count multiplier: `1 + log2(count)`.
+
+**Priority tiers:** score ≥80 = Critical (red), ≥50 = High (orange), ≥20 = Medium (yellow), <20 = Low (gray).
+
+### Layout
+
+**Header:**
+- Title: "Backlog"
+- Summary: "N items across M repos — X critical, Y high, Z medium, W low"
+- Export dropdown: "Export All as Markdown" / "Copy to Clipboard"
+- Filters toggle
+
+**Filters panel** (collapsible):
+- Category toggles (checkboxes per item type)
+- Repo filter (multi-select)
+- Advanced: category weight sliders (collapsed by default). Changes re-sort live via HTMX partial reload.
+  - "Save to config" button persists current weights to `config.yaml` via `POST /api/backlog/save-weights`.
+  - `localStorage` saves slider positions automatically.
+
+**Item list** (HTMX partial: `GET /partials/backlog-items`):
+
+Each row shows: priority badge (color-coded), category icon, repo name (link to detail page), description, age, GitHub link, copy-as-markdown button.
+
+### Markdown Export
+
+**`GET /api/backlog/export`** — returns full backlog as Markdown (`text/plain`).
+
+Format:
+```markdown
+# Grimoire Backlog — YYYY-MM-DD
+
+## Critical (N items)
+- [ ] **[owner/repo]** Failing workflow: Name on `branch` (Xd) — [View](url)
+
+## High (N items)
+- [ ] **[owner/repo]** Stale PR #42: "Title" (Xd) — [View](url)
+```
+
+Individual items can be copied via the per-row clipboard button.
+
+### Routes
+
+| Endpoint | Method | Returns |
+|----------|--------|---------|
+| `GET /backlog` | GET | Full page |
+| `GET /partials/backlog-items` | GET | HTMX partial (item list). Accepts query params: `category`, `repo`, weight overrides. |
+| `GET /api/backlog/export` | GET | Full backlog as Markdown text |
+| `POST /api/backlog/save-weights` | POST | Persists category weight changes to `config.yaml` and reloads in-memory config |
+
+### Item Sources
+
+| Type | Source | Individually listed? |
+|------|--------|---------------------|
+| Failing workflow | `WorkflowStatus` with `status == "failure"` | ✅ per workflow×branch |
+| Failing check (error) | `CheckResultRecord` with `passed == False`, error severity | ✅ per check×repo×branch |
+| Failing check (warning) | Same, with `severity == "warning"` | ✅ |
+| Stale PR | `PullRequestDetail` from cache | ✅ individual items |
+| Stale issue | `IssueDetail` from cache | ✅ individual items |
+| Stale branches | `stale_branches` count per repo | ⚠️ Summary item per repo |
+
+## 6.7 — Styling
 
 **Framework:** Tailwind CSS (via CDN for development, standalone CLI for production build) + DaisyUI for component classes + FontAwesome 6 for status icons (via CDN).
 
@@ -301,6 +382,8 @@ Disabled checks are visually dimmed (reduced opacity) and show `· disabled` inl
 - **Dark mode** — DaisyUI theme support. Default to system preference.
 - **Responsive** — table scrolls horizontally on small screens; key info visible on mobile.
 
+- `backlog.html` extends `base.html`.
+
 **Template hierarchy:**
 - `base.html` — HTML shell, nav bar, Tailwind/DaisyUI CDN links, HTMX script tag.
 - `dashboard.html` extends `base.html`.
@@ -308,7 +391,7 @@ Disabled checks are visually dimmed (reduced opacity) and show `· disabled` inl
 - `actions.html` extends `base.html`.
 - `checks.html` extends `base.html`.
 
-## 6.7 — HTMX Partial Endpoints
+## 6.8 — HTMX Partial Endpoints
 
 These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 
@@ -322,8 +405,9 @@ These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 | `GET /partials/action-output/{result_id}` | Expanded action output text |
 | `GET /partials/check-output/{result_id}` | Expanded check output text |
 | `GET /partials/check-results/{slug}` | Per-check latest results table |
+| `GET /partials/backlog-items` | Filtered/sorted backlog item list |
 
-## 6.8 — Empty States
+## 6.9 — Empty States
 
 Every section must render a helpful message when there's no data:
 
@@ -336,6 +420,7 @@ Every section must render a helpful message when there's no data:
 | No actions exist | Actions page shows "No actions defined — add YAML files to `data/actions/`." |
 | No action results yet | Per-action "Results" button hidden; inline text shows "no runs yet". |
 | Repo has warnings | Amber ⚠ with hover text; never an empty row. |
+| No backlog items | Backlog page shows "No issues found — all clear! 🎉" |
 
 ## Acceptance Criteria
 
@@ -349,6 +434,12 @@ Every section must render a helpful message when there's no data:
 - [ ] Actions page lists all available actions with run buttons
 - [ ] Run history shows all runs with correct metadata
 - [ ] Action run details expand inline with per-repo results and logs
+- [ ] Backlog page lists all problems sorted by priority score
+- [ ] Backlog category weight sliders re-sort items live via HTMX
+- [ ] Backlog "Save to config" persists weight changes to config.yaml
+- [ ] Backlog export renders correct Markdown with tier grouping
+- [ ] Backlog per-item copy-to-clipboard works
+- [ ] Backlog filters by category and repo work correctly
 - [ ] HTMX partial updates work without full page reloads
 - [ ] Pages render correctly in both light and dark mode
 - [ ] Pages are responsive (usable on tablet/mobile, scrollable tables)

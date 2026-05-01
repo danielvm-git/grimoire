@@ -124,6 +124,7 @@ async def _resolve_static(
                 source="static",
                 workflow_include=source.workflows.include,
                 workflow_exclude=source.workflows.exclude,
+                priority=source.priority,
             )
     except Exception:
         logger.warning("Failed to resolve static repo %s, skipping", source.repo, exc_info=True)
@@ -172,6 +173,7 @@ async def _resolve_team(
                 source=source_label,
                 workflow_include=source.workflows.include,
                 workflow_exclude=source.workflows.exclude,
+                priority=source.priority,
             )
 
 
@@ -539,6 +541,7 @@ async def save_stats_to_db(
                     stale_branches=stats.stale_branches,
                     workflow_include_json=json.dumps(repo.workflow_include),
                     workflow_exclude_json=json.dumps(repo.workflow_exclude),
+                    priority=repo.priority,
                     fetched_at=stats.fetched_at or now,
                 )
             )
@@ -762,6 +765,7 @@ async def load_stats_from_db(
                 workflow_exclude=json.loads(cr.workflow_exclude_json)
                 if cr.workflow_exclude_json
                 else [],
+                priority=cr.priority,
             )
             repos.append(repo)
 

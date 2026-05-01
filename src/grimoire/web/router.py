@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
 from sqlmodel import select
@@ -19,6 +19,12 @@ from grimoire.config import StalenessConfig
 from grimoire.database import ActionRunRecord
 from grimoire.models import WorkflowStatus
 from grimoire.targeting import TargetSpec
+from grimoire.web.backlog import (
+    BacklogCategory,
+    BacklogItem,
+    build_backlog_items,
+    export_markdown,
+)
 
 router = APIRouter(tags=["web"])
 
@@ -32,6 +38,20 @@ def set_staleness_config(config: StalenessConfig) -> None:
     """Register the staleness thresholds from the app config."""
     global _staleness_config  # noqa: PLW0603
     _staleness_config = config
+
+
+# Module-level backlog config — set from app lifespan
+from grimoire.config import BacklogConfig  # noqa: E402
+
+_backlog_config: BacklogConfig = BacklogConfig()
+_config_path: Path | None = None
+
+
+def set_backlog_config(config: BacklogConfig, config_path: Path | None = None) -> None:
+    """Register the backlog configuration from the app config."""
+    global _backlog_config, _config_path  # noqa: PLW0603
+    _backlog_config = config
+    _config_path = config_path
 
 
 # ---------------------------------------------------------------------------
@@ -974,3 +994,161 @@ async def history_page(request: Request) -> HTMLResponse:
         "history.html",
         context={"repo_names": repo_names},
     )
+
+
+# ---------------------------------------------------------------------------
+# Backlog page
+# ---------------------------------------------------------------------------
+
+
+async def _build_backlog_items(
+    categories: list[str] | None = None,
+    repos_filter: list[str] | None = None,
+    min_score: float = 0.0,
+) -> list[BacklogItem]:
+    """Collect and optionally filter backlog items."""
+    from grimoire.github.router import _cache, _repos
+
+    repo_names = list(_cache.keys())
+    check_targets, results_by_key = await _load_check_context(repo_names)
+
+    from grimoire.checks.router import _checks
+
+    items = build_backlog_items(
+        cache=_cache,
+        repos=_repos,
+        config=_backlog_config,
+        staleness=_staleness_config,
+        check_targets=check_targets,
+        results_by_key=results_by_key,
+        check_defs=_checks,
+    )
+
+    # Apply filters
+    if categories:
+        cat_set = set(categories)
+        items = [i for i in items if i.category.value in cat_set]
+
+    if repos_filter:
+        repo_set = set(repos_filter)
+        items = [i for i in items if i.repo_full_name in repo_set]
+
+    if min_score > 0:
+        items = [i for i in items if i.score >= min_score]
+
+    return items
+
+
+@router.get("/backlog", response_class=HTMLResponse)
+async def backlog_page(request: Request) -> HTMLResponse:
+    """Backlog page — prioritised problem list across all repos."""
+    from grimoire.github.router import _repos
+
+    items = await _build_backlog_items()
+    repo_names = sorted(_repos.keys()) if _repos else []
+
+    # Build summary counts per tier
+    tier_counts: dict[str, int] = {}
+    for item in items:
+        tier_counts[item.tier] = tier_counts.get(item.tier, 0) + 1
+
+    # Count unique repos with problems
+    repos_with_items = len({i.repo_full_name for i in items})
+
+    return templates.TemplateResponse(
+        request,
+        "backlog.html",
+        context={
+            "items": items,
+            "repo_names": repo_names,
+            "tier_counts": tier_counts,
+            "total_items": len(items),
+            "repos_with_items": repos_with_items,
+            "categories": [c.value for c in BacklogCategory],
+            "category_labels": {
+                c.value: c.value.replace("_", " ").title() for c in BacklogCategory
+            },
+            "backlog_config": _backlog_config,
+            "time_ago": _time_ago,
+        },
+    )
+
+
+@router.get("/partials/backlog-items", response_class=HTMLResponse)
+async def backlog_items_partial(
+    request: Request,
+    categories: str = "",
+    repos: str = "",
+    min_score: float = 0.0,
+) -> HTMLResponse:
+    """Return filtered backlog items as an HTMX partial."""
+    cat_list = [c for c in categories.split(",") if c] or None
+    repo_list = [r for r in repos.split(",") if r] or None
+
+    items = await _build_backlog_items(
+        categories=cat_list,
+        repos_filter=repo_list,
+        min_score=min_score,
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/backlog_items.html",
+        context={
+            "items": items,
+            "time_ago": _time_ago,
+        },
+    )
+
+
+@router.get("/api/backlog/export")
+async def backlog_export_markdown(
+    request: Request,  # noqa: ARG001
+    categories: str = "",
+    repos: str = "",
+    min_score: float = 0.0,
+) -> PlainTextResponse:
+    """Export the backlog as Markdown text."""
+    cat_list = [c for c in categories.split(",") if c] or None
+    repo_list = [r for r in repos.split(",") if r] or None
+
+    items = await _build_backlog_items(
+        categories=cat_list,
+        repos_filter=repo_list,
+        min_score=min_score,
+    )
+    md = export_markdown(items)
+    return PlainTextResponse(md, media_type="text/markdown")
+
+
+@router.post("/api/backlog/save-weights")
+async def backlog_save_weights(request: Request) -> dict[str, str]:
+    """Persist category weights and workflow weights from the UI back to config.yaml."""
+    import yaml
+
+    if _config_path is None or not _config_path.exists():
+        return {"status": "error", "message": "Config file path not available"}
+
+    body = await request.json()
+
+    with open(_config_path) as f:
+        raw = yaml.safe_load(f) or {}
+
+    if "backlog" not in raw:
+        raw["backlog"] = {}
+    if "category_weights" in body:
+        raw["backlog"]["category_weights"] = body["category_weights"]
+    if "workflow_weights" in body:
+        raw["backlog"]["workflow_weights"] = body["workflow_weights"]
+
+    with open(_config_path, "w") as f:
+        yaml.dump(raw, f, default_flow_style=False, sort_keys=False)
+
+    # Reload in-memory config
+    from grimoire.config import BacklogConfig
+
+    new_backlog = BacklogConfig.model_validate(raw.get("backlog", {}))
+    global _backlog_config  # noqa: PLW0603
+    _backlog_config = new_backlog
+
+    return {"status": "ok"}

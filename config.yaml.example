@@ -46,6 +46,19 @@ staleness:
 # Data refresh interval (also default check frequency)
 refresh_interval_minutes: 5
 
+# Backlog (prioritised problem list)
+# backlog:
+#   category_weights:          # base importance of each problem type
+#     failing_workflow: 100
+#     failing_check_error: 80
+#     failing_check_warning: 30
+#     stale_pr: 50
+#     stale_issue: 20
+#     stale_branches: 10
+#   workflow_weights:           # per-workflow-name multiplier (glob patterns)
+#     "Release *": 2.0
+#     "Lint": 0.5
+
 # Paths
 data_dir: "./data"           # Contains checks/ and actions/ subdirectories
 workspace_dir: "./workspace" # Where repos are cloned

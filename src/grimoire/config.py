@@ -84,6 +84,7 @@ class StaticRepoSource(BaseModel):
     repo: str
     branches: list[str] = Field(default_factory=list)
     workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
+    priority: float = 1.0
 
 
 class TeamRepoSource(BaseModel):
@@ -92,6 +93,7 @@ class TeamRepoSource(BaseModel):
     team: str
     exclude: list[str] = Field(default_factory=list)
     workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
+    priority: float = 1.0
 
 
 RepoSource = Annotated[Union[StaticRepoSource, TeamRepoSource], Field(discriminator=None)]
@@ -116,6 +118,24 @@ class HistoryConfig(BaseModel):
     retention_days: int = 90
 
 
+class BacklogCategoryWeights(BaseModel):
+    """Base importance weights for each backlog item category."""
+
+    failing_workflow: float = 100.0
+    failing_check_error: float = 80.0
+    failing_check_warning: float = 30.0
+    stale_pr: float = 50.0
+    stale_issue: float = 20.0
+    stale_branches: float = 10.0
+
+
+class BacklogConfig(BaseModel):
+    """Configuration for the Backlog (prioritised problem list) page."""
+
+    category_weights: BacklogCategoryWeights = Field(default_factory=BacklogCategoryWeights)
+    workflow_weights: dict[str, float] = Field(default_factory=dict)
+
+
 class GrimoireConfig(BaseModel):
     """Top-level application configuration."""
 
@@ -126,6 +146,7 @@ class GrimoireConfig(BaseModel):
 
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)
     history: HistoryConfig = Field(default_factory=HistoryConfig)
+    backlog: BacklogConfig = Field(default_factory=BacklogConfig)
     refresh_interval_minutes: int = 5
 
     data_dir: Path = Path("./data")

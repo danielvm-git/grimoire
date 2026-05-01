@@ -49,7 +49,7 @@ from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import router as metrics_router
 from grimoire.web.router import router as web_router
-from grimoire.web.router import set_staleness_config
+from grimoire.web.router import set_backlog_config, set_staleness_config
 from grimoire.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
@@ -71,12 +71,21 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
         return
 
+    # Resolve the config file path for save-weights API
+    import os
+
+    _env_path = os.environ.get("GRIMOIRE_CONFIG")
+    config_file_path = Path(_env_path) if _env_path else Path("config.yaml")
+
     # Database
     engine = await get_engine(str(config.database_path))
     await create_tables(engine)
 
     # Expose staleness thresholds to web layer
     set_staleness_config(config.staleness)
+
+    # Expose backlog config to web layer
+    set_backlog_config(config.backlog, config_file_path)
 
     # Expose engine + staleness to history layer
     set_history_state(engine, config.staleness)

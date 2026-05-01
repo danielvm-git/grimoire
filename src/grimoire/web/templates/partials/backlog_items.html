@@ -1,0 +1,58 @@
+{# Backlog items partial — rendered inside #backlog-items container #}
+<div class="flex flex-col gap-2">
+{% for item in items %}
+<div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow px-4 py-3">
+    <div class="flex items-center gap-3">
+        {# Priority badge #}
+        <div class="badge badge-{{ item.tier_class }} badge-sm font-mono-nums w-12 justify-center" title="Score: {{ '%.0f' | format(item.score) }}">
+            {{ '%.0f' | format(item.score) }}
+        </div>
+
+        {# Category icon #}
+        <div class="tooltip" data-tip="{{ item.category_label }}">
+            <i class="{{ item.category_icon }} text-sm opacity-60 w-5 text-center"></i>
+        </div>
+
+        {# Repo name #}
+        <a href="/repo/{{ item.repo_full_name }}" class="text-sm font-semibold hover:text-primary whitespace-nowrap">
+            {{ item.repo_full_name }}
+        </a>
+
+        {# Description #}
+        <span class="text-sm opacity-80 truncate flex-1" title="{{ item.description }}">
+            {{ item.description }}
+        </span>
+
+        {# Age #}
+        {% if item.age_days > 0 %}
+        <span class="text-xs opacity-50 whitespace-nowrap font-mono-nums">
+            {% set days = item.age_days | int %}
+            {% if days == 0 %}&lt;1d
+            {% elif days < 365 %}{{ days }}d
+            {% else %}{{ days // 365 }}y {{ days % 365 }}d
+            {% endif %}
+        </span>
+        {% endif %}
+
+        {# Actions #}
+        <div class="flex gap-1 shrink-0">
+            {% if item.url %}
+            <a href="{{ item.url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-xs tooltip" data-tip="Open on GitHub">
+                <i class="fa-brands fa-github"></i>
+            </a>
+            {% endif %}
+            <button class="btn btn-ghost btn-xs copy-item-btn tooltip" data-tip="Copy as Markdown"
+                    data-markdown="{{ item.to_markdown() | e }}">
+                <i class="fa-regular fa-clipboard"></i>
+            </button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% if not items %}
+<div class="text-center py-8 opacity-50">
+    <p>No items match the current filters.</p>
+</div>
+{% endif %}
+</div>
