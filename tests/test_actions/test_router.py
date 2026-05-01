@@ -199,3 +199,16 @@ class TestRunDetail:
     async def test_run_detail_wrong_slug(self, action_client: AsyncClient) -> None:
         resp = await action_client.get("/api/actions/nonexistent/runs/1")
         assert resp.status_code == 404
+
+
+class TestActionStatus:
+    async def test_status_not_running(self, action_client: AsyncClient) -> None:
+        resp = await action_client.get("/api/actions/test-action/status")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["slug"] == "test-action"
+        assert body["running"] is False
+
+    async def test_status_not_found(self, action_client: AsyncClient) -> None:
+        resp = await action_client.get("/api/actions/nonexistent/status")
+        assert resp.status_code == 404

@@ -257,3 +257,19 @@ async def run_action_endpoint(slug: str, repo: str | None = None) -> ActionRunDe
             for r in result.results
         ],
     )
+
+
+@router.get("/{slug}/status")
+async def action_status(slug: str) -> dict[str, object]:
+    """Return whether an action is currently running."""
+    _find_action(slug)
+    assert _engine is not None
+
+    async with AsyncSession(_engine) as session:
+        stmt = select(ActionRunRecord).where(
+            ActionRunRecord.action_slug == slug,
+            ActionRunRecord.status == "running",
+        )
+        running = (await session.exec(stmt)).first() is not None
+
+    return {"slug": slug, "running": running}

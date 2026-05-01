@@ -153,3 +153,27 @@ class TestRunCheck:
         assert len(results) == 1
         assert results[0]["check_slug"] == "test-check"
         assert results[0]["passed"] is True
+
+
+class TestCheckStatus:
+    async def test_status_not_running(self, check_client: AsyncClient) -> None:
+        resp = await check_client.get("/api/checks/test-check/status")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["slug"] == "test-check"
+        assert body["running"] is False
+
+    async def test_status_running(self, check_client: AsyncClient) -> None:
+        from grimoire.checks.engine import _running_checks
+
+        _running_checks.add("test-check")
+        try:
+            resp = await check_client.get("/api/checks/test-check/status")
+            assert resp.status_code == 200
+            assert resp.json()["running"] is True
+        finally:
+            _running_checks.discard("test-check")
+
+    async def test_status_not_found(self, check_client: AsyncClient) -> None:
+        resp = await check_client.get("/api/checks/nonexistent/status")
+        assert resp.status_code == 404

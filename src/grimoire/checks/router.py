@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import text
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.checks.engine import run_check_for_all_targets
+from grimoire.checks.engine import is_check_running, run_check_for_all_targets
 from grimoire.database import CheckToggleRecord
 
 if TYPE_CHECKING:
@@ -187,3 +187,10 @@ async def toggle_check(slug: str) -> dict[str, object]:
         await session.commit()
 
     return {"slug": slug, "enabled": check.enabled}
+
+
+@router.get("/{slug}/status")
+async def check_status(slug: str) -> dict[str, object]:
+    """Return whether a check is currently running."""
+    _find_check(slug)
+    return {"slug": slug, "running": is_check_running(slug)}

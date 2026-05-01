@@ -1,0 +1,27 @@
+{# Run-button partial for a check — swaps between idle and running states.
+   Polls every 3s (idle) or 2s (running) via hx-trigger. #}
+{% if running %}
+<div id="check-run-btn-{{ slug }}"
+     hx-get="/partials/check-run-status/{{ slug }}?was_running=1"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <button class="btn btn-primary btn-sm gap-1" disabled>
+        <span class="loading loading-spinner loading-xs"></span>
+        Running…
+    </button>
+</div>
+{% else %}
+<div id="check-run-btn-{{ slug }}"
+     hx-get="/partials/check-run-status/{{ slug }}"
+     hx-trigger="every 3s"
+     hx-swap="outerHTML">
+    <button class="btn btn-primary btn-sm gap-1"
+            hx-post="/api/checks/{{ slug }}/run"
+            hx-swap="none"
+            hx-on::after-request="if(event.detail.successful) { showToast('Check triggered', 'success'); } else { showToast(event.detail.xhr?.status === 409 ? 'Check is already running' : 'Failed to trigger check', 'error'); }">
+        <i class="fa-solid fa-play text-xs"></i>
+        <span class="btn-label">Run</span>
+        <span class="htmx-indicator loading loading-spinner loading-xs"></span>
+    </button>
+</div>
+{% endif %}

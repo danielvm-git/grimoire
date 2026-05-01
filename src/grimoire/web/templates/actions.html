@@ -46,14 +46,13 @@
                     <span class="text-xs opacity-40 whitespace-nowrap">
                         <i class="fa-regular fa-clock"></i> {% if action.schedule %}{{ action.schedule }}{% else %}manual{% endif %}
                     </span>
-                    <button class="btn btn-primary btn-sm gap-1"
-                            hx-post="/api/actions/{{ action.slug }}/run"
-                            hx-swap="none"
-                            hx-on::after-request="if(event.detail.successful) { showToast('Action triggered', 'success'); setTimeout(() => location.reload(), 1500); } else { showToast('Failed to trigger action', 'error'); }">
-                        <i class="fa-solid fa-play text-xs"></i>
-                        <span class="btn-label">Run</span>
-                        <span class="htmx-indicator loading loading-spinner loading-xs"></span>
-                    </button>
+                    <div hx-get="/partials/action-run-status/{{ action.slug }}"
+                         hx-trigger="load"
+                         hx-swap="outerHTML">
+                        <button class="btn btn-primary btn-sm gap-1" disabled>
+                            <span class="loading loading-spinner loading-xs"></span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -105,4 +104,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
 <script>hljs.highlightAll();</script>
+<script>
+// Refresh page when an action run completes (triggered by HX-Trigger header)
+document.body.addEventListener('actionRunCompleted', function() {
+    showToast('Action completed', 'success');
+    setTimeout(() => location.reload(), 500);
+});
+</script>
 {% endblock %}
