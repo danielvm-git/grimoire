@@ -25,6 +25,14 @@ enabled: true              # optional; default true
 severity: error            # optional; "error" (red, default) or "warning" (yellow)
 ```
 
+Scripts run via `/bin/sh` by default. Add a shebang to use a different interpreter:
+```yaml
+script: |
+  #!/usr/bin/env bash
+  set -euo pipefail
+  # bash-specific features now work (arrays, pipefail, etc.)
+```
+
 ### Pydantic models
 
 ```python
@@ -135,7 +143,8 @@ async def run_check_for_all_targets(
 ```
 
 **Subprocess execution details:**
-- Use `asyncio.create_subprocess_shell` (scripts may use pipes, conditionals, etc.).
+- Scripts that begin with a shebang (`#!`) line are written to a temporary file, made executable, and run directly via `create_subprocess_exec` so the OS honors the interpreter (e.g. `#!/usr/bin/env bash`, `#!/usr/bin/env python3`). The temp file is cleaned up after execution.
+- Scripts without a shebang are passed to `/bin/sh` via `create_subprocess_shell` (scripts may use pipes, conditionals, etc.).
 - Set `cwd` to the workdir path.
 - Merge `workspace.get_env()` into the subprocess environment.
 - Capture stdout and stderr together (combined stream).

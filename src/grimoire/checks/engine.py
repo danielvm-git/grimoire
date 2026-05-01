@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import CheckResultRecord
 from grimoire.models import CheckResult
+from grimoire.script import create_script_process
 from grimoire.targeting import resolve_targets
 
 if TYPE_CHECKING:
@@ -53,10 +54,11 @@ async def run_check(
     env["XDG_RUNTIME_DIR"] = tmpdir
 
     proc: asyncio.subprocess.Process | None = None
+    tmp_script = None
     try:
-        proc = await asyncio.create_subprocess_shell(
+        proc, tmp_script = await create_script_process(
             check.script,
-            cwd=str(workdir),
+            cwd=workdir,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
@@ -89,6 +91,8 @@ async def run_check(
         output = f"Failed to execute: {exc}"
         passed = False
     finally:
+        if tmp_script is not None:
+            tmp_script.unlink(missing_ok=True)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     # Cap output

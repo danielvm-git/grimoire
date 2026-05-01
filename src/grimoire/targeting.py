@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
+from grimoire.script import create_script_process
+
 if TYPE_CHECKING:
     from grimoire.models import TrackedRepository
     from grimoire.workspace.manager import WorkspaceManager
@@ -63,8 +65,9 @@ async def resolve_targets(
     for repo in repos:
         cwd = workspace.get_workdir(repo.full_name, repo.default_branch)
         proc: asyncio.subprocess.Process | None = None
+        tmp_script = None
         try:
-            proc = await asyncio.create_subprocess_shell(
+            proc, tmp_script = await create_script_process(
                 targets.script,
                 cwd=cwd,
                 stdout=asyncio.subprocess.DEVNULL,
@@ -78,4 +81,7 @@ async def resolve_targets(
             # timeout or exec failure → exclude
             if proc is not None and proc.returncode is None:
                 proc.kill()
+        finally:
+            if tmp_script is not None:
+                tmp_script.unlink(missing_ok=True)
     return matched

@@ -2,44 +2,41 @@ name: "Rerun Failed PR Workflows"
 description: "Reruns failed GitHub workflow runs on open PRs by @lucabello and Observability bots"
 schedule: "0 */3 * * *"
 script: |
-  set -u
+  #!/usr/bin/env bash
+  set -euo pipefail
 
   # ─── Configuration ──────────────────────────────────────────────────────
   # PR authors whose failed workflows should be rerun.
   # Use GitHub username. For GitHub Apps, use "app/name" format.
-  # Separate entries with newlines.
-  AUTHORS="lucabello
-  observability-noctua-bot
-  app/renovate"
+  AUTHORS=(
+    "lucabello"
+    "observability-noctua-bot"
+    "app/renovate"
+  )
   # ────────────────────────────────────────────────────────────────────────
 
   reran=0
 
-  echo "$AUTHORS" | while IFS= read -r author; do
-    [ -z "$author" ] && continue
-
+  for author in "${AUTHORS[@]}"; do
     # Search for open PRs by this author across all repos
-    prs=$(gh search prs --author "$author" --state open --limit 100 \
-      --json repository,number,headRefName,headRefOid \
-      --jq '.[] | [.repository.nameWithOwner, (.number | tostring), .headRefName, .headRefOid] | @tsv' \
-      2>/dev/null) || continue
-
-    echo "$prs" | while IFS='	' read -r repo pr_num branch head_sha; do
-      [ -z "$pr_num" ] && continue
+    while IFS=$'\t' read -r repo pr_num branch head_sha; do
+      [[ -z "$pr_num" ]] && continue
 
       # Find workflow runs that failed on this PR's latest commit
-      run_ids=$(gh run list -R "$repo" --branch "$branch" --status failure \
-        --json databaseId,headSha \
-        --jq ".[] | select(.headSha == \"${head_sha}\") | .databaseId" \
-        2>/dev/null) || continue
-
-      echo "$run_ids" | while IFS= read -r run_id; do
-        [ -z "$run_id" ] && continue
+      while IFS= read -r run_id; do
+        [[ -z "$run_id" ]] && continue
         echo "PR ${repo}#${pr_num} (${author}): rerunning failed jobs in run ${run_id}"
         gh run rerun "$run_id" -R "$repo" --failed 2>&1 || echo "  skipped (already in progress or cannot rerun)"
-        reran=$((reran + 1))
-      done
-    done
+        (( reran++ )) || true
+      done < <(gh run list -R "$repo" --branch "$branch" --status failure \
+        --json databaseId,headSha \
+        --jq ".[] | select(.headSha == \"${head_sha}\") | .databaseId" \
+        2>/dev/null || true)
+
+    done < <(gh search prs --author "$author" --state open --limit 100 \
+      --json repository,number,headRefName,headRefOid \
+      --jq '.[] | [.repository.nameWithOwner, (.number | tostring), .headRefName, .headRefOid] | @tsv' \
+      2>/dev/null || true)
   done
 
-  echo "Done."
+  echo "Reran ${reran} failed workflow(s). Done."

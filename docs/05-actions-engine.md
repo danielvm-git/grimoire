@@ -28,6 +28,16 @@ script: |
 schedule: "0 0 * * 1"   # optional cron; omit for manual-only
 ```
 
+Scripts run via `/bin/sh` by default. Add a shebang to use a different interpreter (bash, python3, etc.):
+```yaml
+script: |
+  #!/usr/bin/env python3
+  import subprocess, json
+  result = subprocess.run(["gh", "pr", "list", "--json", "number"], capture_output=True, text=True)
+  prs = json.loads(result.stdout)
+  print(f"Found {len(prs)} open PRs")
+```
+
 A minimal action for testing workspace setup:
 
 ```yaml
@@ -121,7 +131,7 @@ async def run_action(
 **Concurrent run guard:** If an action is already running (an `ActionRunRecord` with `status="running"` exists for this action), reject the new run with HTTP 409 Conflict: `"Action '{slug}' is already running (run ID: {id})"`. This applies to all triggers (manual, cron, API).
 
 **Subprocess execution details:**
-- Same as checks: `asyncio.create_subprocess_shell`, set `cwd`, merge `workspace.get_env()`.
+- Same as checks: scripts with a shebang (`#!`) are written to a temp file and run directly (honoring the interpreter); scripts without a shebang are passed to `/bin/sh`. Set `cwd`, merge `workspace.get_env()`.
 - Capture stdout and stderr together (combined stream).
 - Apply a timeout (configurable, default 10 minutes per action per repo — longer than checks, since actions may involve network operations like `git push`).
 - On timeout, kill the process, record as failure.
