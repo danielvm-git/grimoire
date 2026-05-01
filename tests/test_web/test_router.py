@@ -482,16 +482,17 @@ class TestCheckRunStatusPartial:
         assert "Running" not in resp.text
 
     async def test_running_state_shows_spinner(self, web_client_with_checks: AsyncClient) -> None:
-        from grimoire.checks.engine import _running_checks
+        from grimoire.checks.engine import CheckProgress, _running_checks
 
-        _running_checks.add("watchdog")
+        _running_checks["watchdog"] = CheckProgress(completed=2, total=5)
         try:
             resp = await web_client_with_checks.get("/partials/check-run-status/watchdog")
             assert resp.status_code == 200
             assert "Running" in resp.text
             assert "disabled" in resp.text
+            assert "2/5" in resp.text
         finally:
-            _running_checks.discard("watchdog")
+            _running_checks.pop("watchdog", None)
 
     async def test_transition_sends_hx_trigger(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get(
@@ -503,16 +504,16 @@ class TestCheckRunStatusPartial:
     async def test_no_trigger_when_still_running(
         self, web_client_with_checks: AsyncClient
     ) -> None:
-        from grimoire.checks.engine import _running_checks
+        from grimoire.checks.engine import CheckProgress, _running_checks
 
-        _running_checks.add("watchdog")
+        _running_checks["watchdog"] = CheckProgress()
         try:
             resp = await web_client_with_checks.get(
                 "/partials/check-run-status/watchdog?was_running=1"
             )
             assert "HX-Trigger" not in resp.headers
         finally:
-            _running_checks.discard("watchdog")
+            _running_checks.pop("watchdog", None)
 
 
 class TestActionRunStatusPartial:
