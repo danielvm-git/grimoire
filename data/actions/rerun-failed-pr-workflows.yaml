@@ -30,9 +30,6 @@ script: |
       IFS=$'\t' read -r branch head_sha <<< "$pr_info"
       [[ -z "$branch" ]] && continue
 
-      # FIXME: remove debug output below once rerun logic is confirmed working
-      echo "  found: ${repo}#${pr_num} branch=${branch} sha=${head_sha:0:8}"
-
       # Rerun all failed workflow runs on this PR's head commit
       while IFS= read -r run_id; do
         [[ -z "$run_id" ]] && continue
