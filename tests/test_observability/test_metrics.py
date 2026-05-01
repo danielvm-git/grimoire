@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from httpx import AsyncClient
 from prometheus_client import REGISTRY
 
 from grimoire.models import RepositoryStats, WorkflowStatus
 from grimoire.observability.metrics import (
+    DATA_FETCHED_TIMESTAMP,
+    LAST_COMMIT_TIMESTAMP,
     OPEN_ISSUES,
     OPEN_PRS,
     REPOS_TOTAL,
+    STALE_BRANCHES,
     STALE_ISSUES,
     STALE_PRS,
+    TOTAL_BRANCHES,
+    WORKFLOW_FAILURES,
     WORKFLOW_STATUS,
     update_check_metrics,
     update_repo_metrics,
@@ -29,6 +36,8 @@ async def test_metrics_endpoint_returns_200(async_client: AsyncClient) -> None:
 
 async def test_update_repo_metrics_sets_gauges() -> None:
     """update_repo_metrics correctly sets all per-repo gauges."""
+    last_commit = datetime(2025, 4, 1, 12, 0, 0, tzinfo=timezone.utc)
+    fetched = datetime(2025, 4, 10, 8, 0, 0, tzinfo=timezone.utc)
     stats_list = [
         RepositoryStats(
             full_name="org/alpha",
@@ -37,6 +46,10 @@ async def test_update_repo_metrics_sets_gauges() -> None:
             stale_issues=2,
             open_pull_requests=3,
             stale_pull_requests=1,
+            total_branches=8,
+            stale_branches=3,
+            last_commit_at=last_commit,
+            fetched_at=fetched,
             workflows=[
                 WorkflowStatus(
                     name="CI",
@@ -71,6 +84,10 @@ async def test_update_repo_metrics_sets_gauges() -> None:
     assert STALE_PRS.labels(repo="org/alpha")._value.get() == 1  # type: ignore[union-attr]
     assert OPEN_ISSUES.labels(repo="org/beta")._value.get() == 10  # type: ignore[union-attr]
 
+    # Branch gauges
+    assert TOTAL_BRANCHES.labels(repo="org/alpha")._value.get() == 8  # type: ignore[union-attr]
+    assert STALE_BRANCHES.labels(repo="org/alpha")._value.get() == 3  # type: ignore[union-attr]
+
     # Workflow gauges
     assert (
         WORKFLOW_STATUS.labels(repo="org/alpha", workflow="CI", branch="main")._value.get() == 1  # type: ignore[union-attr]
@@ -79,6 +96,12 @@ async def test_update_repo_metrics_sets_gauges() -> None:
         WORKFLOW_STATUS.labels(repo="org/alpha", workflow="Deploy", branch="main")._value.get()
         == 0  # type: ignore[union-attr]
     )
+    assert WORKFLOW_FAILURES.labels(repo="org/alpha")._value.get() == 1  # type: ignore[union-attr]
+    assert WORKFLOW_FAILURES.labels(repo="org/beta")._value.get() == 0  # type: ignore[union-attr]
+
+    # Timestamp gauges
+    assert LAST_COMMIT_TIMESTAMP.labels(repo="org/alpha")._value.get() == last_commit.timestamp()  # type: ignore[union-attr]
+    assert DATA_FETCHED_TIMESTAMP.labels(repo="org/alpha")._value.get() == fetched.timestamp()  # type: ignore[union-attr]
 
 
 async def test_update_check_metrics() -> None:

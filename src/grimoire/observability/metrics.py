@@ -1,4 +1,7 @@
-"""Prometheus metrics for Grimoire."""
+"""Prometheus metrics for Grimoire.
+
+All metrics are documented in METRICS.md at the repository root.
+"""
 
 from __future__ import annotations
 
@@ -16,15 +19,32 @@ OPEN_ISSUES = Gauge("grimoire_open_issues_total", "Open issues", ["repo"])
 STALE_ISSUES = Gauge("grimoire_stale_issues_total", "Stale issues", ["repo"])
 OPEN_PRS = Gauge("grimoire_open_pull_requests_total", "Open PRs", ["repo"])
 STALE_PRS = Gauge("grimoire_stale_pull_requests_total", "Stale PRs", ["repo"])
+TOTAL_BRANCHES = Gauge("grimoire_total_branches", "Total branches", ["repo"])
+STALE_BRANCHES = Gauge("grimoire_stale_branches_total", "Stale branches", ["repo"])
 WORKFLOW_STATUS = Gauge(
     "grimoire_workflow_status",
     "Workflow status (1=success, 0=failure)",
     ["repo", "workflow", "branch"],
 )
+WORKFLOW_FAILURES = Gauge(
+    "grimoire_workflow_failures_total",
+    "Number of failing workflows",
+    ["repo"],
+)
 CHECK_STATUS = Gauge(
     "grimoire_check_status",
     "Check status (1=pass, 0=fail)",
     ["repo", "check", "branch"],
+)
+LAST_COMMIT_TIMESTAMP = Gauge(
+    "grimoire_last_commit_timestamp_seconds",
+    "Unix timestamp of the most recent commit",
+    ["repo"],
+)
+DATA_FETCHED_TIMESTAMP = Gauge(
+    "grimoire_data_fetched_timestamp_seconds",
+    "Unix timestamp of the last data fetch",
+    ["repo"],
 )
 
 # ---------------------------------------------------------------------------
@@ -78,9 +98,17 @@ def update_repo_metrics(stats_list: list[RepositoryStats]) -> None:
         STALE_ISSUES.labels(repo=repo).set(stats.stale_issues)
         OPEN_PRS.labels(repo=repo).set(stats.open_pull_requests)
         STALE_PRS.labels(repo=repo).set(stats.stale_pull_requests)
+        TOTAL_BRANCHES.labels(repo=repo).set(stats.total_branches)
+        STALE_BRANCHES.labels(repo=repo).set(stats.stale_branches)
         for wf in stats.workflows:
             val = 1 if wf.status == "success" else 0
             WORKFLOW_STATUS.labels(repo=repo, workflow=wf.name, branch=wf.branch).set(val)
+        workflow_failures = sum(1 for wf in stats.workflows if wf.status == "failure")
+        WORKFLOW_FAILURES.labels(repo=repo).set(workflow_failures)
+        if stats.last_commit_at is not None:
+            LAST_COMMIT_TIMESTAMP.labels(repo=repo).set(stats.last_commit_at.timestamp())
+        if stats.fetched_at is not None:
+            DATA_FETCHED_TIMESTAMP.labels(repo=repo).set(stats.fetched_at.timestamp())
 
 
 def update_check_metrics(

@@ -6,6 +6,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -14,6 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import CheckResultRecord
 from grimoire.models import CheckResult
+from grimoire.observability.metrics import update_check_metrics
 from grimoire.script import create_script_process
 from grimoire.targeting import resolve_targets
 
@@ -61,6 +63,7 @@ async def run_check(
     """Run a single check script against a repo+branch and persist the result."""
     passed = False
     output = ""
+    start_time = time.monotonic()
 
     try:
         workdir = await workspace.reset_workdir(repo.full_name, branch)
@@ -121,6 +124,9 @@ async def run_check(
     # Cap output
     if len(output) > OUTPUT_SIZE_CAP:
         output = "[output truncated — showing last 64KB]\n" + output[-OUTPUT_SIZE_CAP:]
+
+    duration = time.monotonic() - start_time
+    update_check_metrics(check.slug, repo.full_name, branch, passed, duration)
 
     return await _persist_result(check, repo, branch, passed, output, engine)
 

@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import ActionRunRecord, ActionRunRepoRecord
 from grimoire.models import ActionRepoResult, ActionRun
+from grimoire.observability.metrics import update_action_metrics
 from grimoire.script import create_script_process
 from grimoire.targeting import resolve_targets
 
@@ -135,6 +136,9 @@ async def run_action(
         await session.commit()
 
     # 6. Return summary
+    duration = (finished_at - now).total_seconds()
+    update_action_metrics(action.slug, duration)
+
     return ActionRun(
         action_name=action.name,
         action_slug=action.slug,

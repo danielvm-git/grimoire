@@ -27,35 +27,7 @@ The endpoint is `"degraded"` when: rate limit is low (< 10%), cached data is old
 **File:** `src/grimoire/observability/metrics.py`
 **Endpoint:** `GET /metrics`
 
-### Metrics to expose
-
-**Repository health (gauges, per-repo labels):**
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `grimoire_repositories_total` | Gauge | — | Number of tracked repos |
-| `grimoire_open_issues_total` | Gauge | `repo` | Open issue count |
-| `grimoire_stale_issues_total` | Gauge | `repo` | Stale issue count |
-| `grimoire_open_pull_requests_total` | Gauge | `repo` | Open PR count |
-| `grimoire_stale_pull_requests_total` | Gauge | `repo` | Stale PR count |
-| `grimoire_workflow_status` | Gauge | `repo`, `workflow`, `branch` | 1=success, 0=failure |
-| `grimoire_check_status` | Gauge | `repo`, `check`, `branch` | 1=pass, 0=fail |
-
-**Performance (histograms/counters):**
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `grimoire_check_run_duration_seconds` | Histogram | `check` | Check execution time |
-| `grimoire_action_run_duration_seconds` | Histogram | `action` | Action execution time |
-| `grimoire_data_refresh_duration_seconds` | Histogram | — | Full data refresh cycle time |
-
-**GitHub API (counters/gauges):**
-
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `grimoire_github_api_requests_total` | Counter | `endpoint`, `status` | Total API calls made |
-| `grimoire_github_api_rate_limit_remaining` | Gauge | — | Current remaining rate limit |
-| `grimoire_github_api_rate_limit_reset` | Gauge | — | Unix timestamp of next reset |
+All metrics are documented in [`METRICS.md`](../METRICS.md) at the repository root. That file is the sole source of truth for metric names, types, labels, and descriptions.
 
 ### Implementation
 
