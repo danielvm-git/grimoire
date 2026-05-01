@@ -94,15 +94,18 @@
 
 <script>
 (function() {
-    // Derive text/grid colors from DaisyUI theme for light/dark compatibility
-    const style = getComputedStyle(document.documentElement);
-    const textColor = style.getPropertyValue('color') || '#888';
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    // Theme-aware color helpers
+    function getThemeColors() {
+        const style = getComputedStyle(document.documentElement);
+        const text = style.getPropertyValue('color') || '#888';
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const grid = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+        return { text, grid };
+    }
 
-    // Set Chart.js global defaults for theme-aware rendering
-    Chart.defaults.color = textColor;
-    Chart.defaults.borderColor = gridColor;
+    let themeColors = getThemeColors();
+    Chart.defaults.color = themeColors.text;
+    Chart.defaults.borderColor = themeColors.grid;
 
     const CHART_COLORS = {
         primary: 'rgb(99, 102, 241)',   // indigo — visible on both
@@ -129,12 +132,12 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                title: { display: true, text: title, color: textColor },
-                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, color: textColor } },
+                title: { display: true, text: title, color: themeColors.text },
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, color: themeColors.text } },
             },
             scales: {
-                x: { ticks: { maxTicksAutoSkip: true, maxRotation: 0, color: textColor }, grid: { color: gridColor } },
-                y: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor } },
+                x: { ticks: { maxTicksAutoSkip: true, maxRotation: 0, color: themeColors.text }, grid: { color: themeColors.grid } },
+                y: { beginAtZero: true, ticks: { color: themeColors.text }, grid: { color: themeColors.grid } },
             },
             elements: { line: { tension: 0.3 }, point: { radius: 2 } },
         };
@@ -240,6 +243,14 @@
         repoSelect.clear();
         // clear() triggers 'change', which calls loadData()
     });
+
+    // Re-render charts when theme toggles
+    new MutationObserver(() => {
+        themeColors = getThemeColors();
+        Chart.defaults.color = themeColors.text;
+        Chart.defaults.borderColor = themeColors.grid;
+        loadData();
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     // Initial load
     loadData();
