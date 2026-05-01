@@ -47,6 +47,7 @@ from grimoire.history.router import router as history_router
 from grimoire.history.router import set_history_state
 from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
+from grimoire.observability.metrics import DATA_REFRESH_DURATION, update_repo_metrics
 from grimoire.observability.metrics import router as metrics_router
 from grimoire.web.router import router as web_router
 from grimoire.web.router import set_backlog_config, set_staleness_config
@@ -118,11 +119,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
         if cached_repos and cache_is_fresh:
             update_cache(cached_repos, cached_stats)
+            update_repo_metrics(cached_stats)
             repos = cached_repos
             logger.info("Using cached data — %d repositories loaded", len(repos))
         else:
             repos, stats = await refresh_all_stats(config, client)
             update_cache(repos, stats)
+            update_repo_metrics(stats)
             logger.info("Initial refresh complete — %d repositories loaded", len(repos))
     except Exception:
         logger.exception("Data loading failed — falling back to cached data")
@@ -130,6 +133,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             cached_repos, cached_stats = await load_stats_from_db(engine)
             if cached_repos:
                 update_cache(cached_repos, cached_stats)
+                update_repo_metrics(cached_stats)
                 repos = cached_repos
                 logger.info("Loaded %d repositories from cache (fallback)", len(cached_repos))
         except Exception:
@@ -152,8 +156,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Refresh callback for POST /api/refresh
     async def _do_refresh() -> None:
-        refreshed_repos, refreshed_stats = await refresh_all_stats(config, client)
+        with DATA_REFRESH_DURATION.time():
+            refreshed_repos, refreshed_stats = await refresh_all_stats(config, client)
         update_cache(refreshed_repos, refreshed_stats)
+        update_repo_metrics(refreshed_stats)
         await prune_stale_data(engine, refreshed_repos, config.workspace_dir)
         set_checks_state(checks, refreshed_repos, workspace, engine)
         set_actions_state(actions, refreshed_repos, workspace, engine)

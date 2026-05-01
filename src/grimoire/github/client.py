@@ -13,6 +13,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import CachedETag
+from grimoire.observability.metrics import update_rate_limit_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +343,8 @@ class GitHubClient:
             self._rate_limit_limit = int(limit)
         if reset is not None:
             self._rate_limit_reset = float(reset)
+        if self._rate_limit_remaining is not None and self._rate_limit_reset is not None:
+            update_rate_limit_metrics(self._rate_limit_remaining, int(self._rate_limit_reset))
 
     # -- pagination ----------------------------------------------------------
 
