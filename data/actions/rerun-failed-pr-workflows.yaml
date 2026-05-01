@@ -20,21 +20,18 @@ script: |
   for author in "${AUTHORS[@]}"; do
     # Only fetch PRs that already have failing checks
     echo "── Searching PRs for author: ${author} ──"
-    # FIXME: remove debug output below once rerun logic is confirmed working
-    gh search prs --author "$author" --state open --checks failure --limit 100 \
-      --json repository,number,headRefName,headRefOid \
-      --jq '.[] | "  found: \(.repository.nameWithOwner)#\(.number) branch=\(.headRefName) sha=\(.headRefOid[:8])"' \
-      2>/dev/null || true
 
-    while IFS=$'\t' read -r repo pr_num branch head_sha; do
+    while IFS=$'\t' read -r repo pr_num; do
       [[ -z "$pr_num" ]] && continue
 
+      # Get branch and head SHA from the PR details
+      pr_info=$(gh pr view "$pr_num" -R "$repo" --json headRefName,headRefOid \
+        --jq '[.headRefName, .headRefOid] | @tsv' 2>/dev/null) || continue
+      IFS=$'\t' read -r branch head_sha <<< "$pr_info"
+      [[ -z "$branch" ]] && continue
+
       # FIXME: remove debug output below once rerun logic is confirmed working
-      echo "  checking runs for ${repo}#${pr_num} branch=${branch} sha=${head_sha:0:8}"
-      gh run list -R "$repo" --branch "$branch" --status failure \
-        --json databaseId,headSha \
-        --jq '.[] | "    run \(.databaseId) sha=\(.headSha[:8])"' \
-        2>/dev/null || true
+      echo "  found: ${repo}#${pr_num} branch=${branch} sha=${head_sha:0:8}"
 
       # Rerun all failed workflow runs on this PR's head commit
       while IFS= read -r run_id; do
@@ -48,8 +45,8 @@ script: |
         2>/dev/null || true)
 
     done < <(gh search prs --author "$author" --state open --checks failure --limit 100 \
-      --json repository,number,headRefName,headRefOid \
-      --jq '.[] | [.repository.nameWithOwner, (.number | tostring), .headRefName, .headRefOid] | @tsv' \
+      --json repository,number \
+      --jq '.[] | [.repository.nameWithOwner, (.number | tostring)] | @tsv' \
       2>/dev/null || true)
   done
 
