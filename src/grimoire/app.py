@@ -36,10 +36,12 @@ from grimoire.github.router import (
     router as repos_router,
 )
 from grimoire.github.service import (
+    compute_check_counts,
     load_stats_from_db,
     prune_removed_repos,
     prune_stale_data,
     refresh_all_stats,
+    update_snapshot_checks,
 )
 from grimoire.history.router import router as history_router
 from grimoire.history.router import set_history_state
@@ -154,6 +156,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 await run_check_for_all_targets(check, refreshed_repos, workspace, engine)
             except Exception:
                 logger.exception("Default-schedule check '%s' failed", check.slug)
+
+        # Update today's snapshot with check metrics
+        try:
+            check_counts = await compute_check_counts(engine)
+            await update_snapshot_checks(engine, check_counts)
+        except Exception:
+            logger.exception("Failed to update snapshot check metrics")
 
     set_refresh_callback(_do_refresh)
 

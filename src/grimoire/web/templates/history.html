@@ -45,12 +45,12 @@
         </div>
     </div>
 
-    {# ── Workflows & Branches section ─────────────────────────────────── #}
+    {# ── Workflows & Checks section ──────────────────────────────────── #}
     <div class="bg-base-100 rounded-lg shadow-sm p-5 mb-6">
-        <h2 class="text-xl font-semibold mb-4">Workflows & Branches</h2>
+        <h2 class="text-xl font-semibold mb-4">Workflows & Checks</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div><canvas id="chart-workflows" height="200"></canvas></div>
-            <div><canvas id="chart-branches" height="200"></canvas></div>
+            <div><canvas id="chart-checks" height="200"></canvas></div>
         </div>
     </div>
 </div>
@@ -170,9 +170,9 @@
             { label: 'Total', data: s.workflow_total, borderColor: CHART_COLORS.muted, backgroundColor: CHART_COLORS.muted + '20', fill: true },
             { label: 'Failures', data: s.workflow_failures, borderColor: CHART_COLORS.danger, backgroundColor: CHART_COLORS.danger + '20', fill: true },
         ]);
-        makeChart('chart-branches', 'Branches', ts, [
-            { label: 'Total', data: s.total_branches, borderColor: CHART_COLORS.muted, backgroundColor: CHART_COLORS.muted + '20', fill: true },
-            { label: 'Stale', data: s.stale_branches, borderColor: CHART_COLORS.warning, backgroundColor: CHART_COLORS.warning + '20', fill: true },
+        makeChart('chart-checks', 'Checks', ts, [
+            { label: 'Total', data: s.check_total, borderColor: CHART_COLORS.muted, backgroundColor: CHART_COLORS.muted + '20', fill: true },
+            { label: 'Failures', data: s.check_failures, borderColor: CHART_COLORS.danger, backgroundColor: CHART_COLORS.danger + '20', fill: true },
         ]);
     }
 

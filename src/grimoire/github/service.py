@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlmodel import delete, select
+from sqlmodel import col, delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import GrimoireConfig, StalenessConfig, StaticRepoSource, TeamRepoSource
@@ -658,6 +658,65 @@ async def _upsert_snapshot(
         set_=update_values,
     )
     await session.execute(stmt)
+
+
+async def update_snapshot_checks(
+    engine: AsyncEngine,
+    check_counts: dict[str, tuple[int, int]],
+) -> None:
+    """Update today's snapshots with check totals after checks complete.
+
+    Args:
+        engine: Database engine.
+        check_counts: Mapping of repo_full_name → (total_checks, failed_checks).
+    """
+    today = date.today()
+    async with AsyncSession(engine) as session:
+        for repo_name, (total, failures) in check_counts.items():
+            stmt = (
+                select(StatsSnapshot)
+                .where(StatsSnapshot.repo_full_name == repo_name)
+                .where(col(StatsSnapshot.snapshot_date) == today)
+            )
+            snap = (await session.exec(stmt)).first()
+            if snap:
+                snap.check_total = total
+                snap.check_failures = failures
+                session.add(snap)
+        await session.commit()
+
+
+async def compute_check_counts(engine: AsyncEngine) -> dict[str, tuple[int, int]]:
+    """Compute per-repo check totals from latest check results in the DB.
+
+    Returns mapping of repo_full_name → (total_checks, failed_checks).
+    """
+    from sqlalchemy import text
+
+    query = text(
+        "SELECT cr.repo_full_name, cr.passed "
+        "FROM check_result cr "
+        "INNER JOIN ("
+        "  SELECT check_slug, repo_full_name, branch, MAX(timestamp) AS max_ts "
+        "  FROM check_result "
+        "  GROUP BY check_slug, repo_full_name, branch"
+        ") latest ON cr.check_slug = latest.check_slug "
+        "AND cr.repo_full_name = latest.repo_full_name "
+        "AND cr.branch = latest.branch "
+        "AND cr.timestamp = latest.max_ts"
+    )
+    counts: dict[str, tuple[int, int]] = {}
+    async with AsyncSession(engine) as session:
+        result = await session.execute(query)
+        for row in result.all():
+            repo_name = row[0]
+            passed = bool(row[1])
+            total, failures = counts.get(repo_name, (0, 0))
+            total += 1
+            if not passed:
+                failures += 1
+            counts[repo_name] = (total, failures)
+    return counts
 
 
 async def load_stats_from_db(
