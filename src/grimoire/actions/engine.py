@@ -12,6 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import ActionRunRecord, ActionRunRepoRecord
 from grimoire.models import ActionRepoResult, ActionRun
+from grimoire.script import create_script_process
 from grimoire.targeting import resolve_targets
 
 if TYPE_CHECKING:
@@ -157,8 +158,9 @@ async def _execute_global_action(
     output = ""
 
     proc: asyncio.subprocess.Process | None = None
+    tmp_script = None
     try:
-        proc = await asyncio.create_subprocess_shell(
+        proc, tmp_script = await create_script_process(
             action.script,
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
@@ -177,6 +179,9 @@ async def _execute_global_action(
     except OSError as exc:
         output = f"Failed to execute: {exc}"
         passed = False
+    finally:
+        if tmp_script is not None:
+            tmp_script.unlink(missing_ok=True)
 
     # Cap output
     if len(output) > OUTPUT_SIZE_CAP:
@@ -201,8 +206,9 @@ async def _execute_action(
     output = ""
 
     proc: asyncio.subprocess.Process | None = None
+    tmp_script = None
     try:
-        proc = await asyncio.create_subprocess_shell(
+        proc, tmp_script = await create_script_process(
             action.script,
             cwd=workdir,
             stdout=asyncio.subprocess.PIPE,
@@ -221,6 +227,9 @@ async def _execute_action(
     except OSError as exc:
         output = f"Failed to execute: {exc}"
         passed = False
+    finally:
+        if tmp_script is not None:
+            tmp_script.unlink(missing_ok=True)
 
     # Cap output
     if len(output) > OUTPUT_SIZE_CAP:
