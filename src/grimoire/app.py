@@ -159,7 +159,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
         # Update today's snapshot with check metrics
         try:
-            check_counts = await compute_check_counts(engine)
+            check_counts = await compute_check_counts(engine, checks)
             await update_snapshot_checks(engine, check_counts)
         except Exception:
             logger.exception("Failed to update snapshot check metrics")

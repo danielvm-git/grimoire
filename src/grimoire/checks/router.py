@@ -186,7 +186,7 @@ async def _update_snapshot_checks() -> None:
 
     assert _engine is not None
     try:
-        check_counts = await compute_check_counts(_engine)
+        check_counts = await compute_check_counts(_engine, _checks)
         await update_snapshot_checks(_engine, check_counts)
     except Exception:
         logger.exception("Failed to update snapshot check metrics after manual run")
