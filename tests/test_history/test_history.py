@@ -55,7 +55,9 @@ def _stats(
         full_name=name,
         default_branch="main",
         open_issues=open_issues,
+        stale_issues=2,
         open_pull_requests=open_prs,
+        stale_pull_requests=1,
         workflows=workflows or [],
         total_branches=5,
         stale_branches=1,
@@ -70,7 +72,9 @@ def _snapshot(
     repo: str = "owner/repo1",
     snapshot_date: date | None = None,
     open_issues: int = 10,
+    stale_issues: int = 2,
     open_prs: int = 3,
+    stale_prs: int = 1,
     issues_by_age: dict | None = None,
     prs_by_age: dict | None = None,
     branches_by_age: dict | None = None,
@@ -80,7 +84,9 @@ def _snapshot(
         timestamp=datetime.now(UTC),
         repo_full_name=repo,
         open_issues=open_issues,
+        stale_issues=stale_issues,
         open_prs=open_prs,
+        stale_prs=stale_prs,
         workflow_total=2,
         workflow_failures=1,
         total_branches=5,
@@ -167,6 +173,8 @@ class TestSnapshotRecording:
         assert len(rows) == 1
         assert rows[0].repo_full_name == "owner/repo1"
         assert rows[0].open_issues == 10
+        assert rows[0].stale_issues == 2
+        assert rows[0].stale_prs == 1
         assert rows[0].snapshot_date == date.today()
 
     async def test_upsert_same_day(self, engine: AsyncEngine) -> None:
@@ -279,8 +287,7 @@ class TestBuildSeries:
 
     def test_build_series_complete(self) -> None:
         snaps = [_snapshot(), _snapshot(snapshot_date=date.today() - timedelta(days=1))]
-        staleness = StalenessConfig(issues_days=365, pull_requests_days=30, branches_days=90)
-        series = _build_series(snaps, staleness)
+        series = _build_series(snaps)
         assert "open_issues" in series
         assert "stale_issues" in series
         assert "open_prs" in series
@@ -291,12 +298,15 @@ class TestBuildSeries:
         assert "stale_branches" in series
         assert len(series["open_issues"]) == 2
 
-    def test_build_series_missing_json_graceful(self) -> None:
+    def test_build_series_uses_direct_stale_counts(self) -> None:
         snap = _snapshot()
-        snap.issues_by_age_json = ""
-        staleness = StalenessConfig()
-        series = _build_series([snap], staleness)
-        assert series["stale_issues"] == [0]
+        snap.stale_issues = 7
+        snap.stale_prs = 3
+        snap.stale_branches = 2
+        series = _build_series([snap])
+        assert series["stale_issues"] == [7]
+        assert series["stale_prs"] == [3]
+        assert series["stale_branches"] == [2]
 
 
 # ---------------------------------------------------------------------------
@@ -327,7 +337,9 @@ class TestHistoryAPI:
                     timestamp=datetime.now(UTC),
                     repo_full_name="a/b",
                     open_issues=10,
+                    stale_issues=4,
                     open_prs=3,
+                    stale_prs=1,
                     workflow_total=4,
                     workflow_failures=1,
                     total_branches=8,
@@ -343,7 +355,9 @@ class TestHistoryAPI:
                     timestamp=datetime.now(UTC),
                     repo_full_name="c/d",
                     open_issues=5,
+                    stale_issues=2,
                     open_prs=1,
+                    stale_prs=0,
                     workflow_total=2,
                     workflow_failures=0,
                     total_branches=3,
@@ -358,7 +372,9 @@ class TestHistoryAPI:
         result = await history_global(days=30)
         assert len(result["timestamps"]) == 1
         assert result["series"]["open_issues"] == [15]  # 10 + 5
+        assert result["series"]["stale_issues"] == [6]  # 4 + 2
         assert result["series"]["open_prs"] == [4]  # 3 + 1
+        assert result["series"]["stale_prs"] == [1]  # 1 + 0
         assert result["series"]["workflow_total"] == [6]  # 4 + 2
         assert result["series"]["workflow_failures"] == [1]
 
