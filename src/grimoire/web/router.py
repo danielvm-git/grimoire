@@ -1004,6 +1004,7 @@ async def _build_backlog_items(
     categories: list[str] | None = None,
     repos_filter: list[str] | None = None,
     min_score: float = 0.0,
+    config_override: BacklogConfig | None = None,
 ) -> list[BacklogItem]:
     """Collect and optionally filter backlog items."""
     from grimoire.github.router import _cache, _repos
@@ -1013,10 +1014,12 @@ async def _build_backlog_items(
 
     from grimoire.checks.router import _checks
 
+    config = config_override if config_override is not None else _backlog_config
+
     items = build_backlog_items(
         cache=_cache,
         repos=_repos,
-        config=_backlog_config,
+        config=config,
         staleness=_staleness_config,
         check_targets=check_targets,
         results_by_key=results_by_key,
@@ -1071,15 +1074,42 @@ async def backlog_items_partial(
     categories: str = "",
     repos: str = "",
     min_score: float = 0.0,
+    w_failing_workflow: float = -1,
+    w_failing_check_error: float = -1,
+    w_failing_check_warning: float = -1,
+    w_stale_pr: float = -1,
+    w_stale_issue: float = -1,
+    w_stale_branches: float = -1,
 ) -> HTMLResponse:
     """Return filtered backlog items as an HTMX partial."""
     cat_list = [c for c in categories.split(",") if c] or None
     repo_list = [r for r in repos.split(",") if r] or None
 
+    # Build a temporary config override if any weight params were provided
+    config_override: BacklogConfig | None = None
+    weight_params = {
+        "failing_workflow": w_failing_workflow,
+        "failing_check_error": w_failing_check_error,
+        "failing_check_warning": w_failing_check_warning,
+        "stale_pr": w_stale_pr,
+        "stale_issue": w_stale_issue,
+        "stale_branches": w_stale_branches,
+    }
+    if any(v >= 0 for v in weight_params.values()):
+        from grimoire.config import BacklogCategoryWeights
+
+        base = _backlog_config.category_weights
+        overrides = {k: v if v >= 0 else getattr(base, k) for k, v in weight_params.items()}
+        config_override = BacklogConfig(
+            category_weights=BacklogCategoryWeights(**overrides),
+            workflow_weights=_backlog_config.workflow_weights,
+        )
+
     items = await _build_backlog_items(
         categories=cat_list,
         repos_filter=repo_list,
         min_score=min_score,
+        config_override=config_override,
     )
 
     return templates.TemplateResponse(
