@@ -1,5 +1,5 @@
 {# Run-button partial for an action — swaps between idle and running states.
-   Polls every 3s (idle) or 2s (running) via hx-trigger. #}
+   Only polls when running (every 2s). Idle state is static. #}
 {% if running %}
 <div id="action-run-btn-{{ slug }}"
      hx-get="/partials/action-run-status/{{ slug }}?was_running=1"
@@ -11,14 +11,11 @@
     </button>
 </div>
 {% else %}
-<div id="action-run-btn-{{ slug }}"
-     hx-get="/partials/action-run-status/{{ slug }}"
-     hx-trigger="every 3s"
-     hx-swap="outerHTML">
+<div id="action-run-btn-{{ slug }}">
     <button class="btn btn-primary btn-sm gap-1"
             hx-post="/api/actions/{{ slug }}/run"
             hx-swap="none"
-            hx-on::after-request="if(event.detail.successful) { showToast('Action triggered', 'success'); } else { showToast(event.detail.xhr?.status === 409 ? 'Action is already running' : 'Failed to trigger action', 'error'); }">
+            hx-on::after-request="if(event.detail.successful) { showToast('Action triggered', 'success'); htmx.ajax('GET', '/partials/action-run-status/{{ slug }}', {target: '#action-run-btn-{{ slug }}', swap: 'outerHTML'}); } else { showToast(event.detail.xhr?.status === 409 ? 'Action is already running' : 'Failed to trigger action', 'error'); }">
         <i class="fa-solid fa-play text-xs"></i>
         <span class="btn-label">Run</span>
         <span class="htmx-indicator loading loading-spinner loading-xs"></span>
