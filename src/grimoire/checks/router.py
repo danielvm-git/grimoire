@@ -151,32 +151,31 @@ async def run_check_endpoint(
     repo: str | None = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
 ) -> CheckRunResponse:
-    """Trigger a check run. Optionally filter to a single repo."""
+    """Trigger a check run. Optionally filter to a single repo.
+
+    Returns immediately with an empty results list. The check runs in the
+    background — poll ``is_check_running()`` or the run-status partial for
+    completion.
+    """
     check = _find_check(slug)
     assert _workspace is not None
     assert _engine is not None
 
-    results = await run_check_for_all_targets(
-        check, _repos, _workspace, _engine, specific_repo=repo
-    )
+    if is_check_running(slug):
+        raise HTTPException(status_code=409, detail="Check is already running")
 
-    # Update today's history snapshot with latest check metrics
-    background_tasks.add_task(_update_snapshot_checks)
+    workspace = _workspace
+    engine = _engine
+
+    async def _run_in_background() -> None:
+        await run_check_for_all_targets(check, _repos, workspace, engine, specific_repo=repo)
+        await _update_snapshot_checks()
+
+    background_tasks.add_task(_run_in_background)
 
     return CheckRunResponse(
         check_slug=slug,
-        results=[
-            CheckResultResponse(
-                check_name=r.check_name,
-                check_slug=r.check_slug,
-                repo_full_name=r.repo_full_name,
-                branch=r.branch,
-                passed=r.passed,
-                output=r.output,
-                timestamp=r.timestamp,
-            )
-            for r in results
-        ],
+        results=[],
     )
 
 

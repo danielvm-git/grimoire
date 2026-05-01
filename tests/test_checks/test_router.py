@@ -132,8 +132,8 @@ class TestRunCheck:
         assert resp.status_code == 200
         body = resp.json()
         assert body["check_slug"] == "test-check"
-        assert len(body["results"]) == 1
-        assert body["results"][0]["passed"] is True
+        # Run is now async — results come back empty immediately
+        assert body["results"] == []
 
     async def test_run_check_not_found(self, check_client: AsyncClient) -> None:
         resp = await check_client.post("/api/checks/nonexistent/run")
@@ -143,7 +143,8 @@ class TestRunCheck:
         resp = await check_client.post("/api/checks/test-check/run?repo=acme/repo")
         assert resp.status_code == 200
         body = resp.json()
-        assert len(body["results"]) == 1
+        # Run is now async — results come back empty immediately
+        assert body["results"] == []
 
     async def test_run_then_get_results(self, check_client: AsyncClient) -> None:
         await check_client.post("/api/checks/test-check/run")
