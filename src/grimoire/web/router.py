@@ -12,9 +12,11 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import StalenessConfig
+from grimoire.database import ActionRunRecord
 from grimoire.models import WorkflowStatus
 from grimoire.targeting import TargetSpec
 
@@ -899,3 +901,57 @@ async def check_results_partial(
             "time_ago": _time_ago,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Run-status polling partials
+# ---------------------------------------------------------------------------
+
+
+@router.get("/partials/check-run-status/{slug}", response_class=HTMLResponse)
+async def check_run_status_partial(
+    request: Request, slug: str, was_running: bool = False
+) -> HTMLResponse:
+    """Return the run-button partial for a check (idle or running state).
+
+    When *was_running* is True but the check has finished, an
+    ``HX-Trigger: checkRunCompleted`` header is sent so the page can
+    auto-refresh results.
+    """
+    from grimoire.checks.engine import is_check_running
+
+    running = is_check_running(slug)
+    resp = templates.TemplateResponse(
+        request,
+        "partials/check_run_button.html",
+        context={"slug": slug, "running": running},
+    )
+    if was_running and not running:
+        resp.headers["HX-Trigger"] = "checkRunCompleted"
+    return resp
+
+
+@router.get("/partials/action-run-status/{slug}", response_class=HTMLResponse)
+async def action_run_status_partial(
+    request: Request, slug: str, was_running: bool = False
+) -> HTMLResponse:
+    """Return the run-button partial for an action (idle or running state)."""
+    from grimoire.actions.router import _engine as _actions_engine
+
+    running = False
+    if _actions_engine is not None:
+        async with AsyncSession(_actions_engine) as session:
+            stmt = select(ActionRunRecord).where(
+                ActionRunRecord.action_slug == slug,
+                ActionRunRecord.status == "running",
+            )
+            running = (await session.exec(stmt)).first() is not None
+
+    resp = templates.TemplateResponse(
+        request,
+        "partials/action_run_button.html",
+        context={"slug": slug, "running": running},
+    )
+    if was_running and not running:
+        resp.headers["HX-Trigger"] = "actionRunCompleted"
+    return resp

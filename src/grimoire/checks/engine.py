@@ -27,6 +27,14 @@ OUTPUT_SIZE_CAP = 64 * 1024  # 64 KB
 _DEFAULT_TIMEOUT = 300  # 5 minutes
 _CONCURRENCY = 5
 
+# In-memory tracking of currently-running check slugs
+_running_checks: set[str] = set()
+
+
+def is_check_running(slug: str) -> bool:
+    """Return True if the check is currently executing."""
+    return slug in _running_checks
+
 
 async def run_check(
     check: CheckDefinition,
@@ -146,24 +154,28 @@ async def run_check_for_all_targets(
     specific_repo: str | None = None,
 ) -> list[CheckResult]:
     """Resolve targets and run the check for every repo × branch combination."""
-    targets = await resolve_targets(check.targets, repos, workspace)
+    _running_checks.add(check.slug)
+    try:
+        targets = await resolve_targets(check.targets, repos, workspace)
 
-    if specific_repo is not None:
-        targets = [r for r in targets if r.full_name == specific_repo]
+        if specific_repo is not None:
+            targets = [r for r in targets if r.full_name == specific_repo]
 
-    sem = asyncio.Semaphore(_CONCURRENCY)
+        sem = asyncio.Semaphore(_CONCURRENCY)
 
-    async def _run(repo: TrackedRepository, branch: str) -> CheckResult:
-        async with sem:
-            return await run_check(check, repo, branch, workspace, engine)
+        async def _run(repo: TrackedRepository, branch: str) -> CheckResult:
+            async with sem:
+                return await run_check(check, repo, branch, workspace, engine)
 
-    tasks: list[asyncio.Task[CheckResult]] = []
-    for repo in targets:
-        branches = repo.branches or [repo.default_branch]
-        for branch in branches:
-            tasks.append(asyncio.create_task(_run(repo, branch)))
+        tasks: list[asyncio.Task[CheckResult]] = []
+        for repo in targets:
+            branches = repo.branches or [repo.default_branch]
+            for branch in branches:
+                tasks.append(asyncio.create_task(_run(repo, branch)))
 
-    if not tasks:
-        return []
+        if not tasks:
+            return []
 
-    return list(await asyncio.gather(*tasks))
+        return list(await asyncio.gather(*tasks))
+    finally:
+        _running_checks.discard(check.slug)

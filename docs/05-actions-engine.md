@@ -158,6 +158,7 @@ async def run_action(
 | `GET` | `/api/actions` | List all action definitions |
 | `GET` | `/api/actions/{slug}/runs` | List run history for an action (paginated, reverse chronological) |
 | `GET` | `/api/actions/{slug}/runs/{run_id}` | Get a specific run with per-repo results + logs |
+| `GET` | `/api/actions/{slug}/status` | Check if currently running: `{"slug": ..., "running": bool}` |
 | `POST` | `/api/actions/{slug}/run` | Trigger an action. Optional query: `?repo=owner/repo`. Returns 409 if already running |
 
 **Response models:**

@@ -152,3 +152,39 @@ class TestRunCheck:
         assert len(rows) == 1
         assert rows[0].passed is True
         assert "persisted" in rows[0].output
+
+
+class TestRunningStateTracking:
+    """Tests for the in-memory _running_checks tracking."""
+
+    async def test_is_check_running_false_when_not_running(self) -> None:
+        from grimoire.checks.engine import is_check_running
+
+        assert is_check_running("nonexistent") is False
+
+    async def test_running_check_tracked_during_execution(self, tmp_path: Path) -> None:
+        """Verify slug is in _running_checks while running, and removed after."""
+        from grimoire.checks.engine import _running_checks, is_check_running
+
+        engine = await get_engine(str(tmp_path / "track.db"))
+        await create_tables(engine)
+
+        check = CheckDefinition(
+            name="Tracker",
+            slug="tracker-test",
+            targets=TargetSpec(list=["acme/repo"]),
+            script="exit 0",
+            description="",
+        )
+        repo = TrackedRepository(full_name="acme/repo", default_branch="main", source="static")
+        workspace = MockWorkspace(tmp_path)
+
+        assert not is_check_running("tracker-test")
+
+        from grimoire.checks.engine import run_check_for_all_targets
+
+        await run_check_for_all_targets(check, [repo], workspace, engine)  # type: ignore[arg-type]
+
+        # After completion, should no longer be running
+        assert "tracker-test" not in _running_checks
+        await engine.dispose()

@@ -126,7 +126,7 @@ class TestActionsPage:
 
     async def test_actions_shows_run_button(self, web_client_with_actions: AsyncClient) -> None:
         resp = await web_client_with_actions.get("/actions")
-        assert "/api/actions/test/run" in resp.text
+        assert "/partials/action-run-status/test" in resp.text
 
     async def test_actions_shows_result_counts(self, web_client_with_actions: AsyncClient) -> None:
         resp = await web_client_with_actions.get("/actions")
@@ -427,8 +427,8 @@ class TestChecksPage:
 
     async def test_checks_shows_run_buttons(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/checks")
-        assert "/api/checks/watchdog/run" in resp.text
-        assert "/api/checks/charm-libs/run" in resp.text
+        assert "/partials/check-run-status/watchdog" in resp.text
+        assert "/partials/check-run-status/charm-libs" in resp.text
 
     async def test_checks_shows_result_counts(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/checks")
@@ -470,3 +470,61 @@ class TestCheckResultsPartial:
         resp = await web_client_with_checks.get("/partials/check-results/charm-libs")
         assert resp.status_code == 200
         assert "No results for this check" in resp.text
+
+
+class TestCheckRunStatusPartial:
+    """Tests for GET /partials/check-run-status/{slug} route."""
+
+    async def test_idle_state_shows_run_button(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get("/partials/check-run-status/watchdog")
+        assert resp.status_code == 200
+        assert "/api/checks/watchdog/run" in resp.text
+        assert "Running" not in resp.text
+
+    async def test_running_state_shows_spinner(self, web_client_with_checks: AsyncClient) -> None:
+        from grimoire.checks.engine import _running_checks
+
+        _running_checks.add("watchdog")
+        try:
+            resp = await web_client_with_checks.get("/partials/check-run-status/watchdog")
+            assert resp.status_code == 200
+            assert "Running" in resp.text
+            assert "disabled" in resp.text
+        finally:
+            _running_checks.discard("watchdog")
+
+    async def test_transition_sends_hx_trigger(self, web_client_with_checks: AsyncClient) -> None:
+        resp = await web_client_with_checks.get(
+            "/partials/check-run-status/watchdog?was_running=1"
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("HX-Trigger") == "checkRunCompleted"
+
+    async def test_no_trigger_when_still_running(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        from grimoire.checks.engine import _running_checks
+
+        _running_checks.add("watchdog")
+        try:
+            resp = await web_client_with_checks.get(
+                "/partials/check-run-status/watchdog?was_running=1"
+            )
+            assert "HX-Trigger" not in resp.headers
+        finally:
+            _running_checks.discard("watchdog")
+
+
+class TestActionRunStatusPartial:
+    """Tests for GET /partials/action-run-status/{slug} route."""
+
+    async def test_idle_state_shows_run_button(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-run-status/test")
+        assert resp.status_code == 200
+        assert "/api/actions/test/run" in resp.text
+        assert "Running" not in resp.text
+
+    async def test_transition_sends_hx_trigger(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-run-status/test?was_running=1")
+        assert resp.status_code == 200
+        assert resp.headers.get("HX-Trigger") == "actionRunCompleted"

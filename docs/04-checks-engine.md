@@ -183,6 +183,7 @@ See Module 7 (`docker-entrypoint.sh`) for implementation details.
 |--------|------|-------------|
 | `GET` | `/api/checks` | List all check definitions + enabled status |
 | `GET` | `/api/checks/{slug}/results` | Latest results for a check, grouped by repo+branch |
+| `GET` | `/api/checks/{slug}/status` | Check if currently running: `{"slug": ..., "running": bool}` |
 | `POST` | `/api/checks/{slug}/run` | Trigger a check run. Optional query: `?repo=owner/repo` to target a single repo |
 | `POST` | `/api/checks/{slug}/toggle` | Toggle check enabled/disabled |
 
