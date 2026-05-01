@@ -35,13 +35,13 @@
         {% endif %}
 
         {# Actions #}
-        <div class="flex gap-1 shrink-0">
+        <div class="flex items-center gap-1 shrink-0">
             {% if item.url %}
-            <a href="{{ item.url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-xs tooltip" data-tip="Open on GitHub">
+            <a href="{{ item.url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-xs tooltip inline-flex items-center" data-tip="Open on GitHub">
                 <i class="fa-brands fa-github"></i>
             </a>
             {% endif %}
-            <button class="btn btn-ghost btn-xs copy-item-btn tooltip" data-tip="Copy as Markdown"
+            <button class="btn btn-ghost btn-xs copy-item-btn tooltip inline-flex items-center" data-tip="Copy as Markdown"
                     data-markdown="{{ item.to_markdown() | e }}">
                 <i class="fa-regular fa-clipboard"></i>
             </button>
