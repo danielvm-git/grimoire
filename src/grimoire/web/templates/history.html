@@ -94,12 +94,22 @@
 
 <script>
 (function() {
+    // Derive text/grid colors from DaisyUI theme for light/dark compatibility
+    const style = getComputedStyle(document.documentElement);
+    const textColor = style.getPropertyValue('color') || '#888';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+
+    // Set Chart.js global defaults for theme-aware rendering
+    Chart.defaults.color = textColor;
+    Chart.defaults.borderColor = gridColor;
+
     const CHART_COLORS = {
-        primary: 'rgb(99, 102, 241)',
-        danger:  'rgb(239, 68, 68)',
-        success: 'rgb(34, 197, 94)',
-        warning: 'rgb(234, 179, 8)',
-        muted:   'rgb(156, 163, 175)',
+        primary: 'rgb(99, 102, 241)',   // indigo — visible on both
+        danger:  'rgb(239, 68, 68)',    // red
+        success: 'rgb(34, 197, 94)',    // green
+        warning: 'rgb(234, 179, 8)',    // amber
+        muted:   'rgb(148, 163, 184)',  // slate-400 — visible on both
     };
 
     const chartInstances = {};
@@ -119,12 +129,12 @@
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                title: { display: true, text: title },
-                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } },
+                title: { display: true, text: title, color: textColor },
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, color: textColor } },
             },
             scales: {
-                x: { ticks: { maxTicksAutoSkip: true, maxRotation: 0 } },
-                y: { beginAtZero: true },
+                x: { ticks: { maxTicksAutoSkip: true, maxRotation: 0, color: textColor }, grid: { color: gridColor } },
+                y: { beginAtZero: true, ticks: { color: textColor }, grid: { color: gridColor } },
             },
             elements: { line: { tension: 0.3 }, point: { radius: 2 } },
         };
