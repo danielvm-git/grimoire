@@ -141,6 +141,14 @@ All fetched data is persisted to the SQLite database as the **persistent cache**
 | `cached_workflow_status` | repo_full_name, workflow_name, branch, status, url, run_url, fetched_at |
 | `cached_etag` | endpoint_url, etag, last_modified |
 
+### Historical snapshots
+
+Alongside cache writes, `save_stats_to_db()` also upserts one `StatsSnapshot` row per repo per calendar day. This provides daily time-series data for the History page (Module 8).
+
+- Age-bucketed counts (issues, PRs, branches) are computed in `fetch_repository_stats()` from raw API data and carried in `RepositoryStats.issues_by_age`, `prs_by_age`, `branches_by_age`.
+- Retention cleanup (delete snapshots older than `history.retention_days`) runs at the start of each `save_stats_to_db()` call.
+- See `docs/08-history.md` for full details.
+
 ## 2.4 — Repos REST API
 
 **File:** `src/grimoire/github/router.py`

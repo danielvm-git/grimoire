@@ -84,6 +84,9 @@ staleness:
   problematic_stale_issues_pct: 20  # highlight when stale/open issues >= 20%
   problematic_stale_prs_pct: 20     # highlight when stale/open PRs >= 20%
 
+history:
+  retention_days: 90       # default: 90 — keep daily snapshots for this many days
+
 refresh_interval_minutes: 5  # default: 5
 
 data_dir: "./data"           # checks/ and actions/ subdirectories
@@ -103,7 +106,8 @@ log_file: "./grimoire.log"
 - `WorkflowFilter(include: list[str] = [], exclude: list[str] = [])` — glob patterns (fnmatch) on workflow name
 - `RepoSource` — discriminated union of the above (by field presence)
 - `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, branches_days: int = 90, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
-- `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional)
+- `HistoryConfig(retention_days: int = 90)`
+- `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional); `history: HistoryConfig = HistoryConfig()` (optional)
 
 ### Config loading
 

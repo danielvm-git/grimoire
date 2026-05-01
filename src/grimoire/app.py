@@ -41,6 +41,8 @@ from grimoire.github.service import (
     prune_stale_data,
     refresh_all_stats,
 )
+from grimoire.history.router import router as history_router
+from grimoire.history.router import set_history_state
 from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import router as metrics_router
@@ -73,6 +75,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Expose staleness thresholds to web layer
     set_staleness_config(config.staleness)
+
+    # Expose engine + staleness to history layer
+    set_history_state(engine, config.staleness)
 
     # Prune DB-cached repos that are no longer in the config
     await prune_removed_repos(engine, config)
@@ -194,6 +199,7 @@ def create_app() -> FastAPI:
     app.include_router(refresh_router, prefix="/api")
     app.include_router(checks_router, prefix="/api")
     app.include_router(actions_router, prefix="/api")
+    app.include_router(history_router, prefix="/api")
 
     # Observability
     app.include_router(metrics_router)

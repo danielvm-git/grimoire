@@ -43,6 +43,7 @@ async def test_tables_created(engine: AsyncEngine) -> None:
         "cached_pull_request",
         "cached_workflow_status",
         "cached_etag",
+        "stats_snapshot",
     }
     assert expected.issubset(tables), f"Missing tables: {expected - tables}"
 

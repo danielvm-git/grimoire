@@ -955,3 +955,22 @@ async def action_run_status_partial(
     if was_running and not running:
         resp.headers["HX-Trigger"] = "actionRunCompleted"
     return resp
+
+
+# ---------------------------------------------------------------------------
+# History page
+# ---------------------------------------------------------------------------
+
+
+@router.get("/history", response_class=HTMLResponse)
+async def history_page(request: Request) -> HTMLResponse:
+    """History page — time-series charts for tracked metrics."""
+    from grimoire.github.router import _repos
+
+    repo_names = sorted(_repos.keys()) if _repos else []
+
+    return templates.TemplateResponse(
+        request,
+        "history.html",
+        context={"repo_names": repo_names},
+    )
