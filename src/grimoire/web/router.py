@@ -544,7 +544,9 @@ async def actions_page(request: Request) -> HTMLResponse:
     action_vms = []
     for a in _actions:
         targets = a.targets
-        if targets.regex is not None:
+        if targets is None:
+            target_summary = "global"
+        elif targets.regex is not None:
             target_summary = f"regex: {targets.regex}"
         elif targets.list is not None:
             target_summary = f"list: {len(targets.list)} repos"

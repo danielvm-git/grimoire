@@ -109,7 +109,9 @@ async def list_actions() -> list[ActionListItem]:
     items: list[ActionListItem] = []
     for a in _actions:
         count = 0
-        if a.targets.list is not None:
+        if a.targets is None:
+            count = 0
+        elif a.targets.list is not None:
             count = len(a.targets.list)
         elif a.targets.regex is not None:
             pattern = re.compile(a.targets.regex)
@@ -208,6 +210,12 @@ async def run_action_endpoint(slug: str, repo: str | None = None) -> ActionRunDe
     action = _find_action(slug)
     assert _workspace is not None
     assert _engine is not None
+
+    if action.targets is None and repo is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="repo parameter is not valid for global actions (no targets)",
+        )
 
     try:
         result = await run_action(

@@ -43,6 +43,11 @@ class WorkspaceManager:
             self._repo_locks[full_name] = asyncio.Lock()
         return self._repo_locks[full_name]
 
+    @property
+    def workspace_dir(self) -> Path:
+        """Return the workspace root directory."""
+        return self._workspace_dir
+
     async def setup(self, repos: list[TrackedRepository]) -> None:
         """Clone/update all repos and configure git identity in each."""
         for repo in repos:

@@ -29,6 +29,10 @@ class MockWorkspace:
         self.sync_calls: list[str] = []
         self.reset_calls: list[tuple[str, str]] = []
 
+    @property
+    def workspace_dir(self) -> Path:
+        return self._workdir
+
     async def sync_repo(self, repo: TrackedRepository) -> None:
         self.sync_calls.append(repo.full_name)
 
@@ -280,3 +284,91 @@ class TestRunAction:
         assert result.results[0].branch == "main"
         assert result.results[1].branch == "develop"
         assert ws.reset_calls == [("acme/repo", "main"), ("acme/repo", "develop")]
+
+
+def _global_action(script: str = "echo global") -> ActionDefinition:
+    return ActionDefinition(
+        name="Global Action",
+        slug="global-action",
+        description="A global test action",
+        targets=None,
+        script=script,
+    )
+
+
+class TestGlobalAction:
+    async def test_global_action_runs_once(self, tmp_path: Path) -> None:
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        result = await run_action(
+            _global_action("echo global"),
+            [_repo()],
+            ws,
+            engine,
+            triggered_by="manual",
+        )
+
+        assert len(result.results) == 1
+        assert result.results[0].repo_full_name == "(global)"
+        assert result.results[0].branch == ""
+        assert result.results[0].passed is True
+        assert "global" in result.results[0].output
+
+    async def test_global_action_no_sync_or_reset(self, tmp_path: Path) -> None:
+        """Global actions must not call sync_repo or reset_workdir."""
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        await run_action(
+            _global_action(),
+            [_repo()],
+            ws,
+            engine,
+            triggered_by="manual",
+        )
+
+        assert ws.sync_calls == []
+        assert ws.reset_calls == []
+
+    async def test_global_action_db_persistence(self, tmp_path: Path) -> None:
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        await run_action(
+            _global_action("echo persisted"),
+            [],
+            ws,
+            engine,
+            triggered_by="cron",
+        )
+
+        async with AsyncSession(engine) as session:
+            runs = (await session.exec(select(ActionRunRecord))).all()
+            assert len(runs) == 1
+            assert runs[0].status == "completed"
+
+            repo_results = (await session.exec(select(ActionRunRepoRecord))).all()
+            assert len(repo_results) == 1
+            assert repo_results[0].repo_full_name == "(global)"
+            assert repo_results[0].branch == ""
+            assert "persisted" in repo_results[0].output
+
+    async def test_global_action_failure(self, tmp_path: Path) -> None:
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        result = await run_action(
+            _global_action("exit 1"),
+            [],
+            ws,
+            engine,
+            triggered_by="manual",
+        )
+
+        assert len(result.results) == 1
+        assert result.results[0].passed is False

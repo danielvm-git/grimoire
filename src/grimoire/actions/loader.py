@@ -16,7 +16,7 @@ class ActionDefinition(BaseModel):
     name: str
     slug: str = ""  # auto-derived from filename
     description: str
-    targets: TargetSpec
+    targets: TargetSpec | None = None  # None = global (run once, no per-repo iteration)
     script: str
     schedule: str | None = None  # cron expression; None = manual-only
 
