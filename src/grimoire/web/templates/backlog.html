@@ -141,6 +141,10 @@
         const params = new URLSearchParams();
         if (cats.length < ALL_CATEGORIES.length) params.set('categories', cats.join(','));
         if (parseFloat(minScore) > 0) params.set('min_score', minScore);
+        // Include weight slider values for live recalculation
+        document.querySelectorAll('.weight-slider').forEach(s => {
+            params.set('w_' + s.dataset.key, s.value);
+        });
         const url = '/partials/backlog-items?' + params.toString();
         htmx.ajax('GET', url, {target: '#backlog-items', swap: 'innerHTML'});
     }
@@ -152,11 +156,15 @@
     });
     slider.addEventListener('change', applyFilters);
 
-    // --- Weight slider labels ---
+    // --- Weight slider labels + live recalculation ---
+    let weightDebounce = null;
     document.querySelectorAll('.weight-slider').forEach(s => {
         s.addEventListener('input', function() {
             const label = document.querySelector('.weight-val[data-key="' + this.dataset.key + '"]');
             if (label) label.textContent = this.value;
+            // Debounce to avoid spamming requests while dragging
+            clearTimeout(weightDebounce);
+            weightDebounce = setTimeout(applyFilters, 150);
         });
     });
 
