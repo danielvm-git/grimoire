@@ -38,75 +38,73 @@
 
 {# ── Filters Panel ─────────────────────────────────────────────────── #}
 <div id="filters-panel" class="hidden bg-base-100 rounded-lg shadow-sm p-5 mb-6">
-    <div class="flex flex-wrap gap-6">
-        {# Category toggles #}
+    {# Row 1: Category checkboxes + min priority slider #}
+    <div class="flex flex-wrap items-end gap-6">
         <div>
-            <label class="label pb-1"><span class="label-text text-xs opacity-60">Categories</span></label>
-            <div class="flex flex-wrap gap-2">
-                {% for cat in categories %}
+            <label class="label pb-1"><span class="label-text text-xs opacity-60">Show</span></label>
+            <div class="flex flex-wrap gap-3">
                 <label class="label cursor-pointer gap-2">
-                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="{{ cat }}" checked />
-                    <span class="label-text text-sm">{{ category_labels[cat] }}</span>
+                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="stale_issue" checked />
+                    <span class="label-text text-sm">Stale Issues</span>
                 </label>
-                {% endfor %}
+                <label class="label cursor-pointer gap-2">
+                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="stale_pr" checked />
+                    <span class="label-text text-sm">Stale PRs</span>
+                </label>
+                <label class="label cursor-pointer gap-2">
+                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="stale_branches" checked />
+                    <span class="label-text text-sm">Stale Branches</span>
+                </label>
+                <label class="label cursor-pointer gap-2">
+                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="failing_workflow" checked />
+                    <span class="label-text text-sm">Workflows</span>
+                </label>
+                <label class="label cursor-pointer gap-2">
+                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="failing_check" checked />
+                    <span class="label-text text-sm">Checks</span>
+                </label>
             </div>
         </div>
 
-        {# Repo filter #}
-        <div class="flex-1 min-w-[200px] max-w-sm">
-            <label class="label pb-1"><span class="label-text text-xs opacity-60">Repository</span></label>
-            <select id="repo-filter" class="select select-bordered select-sm w-full">
-                <option value="">All repositories</option>
-                {% for name in repo_names %}
-                <option value="{{ name }}">{{ name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        {# Min priority #}
-        <div>
+        <div class="ml-auto">
             <label class="label pb-1"><span class="label-text text-xs opacity-60">Min priority: <span id="min-score-label">0</span></span></label>
             <input type="range" id="min-score-slider" min="0" max="200" value="0" step="5" class="range range-sm range-primary w-48" />
         </div>
     </div>
 
-    {# Advanced: category weight sliders #}
-    <div class="mt-4">
-        <button class="btn btn-ghost btn-xs opacity-60" onclick="document.getElementById('weight-panel').classList.toggle('hidden')">
-            <i class="fa-solid fa-sliders"></i> Category weights (advanced)
-        </button>
-        <div id="weight-panel" class="hidden mt-3 bg-base-200 rounded-lg p-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                    <label class="label pb-0"><span class="label-text text-xs">Failing Workflow: <span class="weight-val" data-key="failing_workflow">{{ backlog_config.category_weights.failing_workflow | int }}</span></span></label>
-                    <input type="range" class="range range-xs range-error weight-slider" data-key="failing_workflow" min="0" max="200" value="{{ backlog_config.category_weights.failing_workflow | int }}" />
-                </div>
-                <div>
-                    <label class="label pb-0"><span class="label-text text-xs">Failing Check (error): <span class="weight-val" data-key="failing_check_error">{{ backlog_config.category_weights.failing_check_error | int }}</span></span></label>
-                    <input type="range" class="range range-xs range-error weight-slider" data-key="failing_check_error" min="0" max="200" value="{{ backlog_config.category_weights.failing_check_error | int }}" />
-                </div>
-                <div>
-                    <label class="label pb-0"><span class="label-text text-xs">Failing Check (warning): <span class="weight-val" data-key="failing_check_warning">{{ backlog_config.category_weights.failing_check_warning | int }}</span></span></label>
-                    <input type="range" class="range range-xs range-warning weight-slider" data-key="failing_check_warning" min="0" max="200" value="{{ backlog_config.category_weights.failing_check_warning | int }}" />
-                </div>
-                <div>
-                    <label class="label pb-0"><span class="label-text text-xs">Stale PR: <span class="weight-val" data-key="stale_pr">{{ backlog_config.category_weights.stale_pr | int }}</span></span></label>
-                    <input type="range" class="range range-xs range-info weight-slider" data-key="stale_pr" min="0" max="200" value="{{ backlog_config.category_weights.stale_pr | int }}" />
-                </div>
-                <div>
-                    <label class="label pb-0"><span class="label-text text-xs">Stale Issue: <span class="weight-val" data-key="stale_issue">{{ backlog_config.category_weights.stale_issue | int }}</span></span></label>
-                    <input type="range" class="range range-xs range-info weight-slider" data-key="stale_issue" min="0" max="200" value="{{ backlog_config.category_weights.stale_issue | int }}" />
-                </div>
-                <div>
-                    <label class="label pb-0"><span class="label-text text-xs">Stale Branches: <span class="weight-val" data-key="stale_branches">{{ backlog_config.category_weights.stale_branches | int }}</span></span></label>
-                    <input type="range" class="range range-xs weight-slider" data-key="stale_branches" min="0" max="200" value="{{ backlog_config.category_weights.stale_branches | int }}" />
-                </div>
+    {# Row 2: Category weight sliders #}
+    <div class="mt-4 bg-base-200 rounded-lg p-4">
+        <label class="label pb-2"><span class="label-text text-xs opacity-60"><i class="fa-solid fa-sliders"></i> Category weights</span></label>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+                <label class="label pb-0"><span class="label-text text-xs">Failing Workflow: <span class="weight-val" data-key="failing_workflow">{{ backlog_config.category_weights.failing_workflow | int }}</span></span></label>
+                <input type="range" class="range range-xs range-error weight-slider" data-key="failing_workflow" min="0" max="200" value="{{ backlog_config.category_weights.failing_workflow | int }}" />
             </div>
-            <div class="flex justify-end gap-2 mt-3">
-                <button id="save-weights-btn" class="btn btn-primary btn-sm gap-1">
-                    <i class="fa-solid fa-floppy-disk"></i> Save to config
-                </button>
+            <div>
+                <label class="label pb-0"><span class="label-text text-xs">Failing Check (error): <span class="weight-val" data-key="failing_check_error">{{ backlog_config.category_weights.failing_check_error | int }}</span></span></label>
+                <input type="range" class="range range-xs range-error weight-slider" data-key="failing_check_error" min="0" max="200" value="{{ backlog_config.category_weights.failing_check_error | int }}" />
             </div>
+            <div>
+                <label class="label pb-0"><span class="label-text text-xs">Failing Check (warning): <span class="weight-val" data-key="failing_check_warning">{{ backlog_config.category_weights.failing_check_warning | int }}</span></span></label>
+                <input type="range" class="range range-xs range-warning weight-slider" data-key="failing_check_warning" min="0" max="200" value="{{ backlog_config.category_weights.failing_check_warning | int }}" />
+            </div>
+            <div>
+                <label class="label pb-0"><span class="label-text text-xs">Stale PR: <span class="weight-val" data-key="stale_pr">{{ backlog_config.category_weights.stale_pr | int }}</span></span></label>
+                <input type="range" class="range range-xs range-info weight-slider" data-key="stale_pr" min="0" max="200" value="{{ backlog_config.category_weights.stale_pr | int }}" />
+            </div>
+            <div>
+                <label class="label pb-0"><span class="label-text text-xs">Stale Issue: <span class="weight-val" data-key="stale_issue">{{ backlog_config.category_weights.stale_issue | int }}</span></span></label>
+                <input type="range" class="range range-xs range-info weight-slider" data-key="stale_issue" min="0" max="200" value="{{ backlog_config.category_weights.stale_issue | int }}" />
+            </div>
+            <div>
+                <label class="label pb-0"><span class="label-text text-xs">Stale Branches: <span class="weight-val" data-key="stale_branches">{{ backlog_config.category_weights.stale_branches | int }}</span></span></label>
+                <input type="range" class="range range-xs weight-slider" data-key="stale_branches" min="0" max="200" value="{{ backlog_config.category_weights.stale_branches | int }}" />
+            </div>
+        </div>
+        <div class="flex justify-end gap-2 mt-3">
+            <button id="save-weights-btn" class="btn btn-primary btn-sm gap-1">
+                <i class="fa-solid fa-floppy-disk"></i> Save to config
+            </button>
         </div>
     </div>
 </div>
@@ -125,21 +123,29 @@
 
 <script>
 (function() {
+    // Category filter mapping: checkbox value → actual BacklogCategory values
+    const CATEGORY_MAP = {
+        'stale_issue': ['stale_issue'],
+        'stale_pr': ['stale_pr'],
+        'stale_branches': ['stale_branches'],
+        'failing_workflow': ['failing_workflow'],
+        'failing_check': ['failing_check_error', 'failing_check_warning'],
+    };
+    const ALL_CATEGORIES = Object.values(CATEGORY_MAP).flat();
+
     // --- Filtering via HTMX ---
     function applyFilters() {
-        const cats = Array.from(document.querySelectorAll('.category-filter:checked')).map(c => c.value);
-        const repo = document.getElementById('repo-filter').value;
+        const checkedBoxes = Array.from(document.querySelectorAll('.category-filter:checked')).map(c => c.value);
+        const cats = checkedBoxes.flatMap(v => CATEGORY_MAP[v] || [v]);
         const minScore = document.getElementById('min-score-slider').value;
         const params = new URLSearchParams();
-        if (cats.length < {{ categories | length }}) params.set('categories', cats.join(','));
-        if (repo) params.set('repos', repo);
+        if (cats.length < ALL_CATEGORIES.length) params.set('categories', cats.join(','));
         if (parseFloat(minScore) > 0) params.set('min_score', minScore);
         const url = '/partials/backlog-items?' + params.toString();
         htmx.ajax('GET', url, {target: '#backlog-items', swap: 'innerHTML'});
     }
 
     document.querySelectorAll('.category-filter').forEach(cb => cb.addEventListener('change', applyFilters));
-    document.getElementById('repo-filter').addEventListener('change', applyFilters);
     const slider = document.getElementById('min-score-slider');
     slider.addEventListener('input', function() {
         document.getElementById('min-score-label').textContent = this.value;

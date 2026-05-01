@@ -20,7 +20,6 @@ from grimoire.database import ActionRunRecord
 from grimoire.models import WorkflowStatus
 from grimoire.targeting import TargetSpec
 from grimoire.web.backlog import (
-    BacklogCategory,
     BacklogItem,
     build_backlog_items,
     export_markdown,
@@ -1042,10 +1041,7 @@ async def _build_backlog_items(
 @router.get("/backlog", response_class=HTMLResponse)
 async def backlog_page(request: Request) -> HTMLResponse:
     """Backlog page — prioritised problem list across all repos."""
-    from grimoire.github.router import _repos
-
     items = await _build_backlog_items()
-    repo_names = sorted(_repos.keys()) if _repos else []
 
     # Build summary counts per tier
     tier_counts: dict[str, int] = {}
@@ -1060,14 +1056,9 @@ async def backlog_page(request: Request) -> HTMLResponse:
         "backlog.html",
         context={
             "items": items,
-            "repo_names": repo_names,
             "tier_counts": tier_counts,
             "total_items": len(items),
             "repos_with_items": repos_with_items,
-            "categories": [c.value for c in BacklogCategory],
-            "category_labels": {
-                c.value: c.value.replace("_", " ").title() for c in BacklogCategory
-            },
             "backlog_config": _backlog_config,
             "time_ago": _time_ago,
         },
