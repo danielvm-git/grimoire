@@ -71,24 +71,17 @@ def _extract_stale_series(
 
 def _build_series(
     snapshots: list[StatsSnapshot],
-    staleness: StalenessConfig,
 ) -> dict[str, list[int]]:
     """Build all time-series from a list of snapshots (already ordered by date)."""
     return {
         "open_issues": [s.open_issues for s in snapshots],
-        "stale_issues": _extract_stale_series(
-            snapshots, "issues_by_age_json", staleness.issues_days
-        ),
+        "stale_issues": [s.stale_issues for s in snapshots],
         "open_prs": [s.open_prs for s in snapshots],
-        "stale_prs": _extract_stale_series(
-            snapshots, "prs_by_age_json", staleness.pull_requests_days
-        ),
+        "stale_prs": [s.stale_prs for s in snapshots],
         "workflow_total": [s.workflow_total for s in snapshots],
         "workflow_failures": [s.workflow_failures for s in snapshots],
         "total_branches": [s.total_branches for s in snapshots],
-        "stale_branches": _extract_stale_series(
-            snapshots, "branches_by_age_json", staleness.branches_days
-        ),
+        "stale_branches": [s.stale_branches for s in snapshots],
     }
 
 
@@ -148,7 +141,9 @@ async def history_global(
                 timestamp=group[0].timestamp,
                 repo_full_name="(global)",
                 open_issues=sum(s.open_issues for s in group),
+                stale_issues=sum(s.stale_issues for s in group),
                 open_prs=sum(s.open_prs for s in group),
+                stale_prs=sum(s.stale_prs for s in group),
                 workflow_total=sum(s.workflow_total for s in group),
                 workflow_failures=sum(s.workflow_failures for s in group),
                 total_branches=sum(s.total_branches for s in group),
@@ -159,7 +154,7 @@ async def history_global(
             )
         )
 
-    series = _build_series(agg_snapshots, _staleness)
+    series = _build_series(agg_snapshots)
     timestamps = [d.isoformat() for d in dates_sorted]
     return {"timestamps": timestamps, "series": series}
 
@@ -188,6 +183,6 @@ async def history_repo(
     if not rows:
         return {"timestamps": [], "series": {}}
 
-    series = _build_series(list(rows), _staleness)
+    series = _build_series(list(rows))
     timestamps = [s.snapshot_date.isoformat() for s in rows]
     return {"timestamps": timestamps, "series": series}

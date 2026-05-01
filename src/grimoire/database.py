@@ -178,7 +178,9 @@ class StatsSnapshot(SQLModel, table=True):
     timestamp: datetime = Field(default_factory=_utcnow)
     repo_full_name: str = Field(index=True)
     open_issues: int = 0
+    stale_issues: int = 0
     open_prs: int = 0
+    stale_prs: int = 0
     workflow_total: int = 0
     workflow_failures: int = 0
     total_branches: int = 0
