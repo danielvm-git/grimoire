@@ -18,11 +18,11 @@ script: |
   reran=0
 
   for author in "${AUTHORS[@]}"; do
-    # Search for open PRs by this author across all repos
+    # Only fetch PRs that already have failing checks
     while IFS=$'\t' read -r repo pr_num branch head_sha; do
       [[ -z "$pr_num" ]] && continue
 
-      # Find workflow runs that failed on this PR's latest commit
+      # Rerun all failed workflow runs on this PR's head commit
       while IFS= read -r run_id; do
         [[ -z "$run_id" ]] && continue
         echo "PR ${repo}#${pr_num} (${author}): rerunning failed jobs in run ${run_id}"
@@ -33,7 +33,7 @@ script: |
         --jq ".[] | select(.headSha == \"${head_sha}\") | .databaseId" \
         2>/dev/null || true)
 
-    done < <(gh search prs --author "$author" --state open --limit 100 \
+    done < <(gh search prs --author "$author" --state open --checks failure --limit 100 \
       --json repository,number,headRefName,headRefOid \
       --jq '.[] | [.repository.nameWithOwner, (.number | tostring), .headRefName, .headRefOid] | @tsv' \
       2>/dev/null || true)
