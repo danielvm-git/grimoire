@@ -70,36 +70,58 @@ async def run_action(
 
     run_id: int = run_record.id  # type: ignore[assignment]
 
-    # 3. Resolve targets
-    targets = await resolve_targets(action.targets, repos, workspace)
-    if specific_repo is not None:
-        targets = [r for r in targets if r.full_name == specific_repo]
-
-    # 4. Execute sequentially
+    # 3. Resolve targets and execute
     results: list[ActionRepoResult] = []
-    for repo in targets:
-        branches = repo.branches or [repo.default_branch]
-        for branch in branches:
-            passed, output = await _execute_action(action, repo, branch, workspace)
-            result = ActionRepoResult(
-                repo_full_name=repo.full_name,
-                branch=branch,
-                passed=passed,
-                output=output,
-            )
-            results.append(result)
 
-            # Persist per-repo result
-            repo_record = ActionRunRepoRecord(
-                run_id=run_id,
-                repo_full_name=repo.full_name,
-                branch=branch,
-                passed=passed,
-                output=output,
-            )
-            async with AsyncSession(engine) as session:
-                session.add(repo_record)
-                await session.commit()
+    if action.targets is None:
+        # Global action: run script once, not per-repo
+        passed, output = await _execute_global_action(action, workspace)
+        result = ActionRepoResult(
+            repo_full_name="(global)",
+            branch="",
+            passed=passed,
+            output=output,
+        )
+        results.append(result)
+
+        repo_record = ActionRunRepoRecord(
+            run_id=run_id,
+            repo_full_name="(global)",
+            branch="",
+            passed=passed,
+            output=output,
+        )
+        async with AsyncSession(engine) as session:
+            session.add(repo_record)
+            await session.commit()
+    else:
+        # Per-repo action
+        targets = await resolve_targets(action.targets, repos, workspace)
+        if specific_repo is not None:
+            targets = [r for r in targets if r.full_name == specific_repo]
+
+        for repo in targets:
+            branches = repo.branches or [repo.default_branch]
+            for branch in branches:
+                passed, output = await _execute_action(action, repo, branch, workspace)
+                result = ActionRepoResult(
+                    repo_full_name=repo.full_name,
+                    branch=branch,
+                    passed=passed,
+                    output=output,
+                )
+                results.append(result)
+
+                repo_record = ActionRunRepoRecord(
+                    run_id=run_id,
+                    repo_full_name=repo.full_name,
+                    branch=branch,
+                    passed=passed,
+                    output=output,
+                )
+                async with AsyncSession(engine) as session:
+                    session.add(repo_record)
+                    await session.commit()
 
     # 5. Update run record
     finished_at = datetime.now(timezone.utc)
@@ -120,6 +142,47 @@ async def run_action(
         finished_at=finished_at,
         results=results,
     )
+
+
+async def _execute_global_action(
+    action: ActionDefinition,
+    workspace: WorkspaceManager,
+) -> tuple[bool, str]:
+    """Run the action script once, not tied to any specific repo."""
+    cwd = workspace.workspace_dir
+    cwd.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, **workspace.get_env()}
+
+    passed = False
+    output = ""
+
+    proc: asyncio.subprocess.Process | None = None
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            action.script,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            env=env,
+        )
+        stdout_bytes, _ = await asyncio.wait_for(proc.communicate(), timeout=_DEFAULT_TIMEOUT)
+        output = stdout_bytes.decode(errors="replace")
+        passed = proc.returncode == 0
+    except asyncio.TimeoutError:
+        output = f"Timed out after {_DEFAULT_TIMEOUT}s"
+        passed = False
+        if proc is not None:
+            proc.kill()
+            await proc.wait()
+    except OSError as exc:
+        output = f"Failed to execute: {exc}"
+        passed = False
+
+    # Cap output
+    if len(output) > OUTPUT_SIZE_CAP:
+        output = "[output truncated — showing last 64KB]\n" + output[-OUTPUT_SIZE_CAP:]
+
+    return passed, output
 
 
 async def _execute_action(

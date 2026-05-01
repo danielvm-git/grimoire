@@ -100,3 +100,20 @@ class TestLoadActions:
         (actions_dir / "bad.yaml").write_text("just a string\n")
         with pytest.raises(ValueError, match="Expected a YAML mapping"):
             load_actions(tmp_path)
+
+    def test_global_action_no_targets(self, tmp_path: Path) -> None:
+        """Actions without targets should load as global (targets=None)."""
+        actions_dir = tmp_path / "actions"
+        actions_dir.mkdir()
+        (actions_dir / "global.yaml").write_text(
+            "name: Global Action\n"
+            "description: Runs once, not per-repo\n"
+            "script: echo hello\n"
+            "schedule: '0 */3 * * *'\n"
+        )
+
+        actions = load_actions(tmp_path)
+        assert len(actions) == 1
+        assert actions[0].slug == "global"
+        assert actions[0].targets is None
+        assert actions[0].schedule == "0 */3 * * *"

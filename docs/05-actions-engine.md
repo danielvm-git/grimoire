@@ -40,6 +40,18 @@ script: |
   pwd
 ```
 
+A **global** action (no targets — runs once, not per-repo):
+
+```yaml
+# data/actions/rerun-failed-pr-workflows.yaml
+name: "Rerun Failed PR Workflows"
+description: "Reruns failed CI on open PRs by specified authors"
+script: |
+  echo "Running globally..."
+schedule: "0 */3 * * *"
+# Note: no "targets" field — this makes it a global action
+```
+
 ### Pydantic model
 
 ```python
@@ -47,10 +59,12 @@ class ActionDefinition(BaseModel):
     name: str
     slug: str               # auto-derived from YAML filename (e.g., "update-uv-lock")
     description: str
-    targets: TargetSpec
+    targets: TargetSpec | None = None  # None = global (run once, not per-repo)
     script: str
     schedule: str | None = None
 ```
+
+**Global actions:** When `targets` is omitted, the action runs its script once (not per-repo). The script executes in the workspace root directory with `GH_TOKEN` and other environment variables available. No `sync_repo()` or `reset_workdir()` is called. Results are stored with `repo_full_name="(global)"`.
 
 **Note:** Actions do not have an `enabled` toggle (unlike checks). They are either manual-only or scheduled. To "disable" a scheduled action, remove or rename the YAML file.
 
@@ -84,19 +98,25 @@ async def run_action(
     """
     1. Check if this action is already running. If so, raise/return 409 Conflict.
     2. Create an ActionRunRecord in the database (status: "running").
-    3. Resolve targets (or filter to specific_repo if provided).
-    4. For each target repo × each observed branch (sequentially):
-       a. Call workspace.sync_repo() to fetch latest from remote.
-       b. Call workspace.reset_workdir() to ensure clean state (correct branch, no leftover files).
-       c. Run action.script as subprocess in workdir.
-       d. Capture full stdout+stderr (cap at 64KB, same as checks).
-       e. Record ActionRunRepoRecord (passed, output).
+    3. If global action (targets is None):
+       a. Run script once in workspace root directory.
+       b. Record single ActionRunRepoRecord with repo_full_name="(global)".
+    4. If per-repo action:
+       a. Resolve targets (or filter to specific_repo if provided).
+       b. For each target repo × each observed branch (sequentially):
+          - Call workspace.sync_repo() to fetch latest from remote.
+          - Call workspace.reset_workdir() to ensure clean state.
+          - Run action.script as subprocess in workdir.
+          - Capture full stdout+stderr (cap at 64KB).
+          - Record ActionRunRepoRecord (passed, output).
     5. Update ActionRunRecord (status: "completed", finished_at).
     6. Return ActionRun summary.
     """
 ```
 
-**Sequential execution:** Actions run repos **sequentially**, not concurrently. Actions may have side effects (commits, PRs, branch operations) that could conflict if run in parallel. This is a deliberate safety choice.
+**Global actions:** When `action.targets is None`, the script runs once in the workspace root directory. No `sync_repo()` or `reset_workdir()` is called. The `specific_repo` parameter is rejected with HTTP 400 for global actions.
+
+**Sequential execution:** Per-repo actions run repos **sequentially**, not concurrently. Actions may have side effects (commits, PRs, branch operations) that could conflict if run in parallel. This is a deliberate safety choice.
 
 **Concurrent run guard:** If an action is already running (an `ActionRunRecord` with `status="running"` exists for this action), reject the new run with HTTP 409 Conflict: `"Action '{slug}' is already running (run ID: {id})"`. This applies to all triggers (manual, cron, API).
 
