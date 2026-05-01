@@ -165,15 +165,15 @@ class TestCheckStatus:
         assert body["running"] is False
 
     async def test_status_running(self, check_client: AsyncClient) -> None:
-        from grimoire.checks.engine import _running_checks
+        from grimoire.checks.engine import CheckProgress, _running_checks
 
-        _running_checks.add("test-check")
+        _running_checks["test-check"] = CheckProgress()
         try:
             resp = await check_client.get("/api/checks/test-check/status")
             assert resp.status_code == 200
             assert resp.json()["running"] is True
         finally:
-            _running_checks.discard("test-check")
+            _running_checks.pop("test-check", None)
 
     async def test_status_not_found(self, check_client: AsyncClient) -> None:
         resp = await check_client.get("/api/checks/nonexistent/status")

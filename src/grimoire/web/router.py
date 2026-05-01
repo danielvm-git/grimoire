@@ -937,13 +937,19 @@ async def check_run_status_partial(
     ``HX-Trigger: checkRunCompleted`` header is sent so the page can
     auto-refresh results.
     """
-    from grimoire.checks.engine import is_check_running
+    from grimoire.checks.engine import get_check_progress, is_check_running
 
     running = is_check_running(slug)
+    progress = get_check_progress(slug)
     resp = templates.TemplateResponse(
         request,
         "partials/check_run_button.html",
-        context={"slug": slug, "running": running},
+        context={
+            "slug": slug,
+            "running": running,
+            "progress_completed": progress.completed if progress else 0,
+            "progress_total": progress.total if progress else 0,
+        },
     )
     if was_running and not running:
         resp.headers["HX-Trigger"] = "checkRunCompleted"
@@ -998,7 +1004,7 @@ async def check_run_trigger(
     return templates.TemplateResponse(
         request,
         "partials/check_run_button.html",
-        context={"slug": slug, "running": True},
+        context={"slug": slug, "running": True, "progress_completed": 0, "progress_total": 0},
     )
 
 

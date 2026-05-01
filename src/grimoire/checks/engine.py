@@ -6,6 +6,7 @@ import asyncio
 import os
 import shutil
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -27,13 +28,27 @@ OUTPUT_SIZE_CAP = 64 * 1024  # 64 KB
 _DEFAULT_TIMEOUT = 300  # 5 minutes
 _CONCURRENCY = 5
 
-# In-memory tracking of currently-running check slugs
-_running_checks: set[str] = set()
+
+@dataclass
+class CheckProgress:
+    """Tracks execution progress of a running check."""
+
+    completed: int = 0
+    total: int = 0
+
+
+# In-memory tracking of currently-running check slugs and their progress
+_running_checks: dict[str, CheckProgress] = {}
 
 
 def is_check_running(slug: str) -> bool:
     """Return True if the check is currently executing."""
     return slug in _running_checks
+
+
+def get_check_progress(slug: str) -> CheckProgress | None:
+    """Return the progress tracker for a running check, or None if idle."""
+    return _running_checks.get(slug)
 
 
 async def run_check(
@@ -154,28 +169,38 @@ async def run_check_for_all_targets(
     specific_repo: str | None = None,
 ) -> list[CheckResult]:
     """Resolve targets and run the check for every repo × branch combination."""
-    _running_checks.add(check.slug)
+    progress = CheckProgress()
+    _running_checks[check.slug] = progress
     try:
         targets = await resolve_targets(check.targets, repos, workspace)
 
         if specific_repo is not None:
             targets = [r for r in targets if r.full_name == specific_repo]
 
+        # Count total tasks before starting
+        task_list: list[tuple[TrackedRepository, str]] = []
+        for repo in targets:
+            branches = repo.branches or [repo.default_branch]
+            for branch in branches:
+                task_list.append((repo, branch))
+
+        progress.total = len(task_list)
+
         sem = asyncio.Semaphore(_CONCURRENCY)
 
         async def _run(repo: TrackedRepository, branch: str) -> CheckResult:
             async with sem:
-                return await run_check(check, repo, branch, workspace, engine)
+                result = await run_check(check, repo, branch, workspace, engine)
+                progress.completed += 1
+                return result
 
         tasks: list[asyncio.Task[CheckResult]] = []
-        for repo in targets:
-            branches = repo.branches or [repo.default_branch]
-            for branch in branches:
-                tasks.append(asyncio.create_task(_run(repo, branch)))
+        for repo, branch in task_list:
+            tasks.append(asyncio.create_task(_run(repo, branch)))
 
         if not tasks:
             return []
 
         return list(await asyncio.gather(*tasks))
     finally:
-        _running_checks.discard(check.slug)
+        _running_checks.pop(check.slug, None)
