@@ -69,12 +69,13 @@ Uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` for atomic upsert.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/history/global` | Aggregated time-series (SUM across all repos per day) |
+| `GET` | `/api/history/global` | Aggregated time-series (SUM across all or selected repos per day) |
 | `GET` | `/api/history/{repo}` | Time-series for a single repo |
 
 **Query parameters:**
 
 - `days` (int, default 30, range 1–365): How many days of history to return.
+- `repos` (list[str], optional, global endpoint only): Filter to specific repos. Repeated query param: `?repos=a/b&repos=c/d`. When omitted, aggregates all repos.
 
 **Response format:**
 
@@ -94,7 +95,7 @@ Uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` for atomic upsert.
 }
 ```
 
-**Global aggregation:** Groups by `snapshot_date`, sums numeric fields, merges age bucket JSON dicts.
+**Global aggregation:** Groups by `snapshot_date`, sums numeric fields, merges age bucket JSON dicts. Filtered by `repos` when provided.
 
 ## 8.6 — History Web Page
 
@@ -102,11 +103,20 @@ Uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` for atomic upsert.
 **Template:** `src/grimoire/web/templates/history.html`
 
 Layout:
-- **Time range selector:** Buttons for 7d, 30d (default), 90d
-- **Global overview:** 4 charts (issues, PRs, workflows, branches) — always visible
-- **Per-repo sections:** Collapsible DaisyUI accordions, one per tracked repo. Charts load lazily on expand via `fetch()`.
+- **Controls bar:** Time range buttons (7d, 30d default, 90d) + Tom Select multi-select repo dropdown (searchable, tag-based) + Reset button
+- **Issues & Pull Requests section:** Issues chart + PRs chart (side by side)
+- **Workflows & Branches section:** Workflows chart + Branches chart (side by side)
 
-**Chart library:** Chart.js 4.x (CDN). Line charts with dual series (e.g. Open + Stale), DaisyUI-compatible colors.
+**Behavior:**
+- No repos selected → fetches `/api/history/global?days=N` (all repos aggregated)
+- Repos selected → fetches `/api/history/global?days=N&repos=...` (filtered aggregate)
+- Time range or repo selection changes → re-fetch and re-render all 4 charts
+- Reset button → clears Tom Select, refetches global
+- Empty results → destroys charts, shows "no data" message
+- AbortController used to prevent race conditions from overlapping requests
+
+**Chart library:** Chart.js 4.x (CDN). Line charts with dual series (e.g. Open + Stale).
+**Dropdown library:** Tom Select 2.x (CDN). Styled to match DaisyUI theme.
 
 **Navigation:** "History" link added to navbar in `base.html` (between "Actions" and theme toggle).
 
@@ -132,9 +142,13 @@ With daily snapshots (one row per repo per day):
 - [ ] Each refresh cycle upserts one snapshot per repo for today
 - [ ] Old snapshots are deleted per `retention_days` config
 - [ ] `GET /api/history/global?days=30` returns aggregated series
+- [ ] `GET /api/history/global?days=30&repos=a/b&repos=c/d` returns filtered aggregate
 - [ ] `GET /api/history/{repo}?days=30` returns per-repo series
 - [ ] Stale series uses current `StalenessConfig` to pick age bucket
-- [ ] `/history` page renders Chart.js charts with global and per-repo sections
+- [ ] `/history` page has Tom Select multi-select dropdown with type-to-filter search
+- [ ] No repos selected = global aggregate; selected repos = filtered aggregate
+- [ ] Reset button clears selection and refetches global
+- [ ] Two chart sections: Issues & PRs, Workflows & Branches
 - [ ] Time range selector (7d/30d/90d) reloads charts
-- [ ] Per-repo charts load lazily on expand
-- [ ] Tests cover: snapshot recording, upsert dedup, retention, API endpoints, age bucket computation
+- [ ] AbortController prevents stale responses from overwriting current data
+- [ ] Tests cover: snapshot recording, upsert dedup, retention, API endpoints, repos filter, age bucket computation

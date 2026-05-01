@@ -100,21 +100,19 @@ def _build_series(
 @router.get("/global")
 async def history_global(
     days: int = Query(default=30, ge=1, le=365),
+    repos: list[str] | None = Query(default=None),
 ) -> dict:
-    """Aggregated time-series across all repos."""
+    """Aggregated time-series across all (or selected) repos."""
     if _engine is None:
         raise HTTPException(503, "History not available — engine not initialised")
 
     cutoff = date.today() - timedelta(days=days)
 
     async with AsyncSession(_engine) as session:
-        rows = (
-            await session.exec(
-                select(StatsSnapshot)
-                .where(col(StatsSnapshot.snapshot_date) >= cutoff)
-                .order_by(col(StatsSnapshot.snapshot_date))
-            )
-        ).all()
+        stmt = select(StatsSnapshot).where(col(StatsSnapshot.snapshot_date) >= cutoff)
+        if isinstance(repos, list) and len(repos) > 0:
+            stmt = stmt.where(col(StatsSnapshot.repo_full_name).in_(repos))
+        rows = (await session.exec(stmt.order_by(col(StatsSnapshot.snapshot_date)))).all()
 
     if not rows:
         return {"timestamps": [], "series": {}}

@@ -423,3 +423,94 @@ class TestHistoryAPI:
         # With days=30, both should be returned
         result = await history_repo("owner/repo", days=30)
         assert len(result["timestamps"]) == 2
+
+    async def test_global_repos_filter(self, engine: AsyncEngine) -> None:
+        """When repos param is provided, only those repos are aggregated."""
+        from grimoire.history.router import history_global
+
+        set_history_state(engine, StalenessConfig(issues_days=30))
+
+        today = date.today()
+        async with AsyncSession(engine) as session:
+            for repo, issues, prs in [("a/b", 10, 3), ("c/d", 5, 1), ("e/f", 8, 2)]:
+                session.add(
+                    StatsSnapshot(
+                        snapshot_date=today,
+                        timestamp=datetime.now(UTC),
+                        repo_full_name=repo,
+                        open_issues=issues,
+                        open_prs=prs,
+                        workflow_total=2,
+                        workflow_failures=0,
+                        total_branches=4,
+                        stale_branches=0,
+                        issues_by_age_json=json.dumps({"30": issues}),
+                        prs_by_age_json="{}",
+                        branches_by_age_json="{}",
+                    )
+                )
+            await session.commit()
+
+        # No filter → all repos
+        result = await history_global(days=30, repos=None)
+        assert result["series"]["open_issues"] == [23]  # 10 + 5 + 8
+
+        # Filter to one repo
+        result = await history_global(days=30, repos=["a/b"])
+        assert result["series"]["open_issues"] == [10]
+        assert result["series"]["open_prs"] == [3]
+
+        # Filter to two repos
+        result = await history_global(days=30, repos=["a/b", "c/d"])
+        assert result["series"]["open_issues"] == [15]  # 10 + 5
+        assert result["series"]["open_prs"] == [4]  # 3 + 1
+
+    async def test_global_repos_filter_unknown(self, engine: AsyncEngine) -> None:
+        """Unknown repo names return empty results."""
+        from grimoire.history.router import history_global
+
+        set_history_state(engine, StalenessConfig())
+
+        today = date.today()
+        async with AsyncSession(engine) as session:
+            session.add(
+                StatsSnapshot(
+                    snapshot_date=today,
+                    timestamp=datetime.now(UTC),
+                    repo_full_name="a/b",
+                    open_issues=10,
+                    issues_by_age_json="{}",
+                    prs_by_age_json="{}",
+                    branches_by_age_json="{}",
+                )
+            )
+            await session.commit()
+
+        result = await history_global(days=30, repos=["nonexistent/repo"])
+        assert result["timestamps"] == []
+        assert result["series"] == {}
+
+    async def test_global_repos_empty_list(self, engine: AsyncEngine) -> None:
+        """Empty repos list behaves like no filter (all repos)."""
+        from grimoire.history.router import history_global
+
+        set_history_state(engine, StalenessConfig())
+
+        today = date.today()
+        async with AsyncSession(engine) as session:
+            session.add(
+                StatsSnapshot(
+                    snapshot_date=today,
+                    timestamp=datetime.now(UTC),
+                    repo_full_name="a/b",
+                    open_issues=10,
+                    issues_by_age_json="{}",
+                    prs_by_age_json="{}",
+                    branches_by_age_json="{}",
+                )
+            )
+            await session.commit()
+
+        # Empty list should not filter
+        result = await history_global(days=30, repos=[])
+        assert result["series"]["open_issues"] == [10]

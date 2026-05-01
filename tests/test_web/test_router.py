@@ -546,6 +546,18 @@ class TestHistoryPage:
         resp = await web_client.get("/history")
         assert "chart.js" in resp.text.lower() or "Chart" in resp.text
 
+    async def test_history_has_tom_select(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/history")
+        assert "tom-select" in resp.text
+
+    async def test_history_has_repo_select(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/history")
+        assert 'id="repo-select"' in resp.text
+
+    async def test_history_has_reset_button(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/history")
+        assert 'id="reset-filter"' in resp.text
+
     async def test_history_nav_link(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/history")
         assert 'href="/history"' in resp.text
