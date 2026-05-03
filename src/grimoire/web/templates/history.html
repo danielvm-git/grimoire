@@ -139,7 +139,7 @@
                 x: { ticks: { maxTicksAutoSkip: true, maxRotation: 0, color: themeColors.text }, grid: { color: themeColors.grid } },
                 y: { beginAtZero: true, ticks: { color: themeColors.text }, grid: { color: themeColors.grid } },
             },
-            elements: { line: { tension: 0.3 }, point: { radius: 2 } },
+            elements: { line: { tension: 0.3, borderWidth: 2 }, point: { radius: 2, hoverRadius: 5, hitRadius: 8 } },
         };
     }
 
@@ -172,21 +172,21 @@
         const s = data.series;
 
         makeChart('chart-issues', 'Issues', ts, [
-            { label: 'Open', data: s.open_issues, borderColor: CHART_COLORS.primary, backgroundColor: CHART_COLORS.primary + '20', fill: true },
-            { label: 'Stale', data: s.stale_issues, borderColor: CHART_COLORS.warning, backgroundColor: CHART_COLORS.warning + '20', fill: true },
+            { label: 'Open', data: s.open_issues, borderColor: CHART_COLORS.primary },
+            { label: 'Stale', data: s.stale_issues, borderColor: CHART_COLORS.warning, borderDash: [5, 5] },
         ]);
         makeChart('chart-prs', 'Pull Requests', ts, [
-            { label: 'Open', data: s.open_prs, borderColor: CHART_COLORS.primary, backgroundColor: CHART_COLORS.primary + '20', fill: true },
-            { label: 'Stale', data: s.stale_prs, borderColor: CHART_COLORS.warning, backgroundColor: CHART_COLORS.warning + '20', fill: true },
+            { label: 'Open', data: s.open_prs, borderColor: CHART_COLORS.primary },
+            { label: 'Stale', data: s.stale_prs, borderColor: CHART_COLORS.warning, borderDash: [5, 5] },
         ]);
         makeChart('chart-workflows', 'Workflows', ts, [
-            { label: 'Total', data: s.workflow_total, borderColor: CHART_COLORS.muted, backgroundColor: CHART_COLORS.muted + '20', fill: true },
-            { label: 'Failures', data: s.workflow_failures, borderColor: CHART_COLORS.danger, backgroundColor: CHART_COLORS.danger + '20', fill: true },
+            { label: 'Total', data: s.workflow_total, borderColor: CHART_COLORS.muted },
+            { label: 'Failures', data: s.workflow_failures, borderColor: CHART_COLORS.danger, borderDash: [5, 5] },
         ]);
         makeChart('chart-checks', 'Checks', ts, [
-            { label: 'Total', data: s.check_total, borderColor: CHART_COLORS.muted, backgroundColor: CHART_COLORS.muted + '20', fill: true },
-            { label: 'Failures', data: s.check_failures, borderColor: CHART_COLORS.danger, backgroundColor: CHART_COLORS.danger + '20', fill: true },
-            { label: 'Warnings', data: s.check_warnings, borderColor: CHART_COLORS.warning, backgroundColor: CHART_COLORS.warning + '20', fill: true },
+            { label: 'Total', data: s.check_total, borderColor: CHART_COLORS.muted },
+            { label: 'Failures', data: s.check_failures, borderColor: CHART_COLORS.danger, borderDash: [5, 5] },
+            { label: 'Warnings', data: s.check_warnings, borderColor: CHART_COLORS.warning, borderDash: [5, 5] },
         ]);
     }
 
