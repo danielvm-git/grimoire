@@ -130,7 +130,8 @@ class TestActionsPage:
 
     async def test_actions_shows_result_counts(self, web_client_with_actions: AsyncClient) -> None:
         resp = await web_client_with_actions.get("/actions")
-        assert "✓ 2" in resp.text
+        assert "fa-check" in resp.text
+        assert " 2" in resp.text
 
     async def test_actions_has_results_button(self, web_client_with_actions: AsyncClient) -> None:
         resp = await web_client_with_actions.get("/actions")
@@ -432,9 +433,9 @@ class TestChecksPage:
 
     async def test_checks_shows_result_counts(self, web_client_with_checks: AsyncClient) -> None:
         resp = await web_client_with_checks.get("/checks")
-        # Watchdog has 1 pass + 1 fail from fixture data — shown as compact counts
-        assert "✓ 1" in resp.text
-        assert "✗ 1" in resp.text
+        # Watchdog has 1 pass + 1 fail from fixture data — shown as FA icons with counts
+        assert "fa-check" in resp.text
+        assert "fa-xmark" in resp.text
 
     async def test_checks_has_inline_results_button(
         self, web_client_with_checks: AsyncClient
