@@ -188,6 +188,7 @@ class CheckViewModel:
     severity: str = "error"
     pass_count: int = 0
     fail_count: int = 0
+    warn_count: int = 0
     last_run: datetime | str | None = None
 
 
@@ -651,6 +652,7 @@ async def checks_page(request: Request) -> HTMLResponse:
             target_summary = "script"
 
         stats = check_stats.get(c.slug, {})
+        raw_fail = stats.get("fail", 0)
         check_vms.append(
             CheckViewModel(
                 name=c.name,
@@ -662,7 +664,8 @@ async def checks_page(request: Request) -> HTMLResponse:
                 script=c.script,
                 severity=c.severity,
                 pass_count=stats.get("pass", 0),
-                fail_count=stats.get("fail", 0),
+                fail_count=raw_fail if c.severity == "error" else 0,
+                warn_count=raw_fail if c.severity == "warning" else 0,
                 last_run=stats.get("last_run"),
             )
         )

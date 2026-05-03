@@ -27,10 +27,10 @@
                         {% if action.pass_count or action.fail_count %}
                         <span class="opacity-40">·</span>
                         {% if action.pass_count %}
-                        <span class="text-success">✓ {{ action.pass_count }}</span>
+                        <span class="text-success"><i class="fa-solid fa-check"></i> {{ action.pass_count }}</span>
                         {% endif %}
                         {% if action.fail_count %}
-                        <span class="text-error">✗ {{ action.fail_count }}</span>
+                        <span class="text-error"><i class="fa-solid fa-xmark"></i> {{ action.fail_count }}</span>
                         {% endif %}
                         {% if action.last_run %}
                         <span class="opacity-40">· {{ time_ago(action.last_run) }}</span>
