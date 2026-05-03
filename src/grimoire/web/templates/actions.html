@@ -44,7 +44,7 @@
                 {# Right: schedule + run button #}
                 <div class="flex items-center gap-3 shrink-0">
                     <span class="text-xs opacity-40 whitespace-nowrap">
-                        <i class="fa-regular fa-clock"></i> {% if action.schedule %}{{ action.schedule }}{% else %}manual{% endif %}
+                        <i class="fa-regular fa-clock"></i> Scheduled: {% if action.schedule %}{{ action.schedule }}{% else %}manual{% endif %}
                     </span>
                     <div hx-get="/partials/action-run-status/{{ action.slug }}"
                          hx-trigger="load"

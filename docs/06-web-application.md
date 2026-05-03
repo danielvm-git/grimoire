@@ -254,7 +254,7 @@ One action per row in a vertical list. Each row contains:
 | **Description** | Below name | Small muted text |
 | **Target summary** | Below description, inline | Monospace, muted (e.g., `regex: .*`, `list: 3 repos`) |
 | **Result summary** | Inline after target | Green ✓ / red ✗ counts + last run time |
-| **Schedule** | Right-aligned | Small muted text: `⏱ cron` or `manual` |
+| **Schedule** | Right-aligned | Small muted text: `⏱ Scheduled: cron` or `⏱ Scheduled: manual` |
 | **Run button** | Far right | Primary button with play icon |
 
 **Expandable sections** below each row:
@@ -289,7 +289,7 @@ One check per row in a vertical list (similar to dashboard List view). Each row 
 | **Description** | Below name | Small muted text |
 | **Target summary** | Below description, inline | Monospace, muted (e.g., `regex: .*`, `list: 3 repos`) |
 | **Result summary** | Inline after target | Green ✓ / red ✗ counts + last run time |
-| **Schedule** | Right-aligned | Small muted text: `⏱ cron` or `⏱ default` |
+| **Schedule** | Right-aligned | Small muted text: `⏱ Scheduled: cron` or `⏱ Scheduled: default` |
 | **Enabled toggle** | Right side | Swap toggle (● / ○) |
 | **Run button** | Far right | Primary button with play icon |
 
