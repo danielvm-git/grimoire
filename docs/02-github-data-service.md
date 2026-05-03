@@ -73,7 +73,7 @@ The GitHub REST API has a rate limit of 5,000 requests/hour for authenticated us
 
 **File:** `src/grimoire/github/service.py`
 
-High-level service that resolves the configured repo sources into a list of `TrackedRepository` objects and fetches their stats.
+High-level service that resolves the configured repo sources into a list of `TrackedRepository` objects and fetches their stats. Backlog weighting is not stored on the repository model; it is resolved later from `backlog.repository_weights` when scoring backlog items.
 
 ### Functions
 
@@ -144,6 +144,8 @@ All fetched data is persisted to the SQLite database as the **persistent cache**
 | `cached_pull_request` | repo_full_name, title, number, url, author, created_at, last_push_at, last_comment_at, fetched_at |
 | `cached_workflow_status` | repo_full_name, workflow_name, branch, status, url, run_url, fetched_at |
 | `cached_etag` | endpoint_url, etag, last_modified |
+
+Per-repo backlog weights are not persisted in this layer; the backlog engine resolves them from config when scoring items.
 
 ### Historical snapshots
 

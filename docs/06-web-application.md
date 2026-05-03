@@ -319,16 +319,17 @@ The backlog page flattens every problem across all repos into a single prioritiz
 
 **`BacklogCategory`** — enum of item types: `FAILING_WORKFLOW`, `FAILING_CHECK_ERROR`, `FAILING_CHECK_WARNING`, `STALE_PR`, `STALE_ISSUE`, `STALE_BRANCHES`.
 
-**`BacklogItem`** — dataclass with: `category`, `repo_full_name`, `description`, `url`, `age_days` (optional), `score` (computed), `repo_priority`, `workflow_multiplier`.
+**`BacklogItem`** — dataclass with: `category`, `repo_full_name`, `description`, `url`, `age_days` (optional), `score` (computed), `repo_weight`, `workflow_multiplier`.
 
 ### Priority Scoring
 
-Each item gets a priority score: `score = category_weight × repo_multiplier × workflow_multiplier × age_factor`.
+Each item gets a priority score: `score = category_weight × repo_weight × workflow_multiplier × age_factor`.
 
 - **`category_weight`** — base weight from `backlog.category_weights` config.
-- **`repo_multiplier`** — per-repo `priority` field (default 1.0). Set to 0.0 to hide a repo from the backlog.
+- **`repo_weight`** — resolved by `resolve_repo_weight(repo_full_name, config)` against `backlog.repository_weights`. Rules are evaluated top-to-bottom, the last match wins, and the default is `1.0` if nothing matches. Set a matching rule to `0.0` to hide a repo from the backlog.
 - **`workflow_multiplier`** — per-workflow-name weight from `backlog.workflow_weights` (glob patterns, default 1.0). Only applies to workflow/check items.
 - **`age_factor`** — automatic boost for older problems. Stale items use excess age over threshold: `1.0 + log2(1 + max(0, age_days - threshold))`. Workflows/checks use flat factor (1.0) since failure start time is not tracked. Stale branches use count multiplier: `1 + log2(count)`.
+- **`compute_score(category, repo_weight, age_days, reference_days, config, workflow_name="")`** — scoring helper that accepts the resolved repository weight instead of reading per-repo metadata.
 
 **Priority tiers:** score ≥80 = Critical (red), ≥50 = High (orange), ≥20 = Medium (yellow), <20 = Low (gray).
 

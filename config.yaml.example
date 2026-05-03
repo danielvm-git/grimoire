@@ -58,6 +58,14 @@ refresh_schedule: "*/5 * * * *"
 #   workflow_weights:           # per-workflow-name multiplier (glob patterns)
 #     "Release *": 2.0
 #     "Lint": 0.5
+#   repository_weights:        # per-repo weight multiplier (last match wins)
+#     - regex: "*"             # catch-all baseline
+#       weight: 1.0
+#     - regex: "*-operator"    # fnmatch glob on full_name
+#       weight: 3.0
+#     - repos:                 # explicit list
+#         - "org/critical-repo"
+#       weight: 5.0
 
 # Paths
 data_dir: "./data"           # Contains checks/ and actions/ subdirectories

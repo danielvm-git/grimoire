@@ -84,7 +84,6 @@ class StaticRepoSource(BaseModel):
     repo: str
     branches: list[str] = Field(default_factory=list)
     workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
-    priority: float = 1.0
 
 
 class TeamRepoSource(BaseModel):
@@ -93,7 +92,6 @@ class TeamRepoSource(BaseModel):
     team: str
     exclude: list[str] = Field(default_factory=list)
     workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
-    priority: float = 1.0
 
 
 RepoSource = Annotated[Union[StaticRepoSource, TeamRepoSource], Field(discriminator=None)]
@@ -129,11 +127,31 @@ class BacklogCategoryWeights(BaseModel):
     stale_branches: float = 10.0
 
 
+class RepositoryWeightRule(BaseModel):
+    """A rule mapping repositories to a backlog weight multiplier.
+
+    Exactly one of ``regex`` or ``repos`` must be set.
+    - ``regex``: fnmatch glob pattern matched against the full_name.
+    - ``repos``: explicit list of full_name strings.
+    """
+
+    regex: str | None = None
+    repos: list[str] | None = None
+    weight: float = 1.0
+
+    @model_validator(mode="after")
+    def exactly_one_selector(self) -> Self:
+        if (self.regex is None) == (self.repos is None):
+            raise ValueError("Exactly one of 'regex' or 'repos' must be set")
+        return self
+
+
 class BacklogConfig(BaseModel):
     """Configuration for the Backlog (prioritised problem list) page."""
 
     category_weights: BacklogCategoryWeights = Field(default_factory=BacklogCategoryWeights)
     workflow_weights: dict[str, float] = Field(default_factory=dict)
+    repository_weights: list[RepositoryWeightRule] = Field(default_factory=list)
 
 
 class GrimoireConfig(BaseModel):
