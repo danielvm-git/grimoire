@@ -462,39 +462,44 @@ async def refresh_all_stats(
     """Resolve repos, fetch stats concurrently, persist to DB, return results."""
     global _refresh_progress  # noqa: PLW0603
 
-    # Load previous data so 304 (Not Modified) responses preserve old values
-    cached_repos, old_stats_list = await load_stats_from_db(client._engine)
-    old_stats_map = {s.full_name: s for s in old_stats_list}
-
-    repos = await resolve_repositories(config, client)
-
-    # When the GitHub API returns 304 for repo resolution (ETag cache hit),
-    # resolve_repositories returns an empty list because the paginated response
-    # is None.  Fall back to the DB-cached repo list so we don't lose data.
-    if not repos and cached_repos:
-        logger.info(
-            "Repo resolution returned no results (likely 304 cache hit), reusing %d cached repos",
-            len(cached_repos),
-        )
-        repos = cached_repos
-
-    progress = RefreshProgress(completed=0, total=len(repos))
+    # Mark refresh as running immediately (before async work begins) so that
+    # polling endpoints see it as in-progress right away.  The total will be
+    # updated once we know how many repos there are.
+    progress = RefreshProgress(completed=0, total=0)
     _refresh_progress = progress
 
-    sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
-
-    async def _fetch(repo: TrackedRepository) -> RepositoryStats:
-        async with sem:
-            result = await fetch_repository_stats(
-                repo,
-                client,
-                config.staleness,
-                previous=old_stats_map.get(repo.full_name),
-            )
-            progress.completed += 1
-            return result
-
     try:
+        # Load previous data so 304 (Not Modified) responses preserve old values
+        cached_repos, old_stats_list = await load_stats_from_db(client._engine)
+        old_stats_map = {s.full_name: s for s in old_stats_list}
+
+        repos = await resolve_repositories(config, client)
+
+        # When the GitHub API returns 304 for repo resolution (ETag cache hit),
+        # resolve_repositories returns an empty list because the paginated response
+        # is None.  Fall back to the DB-cached repo list so we don't lose data.
+        if not repos and cached_repos:
+            logger.info(
+                "Repo resolution returned no results (likely 304 cache hit), reusing %d cached repos",
+                len(cached_repos),
+            )
+            repos = cached_repos
+
+        progress.total = len(repos)
+
+        sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
+
+        async def _fetch(repo: TrackedRepository) -> RepositoryStats:
+            async with sem:
+                result = await fetch_repository_stats(
+                    repo,
+                    client,
+                    config.staleness,
+                    previous=old_stats_map.get(repo.full_name),
+                )
+                progress.completed += 1
+                return result
+
         stats = await asyncio.gather(*[_fetch(r) for r in repos])
         stats_list = list(stats)
 

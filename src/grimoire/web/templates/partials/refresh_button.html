@@ -19,7 +19,7 @@
             hx-post="/partials/refresh-trigger"
             hx-target="#refresh-btn"
             hx-swap="outerHTML"
-            hx-on::after-request="if(!event.detail.successful) { showToast('Refresh failed', 'error'); }">
+            hx-on::after-request="if(event.detail.successful) { showToast('Refresh started', 'success'); } else { showToast('Refresh failed', 'error'); }">
         <span class="btn-label">↻ Refresh</span>
         <span class="htmx-indicator loading loading-spinner loading-xs"></span>
     </button>
