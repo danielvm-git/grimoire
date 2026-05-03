@@ -73,7 +73,7 @@ def _build_series(
     snapshots: list[StatsSnapshot],
 ) -> dict[str, list[int]]:
     """Build all time-series from a list of snapshots (already ordered by date)."""
-    return {
+    series: dict[str, list[int]] = {
         "open_issues": [s.open_issues for s in snapshots],
         "stale_issues": [s.stale_issues for s in snapshots],
         "open_prs": [s.open_prs for s in snapshots],
@@ -86,6 +86,17 @@ def _build_series(
         "total_branches": [s.total_branches for s in snapshots],
         "stale_branches": [s.stale_branches for s in snapshots],
     }
+    # Derived: backlog is the sum of all "problem" counts
+    series["backlog_total"] = [
+        s.workflow_failures
+        + s.stale_prs
+        + s.stale_issues
+        + s.stale_branches
+        + s.check_failures
+        + s.check_warnings
+        for s in snapshots
+    ]
+    return series
 
 
 # ---------------------------------------------------------------------------

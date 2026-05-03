@@ -89,11 +89,17 @@ Uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` for atomic upsert.
     "stale_prs": [3, 2, ...],
     "workflow_total": [50, 50, ...],
     "workflow_failures": [2, 1, ...],
+    "check_total": [10, 10, ...],
+    "check_failures": [1, 0, ...],
+    "check_warnings": [2, 1, ...],
     "total_branches": [80, 82, ...],
-    "stale_branches": [5, 4, ...]
+    "stale_branches": [5, 4, ...],
+    "backlog_total": [18, 14, ...]
   }
 }
 ```
+
+`backlog_total` is a derived series computed at query time: `workflow_failures + stale_prs + stale_issues + stale_branches + check_failures + check_warnings`. It is not stored in the database.
 
 **Global aggregation:** Groups by `snapshot_date`, sums numeric fields, merges age bucket JSON dicts. Filtered by `repos` when provided.
 
@@ -104,13 +110,14 @@ Uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` for atomic upsert.
 
 Layout:
 - **Controls bar:** Time range buttons (7d, 30d default, 90d) + Tom Select multi-select repo dropdown (searchable, tag-based) + Reset button
+- **Backlog section:** Single chart showing total backlog size over time, with dashed breakdown lines for each category (failing workflows, stale PRs, stale issues, stale branches, check failures, check warnings)
 - **Issues & Pull Requests section:** Issues chart + PRs chart (side by side)
-- **Workflows & Branches section:** Workflows chart + Branches chart (side by side)
+- **Workflows & Checks section:** Workflows chart + Checks chart (side by side)
 
 **Behavior:**
 - No repos selected → fetches `/api/history/global?days=N` (all repos aggregated)
 - Repos selected → fetches `/api/history/global?days=N&repos=...` (filtered aggregate)
-- Time range or repo selection changes → re-fetch and re-render all 4 charts
+- Time range or repo selection changes → re-fetch and re-render all 5 charts
 - Reset button → clears Tom Select, refetches global
 - Empty results → destroys charts, shows "no data" message
 - AbortController used to prevent race conditions from overlapping requests
