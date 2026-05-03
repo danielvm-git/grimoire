@@ -20,6 +20,7 @@ from grimoire.github.service import (
 from grimoire.history.router import (
     _build_series,
     _extract_stale_series,
+    _fill_date_gaps,
     _pick_bucket,
     set_history_state,
 )
@@ -321,6 +322,28 @@ class TestBuildSeries:
         assert series["backlog_total"] == [2 + 3 + 1 + 4 + 5 + 1]
 
 
+class TestFillDateGaps:
+    """Tests for the _fill_date_gaps helper."""
+
+    def test_fills_missing_dates_with_none(self) -> None:
+        start = date(2026, 1, 1)
+        end = date(2026, 1, 5)
+        timestamps = [date(2026, 1, 2), date(2026, 1, 4)]
+        series = {"val": [10, 20]}
+        filled_ts, filled_series = _fill_date_gaps(timestamps, series, start, end)
+        assert filled_ts == ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05"]
+        assert filled_series["val"] == [None, 10, None, 20, None]
+
+    def test_no_gaps(self) -> None:
+        start = date(2026, 1, 1)
+        end = date(2026, 1, 3)
+        timestamps = [date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3)]
+        series = {"val": [1, 2, 3]}
+        filled_ts, filled_series = _fill_date_gaps(timestamps, series, start, end)
+        assert filled_series["val"] == [1, 2, 3]
+        assert len(filled_ts) == 3
+
+
 # ---------------------------------------------------------------------------
 # History API endpoints
 # ---------------------------------------------------------------------------
@@ -382,13 +405,17 @@ class TestHistoryAPI:
             await session.commit()
 
         result = await history_global(days=30)
-        assert len(result["timestamps"]) == 1
-        assert result["series"]["open_issues"] == [15]  # 10 + 5
-        assert result["series"]["stale_issues"] == [6]  # 4 + 2
-        assert result["series"]["open_prs"] == [4]  # 3 + 1
-        assert result["series"]["stale_prs"] == [1]  # 1 + 0
-        assert result["series"]["workflow_total"] == [6]  # 4 + 2
-        assert result["series"]["workflow_failures"] == [1]
+        # Full range: 31 timestamps (today - 30d through today)
+        assert len(result["timestamps"]) == 31
+        # Data is only for today (last entry)
+        assert result["series"]["open_issues"][-1] == 15  # 10 + 5
+        assert result["series"]["stale_issues"][-1] == 6  # 4 + 2
+        assert result["series"]["open_prs"][-1] == 4  # 3 + 1
+        assert result["series"]["stale_prs"][-1] == 1  # 1 + 0
+        assert result["series"]["workflow_total"][-1] == 6  # 4 + 2
+        assert result["series"]["workflow_failures"][-1] == 1
+        # Earlier dates should be None (no data)
+        assert result["series"]["open_issues"][0] is None
 
     async def test_repo_endpoint(self, engine: AsyncEngine) -> None:
         from grimoire.history.router import history_repo
@@ -413,8 +440,10 @@ class TestHistoryAPI:
             await session.commit()
 
         result = await history_repo("owner/repo", days=30)
-        assert len(result["timestamps"]) == 2
-        assert result["series"]["open_issues"] == [8, 10]
+        # Full range covers 31 days; data on yesterday and today
+        assert len(result["timestamps"]) == 31
+        non_null = [v for v in result["series"]["open_issues"] if v is not None]
+        assert non_null == [8, 10]
 
     async def test_repo_not_found(self, engine: AsyncEngine) -> None:
         from grimoire.history.router import history_repo
@@ -444,13 +473,17 @@ class TestHistoryAPI:
                 )
             await session.commit()
 
-        # With days=7, only today should be returned
+        # With days=7, full range is 8 days; only today has data
         result = await history_repo("owner/repo", days=7)
-        assert len(result["timestamps"]) == 1
+        assert len(result["timestamps"]) == 8
+        non_null = [v for v in result["series"]["open_issues"] if v is not None]
+        assert non_null == [5]
 
-        # With days=30, both should be returned
+        # With days=30, full range is 31 days; both data points present
         result = await history_repo("owner/repo", days=30)
-        assert len(result["timestamps"]) == 2
+        assert len(result["timestamps"]) == 31
+        non_null = [v for v in result["series"]["open_issues"] if v is not None]
+        assert non_null == [5, 5]
 
     async def test_global_repos_filter(self, engine: AsyncEngine) -> None:
         """When repos param is provided, only those repos are aggregated."""
@@ -481,17 +514,17 @@ class TestHistoryAPI:
 
         # No filter → all repos
         result = await history_global(days=30, repos=None)
-        assert result["series"]["open_issues"] == [23]  # 10 + 5 + 8
+        assert result["series"]["open_issues"][-1] == 23  # 10 + 5 + 8
 
         # Filter to one repo
         result = await history_global(days=30, repos=["a/b"])
-        assert result["series"]["open_issues"] == [10]
-        assert result["series"]["open_prs"] == [3]
+        assert result["series"]["open_issues"][-1] == 10
+        assert result["series"]["open_prs"][-1] == 3
 
         # Filter to two repos
         result = await history_global(days=30, repos=["a/b", "c/d"])
-        assert result["series"]["open_issues"] == [15]  # 10 + 5
-        assert result["series"]["open_prs"] == [4]  # 3 + 1
+        assert result["series"]["open_issues"][-1] == 15  # 10 + 5
+        assert result["series"]["open_prs"][-1] == 4  # 3 + 1
 
     async def test_global_repos_filter_unknown(self, engine: AsyncEngine) -> None:
         """Unknown repo names return empty results."""
@@ -541,4 +574,4 @@ class TestHistoryAPI:
 
         # Empty list should not filter
         result = await history_global(days=30, repos=[])
-        assert result["series"]["open_issues"] == [10]
+        assert result["series"]["open_issues"][-1] == 10

@@ -99,6 +99,32 @@ def _build_series(
     return series
 
 
+def _fill_date_gaps(
+    timestamps: list[date],
+    series: dict[str, list[int]],
+    start_date: date,
+    end_date: date,
+) -> tuple[list[str], dict[str, list[int | None]]]:
+    """Expand timestamps to cover the full date range, inserting None for missing days."""
+    data_by_date: dict[date, int] = {d: i for i, d in enumerate(timestamps)}
+
+    all_dates: list[date] = []
+    current = start_date
+    while current <= end_date:
+        all_dates.append(current)
+        current += timedelta(days=1)
+
+    filled_series: dict[str, list[int | None]] = {}
+    for key, values in series.items():
+        filled: list[int | None] = []
+        for d in all_dates:
+            idx = data_by_date.get(d)
+            filled.append(values[idx] if idx is not None else None)
+        filled_series[key] = filled
+
+    return [d.isoformat() for d in all_dates], filled_series
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -172,8 +198,8 @@ async def history_global(
         )
 
     series = _build_series(agg_snapshots)
-    timestamps = [d.isoformat() for d in dates_sorted]
-    return {"timestamps": timestamps, "series": series}
+    timestamps, filled_series = _fill_date_gaps(dates_sorted, series, cutoff, date.today())
+    return {"timestamps": timestamps, "series": filled_series}
 
 
 @router.get("/{repo:path}")
@@ -200,6 +226,7 @@ async def history_repo(
     if not rows:
         return {"timestamps": [], "series": {}}
 
+    snapshot_dates = [s.snapshot_date for s in rows]
     series = _build_series(list(rows))
-    timestamps = [s.snapshot_date.isoformat() for s in rows]
-    return {"timestamps": timestamps, "series": series}
+    timestamps, filled_series = _fill_date_gaps(snapshot_dates, series, cutoff, date.today())
+    return {"timestamps": timestamps, "series": filled_series}
