@@ -1,5 +1,6 @@
 name: "Watchdog"
 description: "Always-green sentinel check — verifies that checks are running and visible in the UI"
+schedule: "0 */8 * * *"
 targets:
   regex: ".*"
 script: "exit 0"

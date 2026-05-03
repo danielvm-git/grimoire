@@ -1,5 +1,6 @@
 name: "Lockfile up-to-date"
 description: "Checks whether running uv lock would produce any changes to uv.lock files"
+schedule: "0 */8 * * *"
 targets:
   script: "find . -name 'uv.lock' -print -quit | grep -q ."
 severity: warning
