@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -50,7 +51,7 @@ from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import DATA_REFRESH_DURATION, update_repo_metrics
 from grimoire.observability.metrics import router as metrics_router
 from grimoire.web.router import router as web_router
-from grimoire.web.router import set_backlog_config, set_staleness_config
+from grimoire.web.router import set_backlog_config, set_refresh_schedule, set_staleness_config
 from grimoire.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
@@ -88,6 +89,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Expose backlog config to web layer
     set_backlog_config(config.backlog, config_file_path)
 
+    # Expose refresh schedule to web layer
+    set_refresh_schedule(config.refresh_schedule)
+
     # Expose engine + staleness to history layer
     set_history_state(engine, config.staleness)
 
@@ -109,7 +113,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             )
             if oldest:
                 age_minutes = (datetime.now(tz=timezone.utc) - oldest).total_seconds() / 60
-                cache_is_fresh = age_minutes < config.refresh_interval_minutes
+                # Compute expected interval from the cron schedule
+                trigger = CronTrigger.from_crontab(config.refresh_schedule)
+                now = datetime.now(tz=timezone.utc)
+                next1 = trigger.get_next_fire_time(None, now)
+                next2 = trigger.get_next_fire_time(next1, next1) if next1 else None
+                interval_minutes = (next2 - next1).total_seconds() / 60 if next1 and next2 else 5
+                cache_is_fresh = age_minutes < interval_minutes
                 logger.info(
                     "DB cache: %d repos, oldest data %.1f min ago (%s)",
                     len(cached_repos),
@@ -185,10 +195,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     scheduler = AsyncIOScheduler()
 
     # Periodic data refresh
+    refresh_trigger = CronTrigger.from_crontab(config.refresh_schedule)
     scheduler.add_job(
         _do_refresh,
-        trigger="interval",
-        minutes=config.refresh_interval_minutes,
+        trigger=refresh_trigger,
         id="data-refresh",
         replace_existing=True,
     )
@@ -197,7 +207,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     register_actions(scheduler, actions, repos, workspace, engine)
 
     scheduler.start()
-    logger.info("Scheduler started (refresh every %d min)", config.refresh_interval_minutes)
+    logger.info("Scheduler started (refresh schedule: %s)", config.refresh_schedule)
 
     yield
 

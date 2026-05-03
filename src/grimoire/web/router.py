@@ -53,6 +53,16 @@ def set_backlog_config(config: BacklogConfig, config_path: Path | None = None) -
     _config_path = config_path
 
 
+# Module-level refresh schedule — set from app lifespan
+_refresh_schedule: str = "*/5 * * * *"
+
+
+def set_refresh_schedule(schedule: str) -> None:
+    """Register the refresh cron schedule from the app config."""
+    global _refresh_schedule  # noqa: PLW0603
+    _refresh_schedule = schedule
+
+
 # ---------------------------------------------------------------------------
 # View-model dataclass for template rendering
 # ---------------------------------------------------------------------------
@@ -478,6 +488,7 @@ async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> H
             "running": refresh_running,
             "progress_completed": refresh_progress.completed if refresh_progress else 0,
             "progress_total": refresh_progress.total if refresh_progress else 0,
+            "refresh_schedule": _refresh_schedule,
         },
     )
 

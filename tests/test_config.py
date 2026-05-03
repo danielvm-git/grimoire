@@ -58,7 +58,7 @@ class TestLoadConfig:
         assert len(config.repositories) == 2
         assert config.staleness.pull_requests_days == 14
         assert config.staleness.issues_days == 180
-        assert config.refresh_interval_minutes == 10
+        assert config.refresh_schedule == "*/10 * * * *"
 
     def test_static_repo_with_branches(self, tmp_config: Path) -> None:
         config = load_config(tmp_config)
@@ -191,7 +191,7 @@ class TestLoadConfig:
         assert config.staleness.branches_days == 90
         assert config.staleness.problematic_stale_issues_pct == 20
         assert config.staleness.problematic_stale_prs_pct == 20
-        assert config.refresh_interval_minutes == 5
+        assert config.refresh_schedule == "*/5 * * * *"
         assert config.data_dir == Path("./data")
 
     def test_staleness_thresholds_parsed(self, tmp_path: Path) -> None:

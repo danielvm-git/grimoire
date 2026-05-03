@@ -171,7 +171,7 @@ See Module 7 (`docker-entrypoint.sh`) for implementation details.
 
 - On startup, load all checks and register enabled ones with APScheduler.
 - If `schedule` is set, use a `CronTrigger` parsed from the cron expression.
-- If `schedule` is not set, use an `IntervalTrigger` matching `refresh_interval_minutes`.
+- If `schedule` is not set, the check runs after each data refresh (driven by `refresh_schedule`).
 - Toggling a check on/off adds/removes it from the scheduler and updates `CheckToggleRecord` in the DB.
 - Toggle state persists across restarts (read from DB on startup).
 

@@ -20,7 +20,7 @@ class HealthResponse(BaseModel):
 # Returns 200 for "ok", 200 for "degraded" (with details), 503 if unresponsive
 ```
 
-The endpoint is `"degraded"` when: rate limit is low (< 10%), cached data is older than `2 × refresh_interval_minutes`, or the last refresh failed.
+The endpoint is `"degraded"` when: rate limit is low (< 10%), cached data is older than two cron intervals (computed from `refresh_schedule`), or the last refresh failed.
 
 ## 7.2 — Prometheus Metrics
 

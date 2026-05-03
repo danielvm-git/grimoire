@@ -165,6 +165,8 @@ The refresh button uses a polling partial pattern (consistent with checks and ac
 - **Idle:** Shows "↻ Refresh" button. Clicking posts to `POST /partials/refresh-trigger` which starts the refresh as a background task and returns the running-state partial.
 - **Running:** Shows a "Refreshing… N/M" counter with a spinner. Polls `GET /partials/refresh-status?was_running=1` every 2 seconds. When the refresh completes, the endpoint sends an `HX-Trigger: refreshCompleted` header, which the dashboard listens for to auto-reload the repo grid (no full page reload).
 
+Next to the refresh button, the configured cron schedule is displayed as muted text: `⏱ Scheduled: */30 * * * *`, matching the style used on checks and actions pages.
+
 ```html
 {# Idle state #}
 <button hx-post="/partials/refresh-trigger"

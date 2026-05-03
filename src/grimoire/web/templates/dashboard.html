@@ -12,6 +12,9 @@
         {% endif %}
     </div>
     {% include "partials/refresh_button.html" %}
+    <span class="text-xs opacity-40 whitespace-nowrap">
+        <i class="fa-regular fa-clock"></i> Scheduled: {{ refresh_schedule }}
+    </span>
 </div>
 
 {# ── Warnings ──────────────────────────────────────────────────────── #}

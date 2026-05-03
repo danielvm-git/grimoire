@@ -131,9 +131,9 @@ All fetched data is persisted to the SQLite database as the **persistent cache**
 
 - On startup, load the latest cached data from the DB immediately — the dashboard is functional right away without any GitHub API calls.
 - Keep an in-memory copy (loaded from DB) for fast reads by the web layer. The web layer never calls the GitHub API directly.
-- The scheduler refreshes data every `refresh_interval_minutes`: fetches from GitHub API, writes to DB, updates in-memory cache.
+- The scheduler refreshes data on a cron schedule (`refresh_schedule`): fetches from GitHub API, writes to DB, updates in-memory cache.
 - Each cached record stores a `fetched_at` timestamp. The dashboard shows "last updated: X minutes ago" so the user knows data freshness.
-- A restart only triggers an API refresh if the cache is older than `refresh_interval_minutes`.
+- A restart only triggers an API refresh if the cache is older than one cron interval (computed from `refresh_schedule`).
 
 ### DB tables for cached data
 
