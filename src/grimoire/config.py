@@ -147,7 +147,7 @@ class GrimoireConfig(BaseModel):
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)
     history: HistoryConfig = Field(default_factory=HistoryConfig)
     backlog: BacklogConfig = Field(default_factory=BacklogConfig)
-    refresh_interval_minutes: int = 5
+    refresh_schedule: str = "*/5 * * * *"
 
     data_dir: Path = Path("./data")
     workspace_dir: Path = Path("./workspace")

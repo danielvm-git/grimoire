@@ -43,8 +43,8 @@ staleness:
   problematic_stale_issues_pct: 20
   problematic_stale_prs_pct: 20
 
-# Data refresh interval (also default check frequency)
-refresh_interval_minutes: 5
+# Data refresh schedule (cron expression; also default check frequency)
+refresh_schedule: "*/5 * * * *"
 
 # Backlog (prioritised problem list)
 # backlog:

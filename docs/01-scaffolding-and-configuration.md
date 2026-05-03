@@ -101,7 +101,7 @@ staleness:
 history:
   retention_days: 90       # default: 90 — keep daily snapshots for this many days
 
-refresh_interval_minutes: 5  # default: 5
+refresh_schedule: "*/5 * * * *"  # default: "*/5 * * * *" — cron expression for data refresh
 
 data_dir: "./data"           # checks/ and actions/ subdirectories
 workspace_dir: "./workspace" # cloned repos live here

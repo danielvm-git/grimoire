@@ -155,7 +155,7 @@ history:
   retention_days: 90       # Keep daily snapshots for this many days (default: 90)
 
 # Data refresh interval (also default check/action frequency)
-refresh_interval_minutes: 5
+refresh_schedule: "*/5 * * * *"
 
 # Paths
 data_dir: "./data"           # Contains checks/ and actions/ subdirectories

@@ -30,7 +30,7 @@ def tmp_config(tmp_path: Path) -> Path:
           pull_requests_days: 14
           issues_days: 180
 
-        refresh_interval_minutes: 10
+        refresh_schedule: "*/10 * * * *"
         data_dir: "{data_dir}"
         workspace_dir: "{workspace_dir}"
         database_path: "{db_path}"
