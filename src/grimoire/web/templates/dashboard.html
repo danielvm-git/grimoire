@@ -11,10 +11,12 @@
         <p class="text-sm opacity-60 mt-1">Last updated {{ last_refresh_ago }}</p>
         {% endif %}
     </div>
-    {% include "partials/refresh_button.html" %}
-    <span class="text-xs opacity-40 whitespace-nowrap">
-        <i class="fa-regular fa-clock"></i> Scheduled: {{ refresh_schedule }}
-    </span>
+    <div class="flex items-center gap-3">
+        {% include "partials/refresh_button.html" %}
+        <span class="text-xs opacity-40 whitespace-nowrap">
+            <i class="fa-regular fa-clock"></i> Scheduled: {{ refresh_schedule }}
+        </span>
+    </div>
 </div>
 
 {# ── Warnings ──────────────────────────────────────────────────────── #}
