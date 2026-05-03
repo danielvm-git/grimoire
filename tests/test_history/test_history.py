@@ -296,6 +296,7 @@ class TestBuildSeries:
         assert "workflow_failures" in series
         assert "total_branches" in series
         assert "stale_branches" in series
+        assert "backlog_total" in series
         assert len(series["open_issues"]) == 2
 
     def test_build_series_uses_direct_stale_counts(self) -> None:
@@ -307,6 +308,17 @@ class TestBuildSeries:
         assert series["stale_issues"] == [7]
         assert series["stale_prs"] == [3]
         assert series["stale_branches"] == [2]
+
+    def test_build_series_backlog_total(self) -> None:
+        snap = _snapshot()
+        snap.workflow_failures = 2
+        snap.stale_prs = 3
+        snap.stale_issues = 1
+        snap.stale_branches = 4
+        snap.check_failures = 5
+        snap.check_warnings = 1
+        series = _build_series([snap])
+        assert series["backlog_total"] == [2 + 3 + 1 + 4 + 5 + 1]
 
 
 # ---------------------------------------------------------------------------
