@@ -35,17 +35,8 @@
     Snapshots are recorded during scheduled refreshes.
 </div>
 
-{# ── Backlog section ───────────────────────────────────────────────── #}
+{# ── Issues & Pull Requests section ──────────────────────────────────── #}
 <div id="charts-container">
-    <div class="bg-base-100 rounded-lg shadow-sm p-5 mb-6">
-        <h2 class="text-xl font-semibold mb-4">Backlog</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div><canvas id="chart-backlog" height="200"></canvas></div>
-            <div class="hidden md:block"></div> {# spacer for grid alignment #}
-        </div>
-    </div>
-
-    {# ── Issues & Pull Requests section ──────────────────────────────────── #}
     <div class="bg-base-100 rounded-lg shadow-sm p-5 mb-6">
         <h2 class="text-xl font-semibold mb-4">Issues & Pull Requests</h2>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -180,15 +171,6 @@
         });
         const s = data.series;
 
-        makeChart('chart-backlog', 'Backlog Size', ts, [
-            { label: 'Total items', data: s.backlog_total, borderColor: CHART_COLORS.primary },
-            { label: 'Failing workflows', data: s.workflow_failures, borderColor: CHART_COLORS.danger, borderDash: [5, 5] },
-            { label: 'Stale PRs', data: s.stale_prs, borderColor: CHART_COLORS.warning, borderDash: [5, 5] },
-            { label: 'Stale issues', data: s.stale_issues, borderColor: CHART_COLORS.muted, borderDash: [5, 5] },
-            { label: 'Stale branches', data: s.stale_branches, borderColor: CHART_COLORS.success, borderDash: [5, 5] },
-            { label: 'Check failures', data: s.check_failures, borderColor: 'rgb(220, 38, 38)', borderDash: [3, 3] },
-            { label: 'Check warnings', data: s.check_warnings, borderColor: 'rgb(251, 191, 36)', borderDash: [3, 3] },
-        ]);
         makeChart('chart-issues', 'Issues', ts, [
             { label: 'Open', data: s.open_issues, borderColor: CHART_COLORS.primary },
             { label: 'Stale', data: s.stale_issues, borderColor: CHART_COLORS.warning, borderDash: [5, 5] },
@@ -198,13 +180,13 @@
             { label: 'Stale', data: s.stale_prs, borderColor: CHART_COLORS.warning, borderDash: [5, 5] },
         ]);
         makeChart('chart-workflows', 'Workflows', ts, [
-            { label: 'Total', data: s.workflow_total, borderColor: CHART_COLORS.muted },
+            { label: 'Total', data: s.workflow_total, borderColor: CHART_COLORS.primary },
             { label: 'Failures', data: s.workflow_failures, borderColor: CHART_COLORS.danger, borderDash: [5, 5] },
         ]);
         makeChart('chart-checks', 'Checks', ts, [
-            { label: 'Total', data: s.check_total, borderColor: CHART_COLORS.muted },
+            { label: 'Total', data: s.check_total, borderColor: CHART_COLORS.primary },
             { label: 'Failures', data: s.check_failures, borderColor: CHART_COLORS.danger, borderDash: [5, 5] },
-            { label: 'Warnings', data: s.check_warnings, borderColor: CHART_COLORS.warning, borderDash: [5, 5] },
+            { label: 'Warnings', data: s.check_warnings, borderColor: CHART_COLORS.warning, borderDash: [2, 3] },
         ]);
     }
 

@@ -110,14 +110,13 @@ Uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` for atomic upsert.
 
 Layout:
 - **Controls bar:** Time range buttons (7d, 30d default, 90d) + Tom Select multi-select repo dropdown (searchable, tag-based) + Reset button
-- **Backlog section:** Single chart showing total backlog size over time, with dashed breakdown lines for each category (failing workflows, stale PRs, stale issues, stale branches, check failures, check warnings)
 - **Issues & Pull Requests section:** Issues chart + PRs chart (side by side)
 - **Workflows & Checks section:** Workflows chart + Checks chart (side by side)
 
 **Behavior:**
 - No repos selected → fetches `/api/history/global?days=N` (all repos aggregated)
 - Repos selected → fetches `/api/history/global?days=N&repos=...` (filtered aggregate)
-- Time range or repo selection changes → re-fetch and re-render all 5 charts
+- Time range or repo selection changes → re-fetch and re-render all 4 charts
 - Reset button → clears Tom Select, refetches global
 - Empty results → destroys charts, shows "no data" message
 - AbortController used to prevent race conditions from overlapping requests
