@@ -20,7 +20,7 @@ targets:
   # script: "test -f pyproject.toml"
 script: |
   uv lock --check
-schedule: "0 */6 * * *"   # optional cron; omit to use default refresh interval
+schedule: "0 */8 * * *"   # optional cron; omit to use default refresh interval
 enabled: true              # optional; default true
 severity: error            # optional; "error" (red, default) or "warning" (yellow)
 ```

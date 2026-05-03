@@ -1,5 +1,6 @@
 name: "Charm Libraries up-to-date"
 description: "Checks whether running charmcraft fetch-lib would produce any changes"
+schedule: "0 */8 * * *"
 targets:
   regex: "-operator$"
 severity: warning
