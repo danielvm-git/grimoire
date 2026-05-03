@@ -109,6 +109,10 @@ async def fetch_repository_stats(
         (no commits in staleness.branches_days)
     Return a RepositoryStats object. On failure, return stats with
     warnings populated and counts from the last cached values.
+
+    Non-existing branches (e.g., from config) are silently ignored: 404
+    responses from GitHub API for branch info or workflow runs do not
+    generate warnings and are simply skipped.
     """
 
 async def refresh_all_stats(
@@ -165,6 +169,13 @@ Expose cached repository data and a manual refresh trigger via REST endpoints.
 ### Refresh progress tracking
 
 `refresh_all_stats()` maintains an in-memory `RefreshProgress(completed, total)` dataclass during execution. Each completed repo increments `completed`. The progress is cleared (set to `None`) in a `finally` block when the refresh finishes or fails.
+
+The initial `total` is computed from config before any async work:
+- Static repos are counted directly from `config.repositories`.
+- After the DB cache loads (fast), the estimate is refined with the cached repo count (covers team repos from previous refreshes).
+- After `resolve_repositories()` returns, the total is set to the exact count.
+
+This ensures the progress bar shows a meaningful denominator immediately.
 
 Helper functions:
 - `is_refresh_running() -> bool` — check if a refresh is in progress.

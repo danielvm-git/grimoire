@@ -24,7 +24,7 @@ from grimoire.database import (
     CheckResultRecord,
     StatsSnapshot,
 )
-from grimoire.github.client import GitHubClient
+from grimoire.github.client import GitHubClient, NotFoundError
 from grimoire.models import (
     IssueDetail,
     PullRequestDetail,
@@ -330,6 +330,8 @@ async def fetch_repository_stats(
                             prev = prev_wf_map.get((wf_name, branch))
                             if prev is not None:
                                 workflow_statuses.append(prev)
+                    except NotFoundError:
+                        pass  # Non-existing branches from config are silently ignored
                     except Exception as exc:
                         warnings.append(
                             f"Failed to fetch runs for workflow {wf_name} on {branch}: {exc}"
@@ -358,6 +360,8 @@ async def fetch_repository_stats(
                 dt = _parse_dt(commit_date_str)
                 if dt is not None:
                     branch_commit_dates.append(dt)
+        except NotFoundError:
+            pass  # Non-existing branches from config are silently ignored
         except Exception as exc:
             warnings.append(f"Failed to fetch branch {branch} info: {exc}")
 
@@ -462,16 +466,25 @@ async def refresh_all_stats(
     """Resolve repos, fetch stats concurrently, persist to DB, return results."""
     global _refresh_progress  # noqa: PLW0603
 
+    # Compute a preliminary repo count from config so the progress bar can
+    # show a meaningful denominator before any async work completes.
+    # Static repos are known exactly; team repos need API resolution, so we
+    # fall back to the cached count if available.
+    preliminary_total = sum(1 for src in config.repositories if isinstance(src, StaticRepoSource))
+
     # Mark refresh as running immediately (before async work begins) so that
-    # polling endpoints see it as in-progress right away.  The total will be
-    # updated once we know how many repos there are.
-    progress = RefreshProgress(completed=0, total=0)
+    # polling endpoints see it as in-progress right away.
+    progress = RefreshProgress(completed=0, total=preliminary_total)
     _refresh_progress = progress
 
     try:
         # Load previous data so 304 (Not Modified) responses preserve old values
         cached_repos, old_stats_list = await load_stats_from_db(client._engine)
         old_stats_map = {s.full_name: s for s in old_stats_list}
+
+        # Refine the estimate with the cached count (covers team repos).
+        if cached_repos and len(cached_repos) > progress.total:
+            progress.total = len(cached_repos)
 
         repos = await resolve_repositories(config, client)
 

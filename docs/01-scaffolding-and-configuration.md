@@ -64,6 +64,7 @@ repositories:
     priority: 3.0              # optional — repo multiplier for backlog scoring (default: 1.0)
   - repo: "lucabello/other-repo"
     # omitting branches → default branch only
+    # non-existing branches are silently ignored (no warnings generated)
 
   # Workflow filtering (glob patterns on workflow name)
   - repo: "lucabello/filtered-repo"
