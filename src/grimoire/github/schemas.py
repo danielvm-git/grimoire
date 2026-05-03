@@ -91,3 +91,11 @@ class RefreshResponse(BaseModel):
 
     status: str
     message: str
+
+
+class RefreshStatusResponse(BaseModel):
+    """Response for GET /api/refresh/status."""
+
+    running: bool
+    completed: int = 0
+    total: int = 0

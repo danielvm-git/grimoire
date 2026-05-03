@@ -444,6 +444,7 @@ async def _build_repo_viewmodels() -> list[RepoViewModel]:
 async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> HTMLResponse:
     """Dashboard page — lists all tracked repositories."""
     from grimoire.github.router import _last_refresh
+    from grimoire.github.service import get_refresh_progress, is_refresh_running
 
     repos = await _build_repo_viewmodels()
     repos = _sort_repos(repos, sort, dir)
@@ -457,6 +458,8 @@ async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> H
                 warnings.append(w)
 
     last_refresh_ago = _time_ago(_last_refresh) if _last_refresh else None
+    refresh_running = is_refresh_running()
+    refresh_progress = get_refresh_progress()
 
     return templates.TemplateResponse(
         request,
@@ -472,6 +475,9 @@ async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> H
             "sort_labels": SORT_LABELS,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
+            "running": refresh_running,
+            "progress_completed": refresh_progress.completed if refresh_progress else 0,
+            "progress_total": refresh_progress.total if refresh_progress else 0,
         },
     )
 
@@ -927,6 +933,58 @@ async def check_results_partial(
 # ---------------------------------------------------------------------------
 
 
+@router.get("/partials/refresh-status", response_class=HTMLResponse)
+async def refresh_status_partial(request: Request, was_running: bool = False) -> HTMLResponse:
+    """Return the refresh-button partial (idle or running state).
+
+    When *was_running* is True but the refresh has finished, an
+    ``HX-Trigger: refreshCompleted`` header is sent so the dashboard can
+    auto-refresh its data.
+    """
+    from grimoire.github.service import get_refresh_progress, is_refresh_running
+
+    running = is_refresh_running()
+    progress = get_refresh_progress()
+    resp = templates.TemplateResponse(
+        request,
+        "partials/refresh_button.html",
+        context={
+            "running": running,
+            "progress_completed": progress.completed if progress else 0,
+            "progress_total": progress.total if progress else 0,
+        },
+    )
+    if was_running and not running:
+        resp.headers["HX-Trigger"] = "refreshCompleted"
+    return resp
+
+
+@router.post("/partials/refresh-trigger", response_class=HTMLResponse)
+async def refresh_trigger(request: Request, background_tasks: BackgroundTasks) -> HTMLResponse:
+    """Trigger a data refresh and return the 'Refreshing...' button partial.
+
+    The refresh is started as a background task — the response is immediate.
+    The returned partial includes polling to detect completion.
+    """
+    from grimoire.github.router import _refresh_callback
+    from grimoire.github.service import is_refresh_running
+
+    if _refresh_callback is None:
+        raise HTTPException(status_code=500, detail="Refresh not configured")
+
+    if not is_refresh_running():
+        from collections.abc import Awaitable, Callable
+
+        callback: Callable[[], Awaitable[None]] = _refresh_callback  # type: ignore[assignment]
+        background_tasks.add_task(callback)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/refresh_button.html",
+        context={"running": True, "progress_completed": 0, "progress_total": 0},
+    )
+
+
 @router.get("/partials/check-run-status/{slug}", response_class=HTMLResponse)
 async def check_run_status_partial(
     request: Request, slug: str, was_running: bool = False
@@ -1013,10 +1071,12 @@ async def action_run_status_partial(
     request: Request, slug: str, was_running: bool = False
 ) -> HTMLResponse:
     """Return the run-button partial for an action (idle or running state)."""
+    from grimoire.actions.engine import get_action_progress, is_action_running
     from grimoire.actions.router import _engine as _actions_engine
 
-    running = False
-    if _actions_engine is not None:
+    # Prefer in-memory tracker; fall back to DB for crash-recovery scenarios
+    running = is_action_running(slug)
+    if not running and _actions_engine is not None:
         async with AsyncSession(_actions_engine) as session:
             stmt = select(ActionRunRecord).where(
                 ActionRunRecord.action_slug == slug,
@@ -1024,10 +1084,16 @@ async def action_run_status_partial(
             )
             running = (await session.exec(stmt)).first() is not None
 
+    progress = get_action_progress(slug)
     resp = templates.TemplateResponse(
         request,
         "partials/action_run_button.html",
-        context={"slug": slug, "running": running},
+        context={
+            "slug": slug,
+            "running": running,
+            "progress_completed": progress.completed if progress else 0,
+            "progress_total": progress.total if progress else 0,
+        },
     )
     if was_running and not running:
         resp.headers["HX-Trigger"] = "actionRunCompleted"

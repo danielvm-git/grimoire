@@ -130,6 +130,8 @@ async def run_action(
 
 **Concurrent run guard:** If an action is already running (an `ActionRunRecord` with `status="running"` exists for this action), reject the new run with HTTP 409 Conflict: `"Action '{slug}' is already running (run ID: {id})"`. This applies to all triggers (manual, cron, API).
 
+**Progress tracking:** Like checks, actions maintain an in-memory `ActionProgress(completed, total)` dataclass in `_running_actions: dict[str, ActionProgress]`. The total is computed as the number of repo×branch tasks before execution begins. Each completed task increments `completed`. The entry is removed in a `finally` block. Helper functions: `is_action_running(slug)`, `get_action_progress(slug)`. The web UI polls this to display a `completed/total` counter on the action run button.
+
 **Subprocess execution details:**
 - Same as checks: scripts with a shebang (`#!`) are written to a temp file and run directly (honoring the interpreter); scripts without a shebang are passed to `/bin/sh`. Set `cwd`, merge `workspace.get_env()`.
 - Capture stdout and stderr together (combined stream).

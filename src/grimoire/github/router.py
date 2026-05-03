@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from grimoire.github.schemas import (
     RefreshResponse,
+    RefreshStatusResponse,
     RepoDetailResponse,
     RepoListResponse,
     RepoSummary,
@@ -127,19 +128,35 @@ def set_refresh_callback(callback: object) -> None:
     _refresh_callback = callback
 
 
-@refresh_router.post("/refresh", response_model=RefreshResponse)
-async def trigger_refresh() -> RefreshResponse:
-    """Trigger a manual data refresh."""
+@refresh_router.post("/refresh", response_model=RefreshResponse, status_code=202)
+async def trigger_refresh(background_tasks: BackgroundTasks) -> RefreshResponse:
+    """Trigger a manual data refresh (runs in background)."""
+    from grimoire.github.service import is_refresh_running
+
     if _refresh_callback is None:
         return RefreshResponse(
             status="error", message="Refresh not configured — no callback registered"
         )
 
+    if is_refresh_running():
+        return RefreshResponse(status="ok", message="Refresh already in progress")
+
     from collections.abc import Awaitable, Callable
 
     callback: Callable[[], Awaitable[None]] = _refresh_callback  # type: ignore[assignment]
-    try:
-        await callback()
-        return RefreshResponse(status="ok", message="Refresh completed successfully")
-    except Exception as exc:
-        return RefreshResponse(status="error", message=f"Refresh failed: {exc}")
+    background_tasks.add_task(callback)
+    return RefreshResponse(status="ok", message="Refresh started")
+
+
+@refresh_router.get("/refresh/status", response_model=RefreshStatusResponse)
+async def refresh_status() -> RefreshStatusResponse:
+    """Return current refresh progress."""
+    from grimoire.github.service import get_refresh_progress, is_refresh_running
+
+    running = is_refresh_running()
+    progress = get_refresh_progress()
+    return RefreshStatusResponse(
+        running=running,
+        completed=progress.completed if progress else 0,
+        total=progress.total if progress else 0,
+    )

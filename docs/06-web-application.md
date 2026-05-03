@@ -160,16 +160,31 @@ Supported sort keys: `name`, `issues`, `stale_issues`, `prs`, `stale_prs`, `work
 
 ### Refresh (HTMX)
 
-The "Refresh" button triggers an API call and then re-fetches the table:
+The refresh button uses a polling partial pattern (consistent with checks and actions). A new partial template `partials/refresh_button.html` handles two states:
+
+- **Idle:** Shows "↻ Refresh" button. Clicking posts to `POST /partials/refresh-trigger` which starts the refresh as a background task and returns the running-state partial.
+- **Running:** Shows a "Refreshing… N/M" counter with a spinner. Polls `GET /partials/refresh-status?was_running=1` every 2 seconds. When the refresh completes, the endpoint sends an `HX-Trigger: refreshCompleted` header, which the dashboard listens for to auto-reload the repo grid (no full page reload).
 
 ```html
-<button hx-post="/api/refresh"
-        hx-target="#repo-table-body"
-        hx-swap="innerHTML"
-        hx-indicator="#refresh-spinner">
-  Refresh
+{# Idle state #}
+<button hx-post="/partials/refresh-trigger"
+        hx-target="#refresh-btn"
+        hx-swap="outerHTML">
+  ↻ Refresh
 </button>
+
+{# Running state — polls every 2s #}
+<div hx-get="/partials/refresh-status?was_running=1"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    Refreshing… 3/12
+</div>
 ```
+
+This pattern is shared across all long-running operations:
+- **Refresh:** `RefreshProgress` in `github/service.py`, polled via `GET /partials/refresh-status`
+- **Checks:** `CheckProgress` in `checks/engine.py`, polled via `GET /partials/check-run-status/{slug}`
+- **Actions:** `ActionProgress` in `actions/engine.py`, polled via `GET /partials/action-run-status/{slug}`
 
 ## 6.3 — Repository Detail Page
 
@@ -406,6 +421,11 @@ These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 | `GET /partials/check-output/{result_id}` | Expanded check output text |
 | `GET /partials/check-results/{slug}` | Per-check latest results table |
 | `GET /partials/backlog-items` | Filtered/sorted backlog item list |
+| `GET /partials/refresh-status` | Refresh button (idle/running with progress) |
+| `POST /partials/refresh-trigger` | Starts refresh, returns running-state button |
+| `GET /partials/check-run-status/{slug}` | Check run button with progress counter |
+| `POST /partials/check-run/{slug}` | Starts check run, returns running-state button |
+| `GET /partials/action-run-status/{slug}` | Action run button with progress counter |
 
 ## 6.9 — Empty States
 
