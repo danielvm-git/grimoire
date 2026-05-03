@@ -11,11 +11,7 @@
         <p class="text-sm opacity-60 mt-1">Last updated {{ last_refresh_ago }}</p>
         {% endif %}
     </div>
-    <button class="btn btn-primary btn-sm gap-2" hx-post="/api/refresh" hx-swap="none"
-            hx-on::after-request="if(event.detail.successful) { showToast('Refresh complete', 'success'); setTimeout(() => location.reload(), 600); } else { showToast('Refresh failed', 'error'); }">
-        <span class="btn-label">↻ Refresh</span>
-        <span class="htmx-indicator loading loading-spinner loading-xs"></span>
-    </button>
+    {% include "partials/refresh_button.html" %}
 </div>
 
 {# ── Warnings ──────────────────────────────────────────────────────── #}
@@ -203,6 +199,12 @@
         } else {
             fetchView().then(() => document.getElementById('repo-grid').classList.remove('hidden'));
         }
+    });
+
+    // Auto-reload data when a background refresh completes
+    document.body.addEventListener('refreshCompleted', function() {
+        showToast('Refresh complete', 'success');
+        fetchView();
     });
 </script>
 {% endblock %}

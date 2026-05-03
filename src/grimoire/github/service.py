@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from fnmatch import fnmatch
 from pathlib import Path
@@ -37,6 +38,32 @@ logger = logging.getLogger(__name__)
 _CONCURRENCY_LIMIT = 10
 
 AGE_BUCKET_THRESHOLDS = [7, 14, 30, 60, 90, 180, 365]
+
+
+# ---------------------------------------------------------------------------
+# Refresh progress tracking
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RefreshProgress:
+    """Tracks execution progress of a running data refresh."""
+
+    completed: int = 0
+    total: int = 0
+
+
+_refresh_progress: RefreshProgress | None = None
+
+
+def is_refresh_running() -> bool:
+    """Return True if a data refresh is currently in progress."""
+    return _refresh_progress is not None
+
+
+def get_refresh_progress() -> RefreshProgress | None:
+    """Return the progress tracker for a running refresh, or None if idle."""
+    return _refresh_progress
 
 
 def _workflow_matches_filter(wf_name: str, include: list[str], exclude: list[str]) -> bool:
@@ -433,6 +460,8 @@ async def refresh_all_stats(
     config: GrimoireConfig, client: GitHubClient
 ) -> tuple[list[TrackedRepository], list[RepositoryStats]]:
     """Resolve repos, fetch stats concurrently, persist to DB, return results."""
+    global _refresh_progress  # noqa: PLW0603
+
     # Load previous data so 304 (Not Modified) responses preserve old values
     cached_repos, old_stats_list = await load_stats_from_db(client._engine)
     old_stats_map = {s.full_name: s for s in old_stats_list}
@@ -449,27 +478,35 @@ async def refresh_all_stats(
         )
         repos = cached_repos
 
+    progress = RefreshProgress(completed=0, total=len(repos))
+    _refresh_progress = progress
+
     sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
 
     async def _fetch(repo: TrackedRepository) -> RepositoryStats:
         async with sem:
-            return await fetch_repository_stats(
+            result = await fetch_repository_stats(
                 repo,
                 client,
                 config.staleness,
                 previous=old_stats_map.get(repo.full_name),
             )
+            progress.completed += 1
+            return result
 
-    stats = await asyncio.gather(*[_fetch(r) for r in repos])
-    stats_list = list(stats)
+    try:
+        stats = await asyncio.gather(*[_fetch(r) for r in repos])
+        stats_list = list(stats)
 
-    await save_stats_to_db(
-        client._engine,
-        stats_list,
-        repos,
-        retention_days=config.history.retention_days,
-    )
-    return repos, stats_list
+        await save_stats_to_db(
+            client._engine,
+            stats_list,
+            repos,
+            retention_days=config.history.retention_days,
+        )
+        return repos, stats_list
+    finally:
+        _refresh_progress = None
 
 
 # ---------------------------------------------------------------------------

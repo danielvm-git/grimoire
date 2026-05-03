@@ -562,3 +562,55 @@ class TestHistoryPage:
     async def test_history_nav_link(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/history")
         assert 'href="/history"' in resp.text
+
+
+class TestRefreshPartials:
+    """Tests for refresh progress partials."""
+
+    async def test_refresh_status_idle(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/refresh-status")
+        assert resp.status_code == 200
+        assert "Refresh" in resp.text
+        # Should show the idle button, not the running state
+        assert "Refreshing" not in resp.text
+
+    async def test_refresh_status_shows_button(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/refresh-status")
+        assert "refresh-btn" in resp.text
+
+    async def test_refresh_status_hx_trigger_on_completion(self, web_client: AsyncClient) -> None:
+        """When was_running=1 and refresh is idle, should send HX-Trigger."""
+        resp = await web_client.get("/partials/refresh-status?was_running=1")
+        assert resp.status_code == 200
+        assert resp.headers.get("HX-Trigger") == "refreshCompleted"
+
+    async def test_refresh_status_no_trigger_when_not_was_running(
+        self, web_client: AsyncClient
+    ) -> None:
+        resp = await web_client.get("/partials/refresh-status?was_running=0")
+        assert "HX-Trigger" not in resp.headers
+
+    async def test_dashboard_contains_refresh_partial(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/")
+        assert "refresh-btn" in resp.text
+        assert "Refresh" in resp.text
+
+    async def test_dashboard_has_refresh_completed_listener(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/")
+        assert "refreshCompleted" in resp.text
+
+
+class TestActionProgressUI:
+    """Tests for action progress display in partials."""
+
+    async def test_action_status_idle(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-run-status/test")
+        assert resp.status_code == 200
+        assert "Running" not in resp.text
+
+    async def test_action_status_hx_trigger_on_completion(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/partials/action-run-status/test?was_running=1")
+        assert resp.status_code == 200
+        assert resp.headers.get("HX-Trigger") == "actionRunCompleted"

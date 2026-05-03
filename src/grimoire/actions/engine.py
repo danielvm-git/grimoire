@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,28 @@ if TYPE_CHECKING:
 
 OUTPUT_SIZE_CAP = 64 * 1024  # 64 KB
 _DEFAULT_TIMEOUT = 600  # 10 minutes
+
+
+@dataclass
+class ActionProgress:
+    """Tracks execution progress of a running action."""
+
+    completed: int = 0
+    total: int = 0
+
+
+# In-memory tracking of currently-running action slugs and their progress
+_running_actions: dict[str, ActionProgress] = {}
+
+
+def is_action_running(slug: str) -> bool:
+    """Return True if the action is currently executing."""
+    return slug in _running_actions
+
+
+def get_action_progress(slug: str) -> ActionProgress | None:
+    """Return the progress tracker for a running action, or None if idle."""
+    return _running_actions.get(slug)
 
 
 class ActionConflictError(Exception):
@@ -74,56 +97,67 @@ async def run_action(
 
     # 3. Resolve targets and execute
     results: list[ActionRepoResult] = []
+    progress = ActionProgress()
+    _running_actions[action.slug] = progress
 
-    if action.targets is None:
-        # Global action: run script once, not per-repo
-        passed, output = await _execute_global_action(action, workspace)
-        result = ActionRepoResult(
-            repo_full_name="(global)",
-            branch="",
-            passed=passed,
-            output=output,
-        )
-        results.append(result)
+    try:
+        if action.targets is None:
+            # Global action: run script once, not per-repo
+            progress.total = 1
+            passed, output = await _execute_global_action(action, workspace)
+            result = ActionRepoResult(
+                repo_full_name="(global)",
+                branch="",
+                passed=passed,
+                output=output,
+            )
+            results.append(result)
+            progress.completed = 1
 
-        repo_record = ActionRunRepoRecord(
-            run_id=run_id,
-            repo_full_name="(global)",
-            branch="",
-            passed=passed,
-            output=output,
-        )
-        async with AsyncSession(engine) as session:
-            session.add(repo_record)
-            await session.commit()
-    else:
-        # Per-repo action
-        targets = await resolve_targets(action.targets, repos, workspace)
-        if specific_repo is not None:
-            targets = [r for r in targets if r.full_name == specific_repo]
+            repo_record = ActionRunRepoRecord(
+                run_id=run_id,
+                repo_full_name="(global)",
+                branch="",
+                passed=passed,
+                output=output,
+            )
+            async with AsyncSession(engine) as session:
+                session.add(repo_record)
+                await session.commit()
+        else:
+            # Per-repo action
+            targets = await resolve_targets(action.targets, repos, workspace)
+            if specific_repo is not None:
+                targets = [r for r in targets if r.full_name == specific_repo]
 
-        for repo in targets:
-            branches = repo.branches or [repo.default_branch]
-            for branch in branches:
-                passed, output = await _execute_action(action, repo, branch, workspace)
-                result = ActionRepoResult(
-                    repo_full_name=repo.full_name,
-                    branch=branch,
-                    passed=passed,
-                    output=output,
-                )
-                results.append(result)
+            # Count total repo×branch tasks
+            progress.total = sum(len(r.branches or [r.default_branch]) for r in targets)
 
-                repo_record = ActionRunRepoRecord(
-                    run_id=run_id,
-                    repo_full_name=repo.full_name,
-                    branch=branch,
-                    passed=passed,
-                    output=output,
-                )
-                async with AsyncSession(engine) as session:
-                    session.add(repo_record)
-                    await session.commit()
+            for repo in targets:
+                branches = repo.branches or [repo.default_branch]
+                for branch in branches:
+                    passed, output = await _execute_action(action, repo, branch, workspace)
+                    result = ActionRepoResult(
+                        repo_full_name=repo.full_name,
+                        branch=branch,
+                        passed=passed,
+                        output=output,
+                    )
+                    results.append(result)
+                    progress.completed += 1
+
+                    repo_record = ActionRunRepoRecord(
+                        run_id=run_id,
+                        repo_full_name=repo.full_name,
+                        branch=branch,
+                        passed=passed,
+                        output=output,
+                    )
+                    async with AsyncSession(engine) as session:
+                        session.add(repo_record)
+                        await session.commit()
+    finally:
+        _running_actions.pop(action.slug, None)
 
     # 5. Update run record
     finished_at = datetime.now(timezone.utc)

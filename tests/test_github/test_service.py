@@ -689,3 +689,62 @@ async def test_prune_workspace_dirs(engine: AsyncEngine, tmp_path) -> None:
     assert (workspace / "org" / "keep").is_dir()
     assert not (workspace / "org" / "stale").exists()
     assert not (workspace / "other").exists()  # empty owner dir removed
+
+
+# ---------------------------------------------------------------------------
+# RefreshProgress tracking
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_progress_initial_state() -> None:
+    """Before any refresh, progress should be None and not running."""
+    from grimoire.github.service import get_refresh_progress, is_refresh_running
+
+    assert not is_refresh_running()
+    assert get_refresh_progress() is None
+
+
+@respx.mock
+async def test_refresh_tracks_progress(client: GitHubClient, engine: AsyncEngine) -> None:
+    """Progress should be set during refresh and cleared after."""
+    from grimoire.github.service import (
+        get_refresh_progress,
+        is_refresh_running,
+    )
+
+    # Pre-populate cached data
+    repos = [TrackedRepository(full_name="myorg/svc", default_branch="main", branches=["main"])]
+    now = datetime.now(UTC)
+    stats_list = [
+        RepositoryStats(
+            full_name="myorg/svc", default_branch="main", open_issues=0, fetched_at=now
+        )
+    ]
+    await save_stats_to_db(engine, stats_list, repos)
+
+    # Mock team endpoint returning 304
+    respx.get("https://api.github.com/orgs/myorg/teams/backend/repos").mock(
+        return_value=httpx.Response(
+            304, headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"}
+        )
+    )
+    for pattern in [
+        "/repos/myorg/svc/issues",
+        "/repos/myorg/svc/pulls",
+        "/repos/myorg/svc/actions/workflows",
+        "/repos/myorg/svc/branches/main",
+        "/repos/myorg/svc/branches",
+    ]:
+        respx.get(f"https://api.github.com{pattern}").mock(
+            return_value=httpx.Response(
+                304, headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"}
+            )
+        )
+
+    config = _make_config(repos=[TeamRepoSource(team="myorg/backend")])
+    result_repos, result_stats = await refresh_all_stats(config, client)
+
+    # After refresh completes, progress should be cleared
+    assert not is_refresh_running()
+    assert get_refresh_progress() is None
+    assert len(result_repos) == 1

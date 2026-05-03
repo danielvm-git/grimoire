@@ -159,7 +159,18 @@ Expose cached repository data and a manual refresh trigger via REST endpoints.
 |--------|------|-------------|
 | `GET` | `/api/repos` | List all tracked repos with latest cached stats |
 | `GET` | `/api/repos/{owner}/{name}` | Detailed stats for a single repo (issues, PRs, workflows, checks) |
-| `POST` | `/api/refresh` | Trigger an immediate data refresh. Returns 202 Accepted; refresh runs in the background |
+| `POST` | `/api/refresh` | Trigger an immediate data refresh. Returns 202 Accepted; refresh runs as a background task |
+| `GET` | `/api/refresh/status` | Returns current refresh progress: `{ running, completed, total }` |
+
+### Refresh progress tracking
+
+`refresh_all_stats()` maintains an in-memory `RefreshProgress(completed, total)` dataclass during execution. Each completed repo increments `completed`. The progress is cleared (set to `None`) in a `finally` block when the refresh finishes or fails.
+
+Helper functions:
+- `is_refresh_running() -> bool` — check if a refresh is in progress.
+- `get_refresh_progress() -> RefreshProgress | None` — get the current progress tracker.
+
+The web layer polls `GET /api/refresh/status` (or the HTMX partial `GET /partials/refresh-status`) every 2 seconds while a refresh is running to display a progress indicator.
 
 ### Response models
 

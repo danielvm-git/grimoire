@@ -372,3 +372,51 @@ class TestGlobalAction:
 
         assert len(result.results) == 1
         assert result.results[0].passed is False
+
+
+class TestActionProgress:
+    """Tests for in-memory action progress tracking."""
+
+    def test_initial_state(self) -> None:
+        from grimoire.actions.engine import get_action_progress, is_action_running
+
+        assert not is_action_running("nonexistent")
+        assert get_action_progress("nonexistent") is None
+
+    async def test_progress_tracked_during_run(self, tmp_path: Path) -> None:
+        """Progress should be set during run and cleared after completion."""
+        from grimoire.actions.engine import get_action_progress, is_action_running
+
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        repos = [_repo("acme/alpha"), _repo("acme/beta")]
+        action = ActionDefinition(
+            name="Progress Action",
+            slug="progress-action",
+            description="Test progress",
+            targets=TargetSpec(list=["acme/alpha", "acme/beta"]),
+            script="echo ok",
+        )
+
+        result = await run_action(action, repos, ws, engine, triggered_by="manual")
+
+        # After completion, progress should be cleared
+        assert not is_action_running("progress-action")
+        assert get_action_progress("progress-action") is None
+        assert len(result.results) == 2
+
+    async def test_progress_cleared_on_error(self, tmp_path: Path) -> None:
+        """Progress should be cleared even if the action fails."""
+        from grimoire.actions.engine import get_action_progress, is_action_running
+
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        result = await run_action(_action("exit 1"), [_repo()], ws, engine, triggered_by="manual")
+
+        assert not is_action_running("test-action")
+        assert get_action_progress("test-action") is None
+        assert result.results[0].passed is False
