@@ -1299,6 +1299,8 @@ async def backlog_save_weights(request: Request) -> dict[str, str]:
         raw["backlog"]["category_weights"] = body["category_weights"]
     if "workflow_weights" in body:
         raw["backlog"]["workflow_weights"] = body["workflow_weights"]
+    if "repository_weights" in body:
+        raw["backlog"]["repository_weights"] = body["repository_weights"]
 
     with open(_config_path, "w") as f:
         yaml.dump(raw, f, default_flow_style=False, sort_keys=False)

@@ -147,6 +147,24 @@ def _get_workflow_multiplier(
     return 1.0
 
 
+def resolve_repo_weight(
+    full_name: str,
+    config: BacklogConfig,
+) -> float:
+    """Resolve the backlog weight for a repository.
+
+    Evaluates ``config.repository_weights`` top-to-bottom; last matching
+    rule wins.  Returns 1.0 if no rule matches.
+    """
+    weight = 1.0
+    for rule in config.repository_weights:
+        if rule.repos is not None and full_name in rule.repos:
+            weight = rule.weight
+        elif rule.regex is not None and fnmatch(full_name, rule.regex):
+            weight = rule.weight
+    return weight
+
+
 def _compute_age_factor(age_days: float, reference_days: float) -> float:
     """Gentle logarithmic boost for older problems.
 
@@ -162,7 +180,7 @@ def _compute_age_factor(age_days: float, reference_days: float) -> float:
 
 def compute_score(
     category: BacklogCategory,
-    repo_priority: float,
+    repo_weight: float,
     age_days: float,
     reference_days: float,
     config: BacklogConfig,
@@ -172,7 +190,7 @@ def compute_score(
     category_weight = _get_category_weight(category, config)
     workflow_mult = _get_workflow_multiplier(workflow_name, config) if workflow_name else 1.0
     age_factor = _compute_age_factor(age_days, reference_days)
-    return category_weight * repo_priority * workflow_mult * age_factor
+    return category_weight * repo_weight * workflow_mult * age_factor
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +225,7 @@ def _collect_workflow_items(
             continue
         category_weight = _get_category_weight(BacklogCategory.FAILING_WORKFLOW, config)
         workflow_mult = _get_workflow_multiplier(wf.name, config)
-        score = category_weight * repo.priority * workflow_mult
+        score = category_weight * resolve_repo_weight(repo.full_name, config) * workflow_mult
         items.append(
             BacklogItem(
                 category=BacklogCategory.FAILING_WORKFLOW,
@@ -237,7 +255,7 @@ def _collect_stale_pr_items(
         excess = max(0.0, age_days - threshold)
         score = compute_score(
             BacklogCategory.STALE_PR,
-            repo.priority,
+            resolve_repo_weight(repo.full_name, config),
             excess,
             reference_days=threshold,
             config=config,
@@ -271,7 +289,7 @@ def _collect_stale_issue_items(
         excess = max(0.0, age_days - threshold)
         score = compute_score(
             BacklogCategory.STALE_ISSUE,
-            repo.priority,
+            resolve_repo_weight(repo.full_name, config),
             excess,
             reference_days=threshold,
             config=config,
@@ -306,7 +324,7 @@ def _collect_stale_branch_items(
 
     category_weight = _get_category_weight(BacklogCategory.STALE_BRANCHES, config)
     count_factor = 1.0 + math.log2(stats.stale_branches)
-    score = category_weight * repo.priority * count_factor
+    score = category_weight * resolve_repo_weight(repo.full_name, config) * count_factor
     url = f"https://github.com/{repo.full_name}/branches/stale"
     count = stats.stale_branches
     desc = f"{count} stale branch{'es' if count != 1 else ''}"
@@ -355,7 +373,7 @@ def _collect_check_items(
                 else BacklogCategory.FAILING_CHECK_WARNING
             )
             category_weight = _get_category_weight(category, config)
-            score = category_weight * repo.priority
+            score = category_weight * resolve_repo_weight(repo.full_name, config)
             items.append(
                 BacklogItem(
                     category=category,

@@ -20,7 +20,6 @@ class TrackedRepository(BaseModel):
     source: str = "static"  # "static" | "team:org/team-name"
     workflow_include: list[str] = []  # glob patterns; empty → include all
     workflow_exclude: list[str] = []  # glob patterns; empty → exclude none
-    priority: float = 1.0  # backlog scoring multiplier
 
 
 class WorkflowStatus(BaseModel):

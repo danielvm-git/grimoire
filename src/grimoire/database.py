@@ -100,7 +100,6 @@ class CachedRepository(SQLModel, table=True):
     stale_branches: int = 0
     workflow_include_json: str = "[]"  # JSON-encoded glob patterns
     workflow_exclude_json: str = "[]"  # JSON-encoded glob patterns
-    priority: float = 1.0  # backlog scoring multiplier
     fetched_at: datetime = Field(default_factory=_utcnow)
 
 

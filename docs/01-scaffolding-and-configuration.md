@@ -61,7 +61,6 @@ repositories:
   # Static list with optional branches
   - repo: "lucabello/grimoire"
     branches: ["main", "develop"]
-    priority: 3.0              # optional — repo multiplier for backlog scoring (default: 1.0)
   - repo: "lucabello/other-repo"
     # omitting branches → default branch only
     # non-existing branches are silently ignored (no warnings generated)
@@ -79,7 +78,7 @@ repositories:
     workflows:
       exclude: ["Nightly *"]      # applies to all repos from this team
 
-backlog:                        # optional — backlog tab priority weights
+backlog:                        # optional — backlog scoring weights
   category_weights:
     failing_workflow: 100
     failing_check_error: 80
@@ -90,6 +89,11 @@ backlog:                        # optional — backlog tab priority weights
   workflow_weights:             # glob pattern → multiplier
     "Release *": 2.0
     "Lint": 0.5
+  repository_weights:           # evaluated top-to-bottom; last match wins
+    - regex: "lucabello/*"      # fnmatch glob on full_name
+      weight: 1.5
+    - repos: ["lucabello/grimoire"]
+      weight: 3.0
 
 staleness:
   pull_requests_days: 30   # default: 30
@@ -115,14 +119,15 @@ log_file: "./grimoire.log"
 - `GitUserConfig(name: str, email: str)`
 - `SigningConfig(key_path: Path, format: Literal["ssh", "gpg"])`
 - `GitConfig(user: GitUserConfig, signing: SigningConfig | None = None, ssh_known_hosts: Path | None = None)`
-- `StaticRepoSource(repo: str, branches: list[str] = [], workflows: WorkflowFilter = WorkflowFilter(), priority: float = 1.0)`
-- `TeamRepoSource(team: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter(), priority: float = 1.0)`
+- `StaticRepoSource(repo: str, branches: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
+- `TeamRepoSource(team: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
 - `WorkflowFilter(include: list[str] = [], exclude: list[str] = [])` — glob patterns (fnmatch) on workflow name
 - `RepoSource` — discriminated union of the above (by field presence)
 - `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, branches_days: int = 90, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
 - `HistoryConfig(retention_days: int = 90)`
 - `BacklogCategoryWeights(failing_workflow: float = 100, failing_check_error: float = 80, failing_check_warning: float = 30, stale_pr: float = 50, stale_issue: float = 20, stale_branches: float = 10)`
-- `BacklogConfig(category_weights: BacklogCategoryWeights = BacklogCategoryWeights(), workflow_weights: dict[str, float] = {})` — `workflow_weights` maps glob patterns on workflow name to multipliers
+- `RepositoryWeightRule(regex: str | None = None, repos: list[str] | None = None, weight: float = 1.0)` — exactly one of `regex` or `repos` must be set; rules are evaluated top-to-bottom and the last match wins
+- `BacklogConfig(category_weights: BacklogCategoryWeights = BacklogCategoryWeights(), workflow_weights: dict[str, float] = {}, repository_weights: list[RepositoryWeightRule] = [])` — `workflow_weights` maps glob patterns on workflow name to multipliers; `repository_weights` maps repos to backlog score multipliers and defaults to `1.0` when no rule matches
 - `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional); `history: HistoryConfig = HistoryConfig()` (optional); `backlog: BacklogConfig = BacklogConfig()` (optional)
 
 ### Config loading
@@ -155,7 +160,6 @@ class TrackedRepository(BaseModel):
     full_name: str          # "owner/repo"
     branches: list[str]     # branches to observe; empty = default branch only
     source: str             # "static" | "team:org/team-name"
-    priority: float = 1.0   # repo multiplier for backlog scoring
 
 class WorkflowStatus(BaseModel):
     name: str

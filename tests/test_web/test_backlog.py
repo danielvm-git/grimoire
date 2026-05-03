@@ -8,7 +8,12 @@ from datetime import datetime, timezone
 import pytest
 from httpx import AsyncClient
 
-from grimoire.config import BacklogCategoryWeights, BacklogConfig, StalenessConfig
+from grimoire.config import (
+    BacklogCategoryWeights,
+    BacklogConfig,
+    RepositoryWeightRule,
+    StalenessConfig,
+)
 from grimoire.models import (
     IssueDetail,
     PullRequestDetail,
@@ -25,6 +30,7 @@ from grimoire.web.backlog import (
     build_backlog_items,
     compute_score,
     export_markdown,
+    resolve_repo_weight,
 )
 
 # ---------------------------------------------------------------------------
@@ -44,7 +50,7 @@ class TestComputeScore:
         config = self._default_config()
         score = compute_score(
             BacklogCategory.FAILING_WORKFLOW,
-            repo_priority=1.0,
+            repo_weight=1.0,
             age_days=0.0,
             reference_days=1.0,
             config=config,
@@ -55,7 +61,7 @@ class TestComputeScore:
         config = self._default_config()
         score = compute_score(
             BacklogCategory.FAILING_WORKFLOW,
-            repo_priority=3.0,
+            repo_weight=3.0,
             age_days=0.0,
             reference_days=1.0,
             config=config,
@@ -66,7 +72,7 @@ class TestComputeScore:
         config = self._default_config()
         score = compute_score(
             BacklogCategory.FAILING_WORKFLOW,
-            repo_priority=0.0,
+            repo_weight=0.0,
             age_days=10.0,
             reference_days=1.0,
             config=config,
@@ -77,14 +83,14 @@ class TestComputeScore:
         config = self._default_config()
         score_fresh = compute_score(
             BacklogCategory.STALE_PR,
-            repo_priority=1.0,
+            repo_weight=1.0,
             age_days=0.0,
             reference_days=30.0,
             config=config,
         )
         score_old = compute_score(
             BacklogCategory.STALE_PR,
-            repo_priority=1.0,
+            repo_weight=1.0,
             age_days=30.0,
             reference_days=30.0,
             config=config,
@@ -99,7 +105,7 @@ class TestComputeScore:
         )
         score = compute_score(
             BacklogCategory.FAILING_WORKFLOW,
-            repo_priority=1.0,
+            repo_weight=1.0,
             age_days=0.0,
             reference_days=1.0,
             config=config,
@@ -113,7 +119,7 @@ class TestComputeScore:
         )
         score = compute_score(
             BacklogCategory.FAILING_WORKFLOW,
-            repo_priority=1.0,
+            repo_weight=1.0,
             age_days=0.0,
             reference_days=1.0,
             config=config,
@@ -125,7 +131,7 @@ class TestComputeScore:
         config = self._default_config(stale_issue=5.0)
         score = compute_score(
             BacklogCategory.STALE_ISSUE,
-            repo_priority=1.0,
+            repo_weight=1.0,
             age_days=0.0,
             reference_days=365.0,
             config=config,
@@ -184,6 +190,47 @@ class TestDaysSince:
         assert _days_since(dt, now) == 0.0
 
 
+class TestResolveRepoWeight:
+    """Tests for resolve_repo_weight()."""
+
+    def test_no_rules_returns_default(self) -> None:
+        config = BacklogConfig()
+        assert resolve_repo_weight("org/repo", config) == 1.0
+
+    def test_regex_match(self) -> None:
+        config = BacklogConfig(
+            repository_weights=[RepositoryWeightRule(regex="org/*", weight=3.0)],
+        )
+        assert resolve_repo_weight("org/repo", config) == 3.0
+
+    def test_repos_list_match(self) -> None:
+        config = BacklogConfig(
+            repository_weights=[
+                RepositoryWeightRule(repos=["org/important"], weight=5.0),
+            ],
+        )
+        assert resolve_repo_weight("org/important", config) == 5.0
+        assert resolve_repo_weight("org/other", config) == 1.0
+
+    def test_last_match_wins(self) -> None:
+        config = BacklogConfig(
+            repository_weights=[
+                RepositoryWeightRule(regex="*", weight=2.0),
+                RepositoryWeightRule(repos=["org/special"], weight=10.0),
+            ],
+        )
+        assert resolve_repo_weight("org/special", config) == 10.0
+        assert resolve_repo_weight("org/other", config) == 2.0
+
+    def test_no_match_returns_default(self) -> None:
+        config = BacklogConfig(
+            repository_weights=[
+                RepositoryWeightRule(repos=["org/specific"], weight=5.0),
+            ],
+        )
+        assert resolve_repo_weight("other/repo", config) == 1.0
+
+
 # ---------------------------------------------------------------------------
 # Unit tests for item collection
 # ---------------------------------------------------------------------------
@@ -191,15 +238,12 @@ class TestDaysSince:
 NOW = datetime(2026, 5, 1, tzinfo=timezone.utc)
 
 
-def _make_repo(
-    name: str = "acme/api", priority: float = 1.0, branches: list[str] | None = None
-) -> TrackedRepository:
+def _make_repo(name: str = "acme/api", branches: list[str] | None = None) -> TrackedRepository:
     return TrackedRepository(
         full_name=name,
         default_branch="main",
         branches=branches or ["main"],
         source="static",
-        priority=priority,
     )
 
 
@@ -401,7 +445,7 @@ class TestBuildBacklogItems:
         assert items[0].category == BacklogCategory.FAILING_WORKFLOW
 
     def test_repo_priority_affects_ranking(self) -> None:
-        """A low-priority repo's workflow should rank below a high-priority repo's stale PR."""
+        """A low-weight repo's workflow should rank below a high-weight repo's stale PR."""
         wf = WorkflowStatus(name="CI", branch="main", status="failure", url="", run_url="")
         pr = PullRequestDetail(
             number=1,
@@ -410,15 +454,21 @@ class TestBuildBacklogItems:
             created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
             last_activity_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
         )
-        low_repo = _make_repo(name="low/repo", priority=0.3)
-        high_repo = _make_repo(name="high/repo", priority=5.0)
+        low_repo = _make_repo(name="low/repo")
+        high_repo = _make_repo(name="high/repo")
         low_stats = _make_stats(name="low/repo", workflows=[wf])
         high_stats = _make_stats(name="high/repo", stale_pr_items=[pr])
 
+        config = BacklogConfig(
+            repository_weights=[
+                RepositoryWeightRule(regex="low/*", weight=0.3),
+                RepositoryWeightRule(regex="high/*", weight=5.0),
+            ],
+        )
         items = build_backlog_items(
             cache={"low/repo": low_stats, "high/repo": high_stats},
             repos={"low/repo": low_repo, "high/repo": high_repo},
-            config=BacklogConfig(),
+            config=config,
             staleness=StalenessConfig(pull_requests_days=30),
             check_targets={},
             results_by_key={},
