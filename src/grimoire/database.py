@@ -229,3 +229,30 @@ async def create_tables(engine: AsyncEngine) -> None:
 async def get_session(engine: AsyncEngine) -> AsyncSession:
     """Get a new async session."""
     return AsyncSession(engine)
+
+
+async def cleanup_stale_runs(engine: AsyncEngine) -> None:
+    """Mark any 'running' check/action run records as 'interrupted'.
+
+    Called at startup — if the app was restarted while runs were in progress,
+    the in-memory tracking is gone and the DB records would be stuck forever.
+    """
+    from sqlalchemy import text
+
+    async with AsyncSession(engine) as session:
+        now = _utcnow()
+        await session.execute(
+            text(
+                "UPDATE check_run SET status = 'interrupted', finished_at = :now "
+                "WHERE status = 'running'"
+            ),
+            params={"now": now},
+        )
+        await session.execute(
+            text(
+                "UPDATE action_run SET status = 'interrupted', finished_at = :now "
+                "WHERE status = 'running'"
+            ),
+            params={"now": now},
+        )
+        await session.commit()

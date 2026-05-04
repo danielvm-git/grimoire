@@ -84,6 +84,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     engine = await get_engine(str(config.database_path))
     await create_tables(engine)
 
+    # Clean up any run records left in 'running' state from a previous crash
+    from grimoire.database import cleanup_stale_runs
+
+    await cleanup_stale_runs(engine)
+
     # Expose staleness thresholds to web layer
     set_staleness_config(config.staleness)
 

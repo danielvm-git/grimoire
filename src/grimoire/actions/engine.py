@@ -156,18 +156,18 @@ async def run_action(
                     async with AsyncSession(engine) as session:
                         session.add(repo_record)
                         await session.commit()
+
+        # Mark run as completed (inside try so finally always cleans up in-memory state)
+        finished_at = datetime.now(timezone.utc)
+        async with AsyncSession(engine) as session:
+            record = await session.get(ActionRunRecord, run_id)
+            assert record is not None
+            record.status = "completed"
+            record.finished_at = finished_at
+            session.add(record)
+            await session.commit()
     finally:
         _running_actions.pop(action.slug, None)
-
-    # 5. Update run record
-    finished_at = datetime.now(timezone.utc)
-    async with AsyncSession(engine) as session:
-        record = await session.get(ActionRunRecord, run_id)
-        assert record is not None
-        record.status = "completed"
-        record.finished_at = finished_at
-        session.add(record)
-        await session.commit()
 
     # 6. Return summary
     duration = (finished_at - now).total_seconds()
