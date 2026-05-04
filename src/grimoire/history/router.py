@@ -84,16 +84,10 @@ def _build_series(
         "check_failures": [s.check_failures for s in snapshots],
         "check_warnings": [s.check_warnings for s in snapshots],
         "total_branches": [s.total_branches for s in snapshots],
-        "stale_branches": [s.stale_branches for s in snapshots],
     }
     # Derived: backlog is the sum of all "problem" counts
     series["backlog_total"] = [
-        s.workflow_failures
-        + s.stale_prs
-        + s.stale_issues
-        + s.stale_branches
-        + s.check_failures
-        + s.check_warnings
+        s.workflow_failures + s.stale_prs + s.stale_issues + s.check_failures + s.check_warnings
         for s in snapshots
     ]
     return series
@@ -161,12 +155,10 @@ async def history_global(
         group = by_date[d]
         merged_issues_age: dict[str, int] = {}
         merged_prs_age: dict[str, int] = {}
-        merged_branches_age: dict[str, int] = {}
         for s in group:
             for field, target in [
                 ("issues_by_age_json", merged_issues_age),
                 ("prs_by_age_json", merged_prs_age),
-                ("branches_by_age_json", merged_branches_age),
             ]:
                 try:
                     buckets = json.loads(getattr(s, field) or "{}")
@@ -190,10 +182,8 @@ async def history_global(
                 check_failures=sum(s.check_failures for s in group),
                 check_warnings=sum(s.check_warnings for s in group),
                 total_branches=sum(s.total_branches for s in group),
-                stale_branches=sum(s.stale_branches for s in group),
                 issues_by_age_json=json.dumps(merged_issues_age),
                 prs_by_age_json=json.dumps(merged_prs_age),
-                branches_by_age_json=json.dumps(merged_branches_age),
             )
         )
 

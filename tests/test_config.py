@@ -188,7 +188,6 @@ class TestLoadConfig:
         config = load_config(config_file)
         assert config.staleness.pull_requests_days == 30
         assert config.staleness.issues_days == 365
-        assert config.staleness.branches_days == 90
         assert config.staleness.problematic_stale_issues_pct == 20
         assert config.staleness.problematic_stale_prs_pct == 20
         assert config.refresh_schedule == "*/5 * * * *"
@@ -205,13 +204,11 @@ class TestLoadConfig:
             staleness:
               pull_requests_days: 14
               issues_days: 180
-              branches_days: 60
               problematic_stale_issues_pct: 30
               problematic_stale_prs_pct: 10
             """)
         )
         config = load_config(config_file)
-        assert config.staleness.branches_days == 60
         assert config.staleness.problematic_stale_issues_pct == 30
         assert config.staleness.problematic_stale_prs_pct == 10
 

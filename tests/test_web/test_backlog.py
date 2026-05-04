@@ -30,6 +30,7 @@ from grimoire.web.backlog import (
     build_backlog_items,
     compute_score,
     export_markdown,
+    group_by_repo,
     resolve_repo_weight,
 )
 
@@ -101,7 +102,7 @@ class TestComputeScore:
 
     def test_workflow_weight_override(self) -> None:
         config = BacklogConfig(
-            workflow_weights={"Release *": 2.0},
+            workflow_weights={"Release .*": 2.0},
         )
         score = compute_score(
             BacklogCategory.FAILING_WORKFLOW,
@@ -115,7 +116,7 @@ class TestComputeScore:
 
     def test_workflow_weight_no_match_uses_default(self) -> None:
         config = BacklogConfig(
-            workflow_weights={"Release *": 2.0},
+            workflow_weights={"Release .*": 2.0},
         )
         score = compute_score(
             BacklogCategory.FAILING_WORKFLOW,
@@ -124,6 +125,31 @@ class TestComputeScore:
             reference_days=1.0,
             config=config,
             workflow_name="CI",
+        )
+        assert score == 100.0
+
+    def test_workflow_weight_regex_alternation(self) -> None:
+        config = BacklogConfig(
+            workflow_weights={"^(CI|Build)$": 3.0},
+        )
+        for name in ("CI", "Build"):
+            score = compute_score(
+                BacklogCategory.FAILING_WORKFLOW,
+                repo_weight=1.0,
+                age_days=0.0,
+                reference_days=1.0,
+                config=config,
+                workflow_name=name,
+            )
+            assert score == 300.0
+        # Non-matching
+        score = compute_score(
+            BacklogCategory.FAILING_WORKFLOW,
+            repo_weight=1.0,
+            age_days=0.0,
+            reference_days=1.0,
+            config=config,
+            workflow_name="Deploy",
         )
         assert score == 100.0
 
@@ -252,7 +278,6 @@ def _make_stats(
     workflows: list[WorkflowStatus] | None = None,
     stale_pr_items: list[PullRequestDetail] | None = None,
     stale_issue_items: list[IssueDetail] | None = None,
-    stale_branches: int = 0,
 ) -> RepositoryStats:
     return RepositoryStats(
         full_name=name,
@@ -260,7 +285,6 @@ def _make_stats(
         workflows=workflows or [],
         stale_pr_items=stale_pr_items or [],
         stale_issue_items=stale_issue_items or [],
-        stale_branches=stale_branches,
         fetched_at=NOW,
     )
 
@@ -374,51 +398,6 @@ class TestBuildBacklogItems:
         assert items[0].category == BacklogCategory.STALE_ISSUE
         assert items[0].number == 42
 
-    def test_stale_branches_summary_item(self) -> None:
-        repo = _make_repo()
-        stats = _make_stats(stale_branches=5)
-        items = build_backlog_items(
-            cache={repo.full_name: stats},
-            repos={repo.full_name: repo},
-            config=BacklogConfig(),
-            staleness=StalenessConfig(),
-            check_targets={},
-            results_by_key={},
-            check_defs=[],
-            now=NOW,
-        )
-        assert len(items) == 1
-        assert items[0].category == BacklogCategory.STALE_BRANCHES
-        assert "5 stale branches" in items[0].description
-        assert items[0].url.endswith("/branches/stale")
-
-    def test_stale_branches_count_affects_score(self) -> None:
-        repo = _make_repo()
-        stats1 = _make_stats(name="acme/api", stale_branches=1)
-        stats8 = _make_stats(name="acme/big", stale_branches=8)
-        items1 = build_backlog_items(
-            cache={"acme/api": stats1},
-            repos={"acme/api": repo},
-            config=BacklogConfig(),
-            staleness=StalenessConfig(),
-            check_targets={},
-            results_by_key={},
-            check_defs=[],
-            now=NOW,
-        )
-        repo_big = _make_repo(name="acme/big")
-        items8 = build_backlog_items(
-            cache={"acme/big": stats8},
-            repos={"acme/big": repo_big},
-            config=BacklogConfig(),
-            staleness=StalenessConfig(),
-            check_targets={},
-            results_by_key={},
-            check_defs=[],
-            now=NOW,
-        )
-        assert items8[0].score > items1[0].score
-
     def test_items_sorted_by_score_descending(self) -> None:
         """Multiple item types should be sorted highest-score-first."""
         wf = WorkflowStatus(name="CI", branch="main", status="failure", url="", run_url="")
@@ -523,7 +502,7 @@ class TestBacklogItem:
 
     def test_tier_low(self) -> None:
         item = BacklogItem(
-            category=BacklogCategory.STALE_BRANCHES,
+            category=BacklogCategory.STALE_ISSUE,
             repo_full_name="a/b",
             description="x",
             url="",
@@ -656,13 +635,8 @@ class TestBacklogRoute:
     async def test_backlog_page_shows_stale_items(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/backlog")
         assert resp.status_code == 200
-        # acme/api has stale PRs, issues, and branches
+        # acme/api has stale PRs and issues
         assert "acme/api" in resp.text
-
-    async def test_backlog_page_shows_stale_branches(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/backlog")
-        assert resp.status_code == 200
-        assert "stale branch" in resp.text
 
     async def test_backlog_items_partial(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/partials/backlog-items")
@@ -677,8 +651,6 @@ class TestBacklogRoute:
         resp = await web_client.get("/partials/backlog-items?categories=failing_workflow")
         assert resp.status_code == 200
         assert "Build" in resp.text
-        # Should not show stale items
-        assert "stale branch" not in resp.text
 
     async def test_backlog_items_partial_filter_by_repo(
         self,
@@ -689,6 +661,38 @@ class TestBacklogRoute:
         assert "acme/frontend" in resp.text
         # Should not show items from acme/api
         assert "acme/api" not in resp.text
+
+    async def test_backlog_items_partial_search_by_repo(
+        self,
+        web_client: AsyncClient,
+    ) -> None:
+        resp = await web_client.get("/partials/backlog-items?search=frontend")
+        assert resp.status_code == 200
+        assert "acme/frontend" in resp.text
+
+    async def test_backlog_items_partial_search_by_description(
+        self,
+        web_client: AsyncClient,
+    ) -> None:
+        resp = await web_client.get("/partials/backlog-items?search=Build")
+        assert resp.status_code == 200
+        assert "Build" in resp.text
+
+    async def test_backlog_items_partial_search_case_insensitive(
+        self,
+        web_client: AsyncClient,
+    ) -> None:
+        resp = await web_client.get("/partials/backlog-items?search=build")
+        assert resp.status_code == 200
+        assert "Build" in resp.text
+
+    async def test_backlog_items_partial_search_no_match(
+        self,
+        web_client: AsyncClient,
+    ) -> None:
+        resp = await web_client.get("/partials/backlog-items?search=zzz_no_match_zzz")
+        assert resp.status_code == 200
+        assert "No items match" in resp.text
 
     async def test_backlog_export_markdown(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/api/backlog/export")
@@ -705,3 +709,89 @@ class TestBacklogRoute:
         assert resp.status_code == 200
         # Should show the failing watchdog check for acme/frontend
         assert "Watchdog" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for group_by_repo
+# ---------------------------------------------------------------------------
+
+
+class TestGroupByRepo:
+    """Tests for the group_by_repo() function."""
+
+    def _make_item(self, repo: str, score: float) -> BacklogItem:
+        return BacklogItem(
+            category=BacklogCategory.FAILING_WORKFLOW,
+            repo_full_name=repo,
+            description=f"item in {repo}",
+            url="",
+            age_days=0.0,
+            score=score,
+        )
+
+    def test_empty_list(self) -> None:
+        assert group_by_repo([]) == []
+
+    def test_single_repo(self) -> None:
+        items = [self._make_item("org/a", 50.0), self._make_item("org/a", 30.0)]
+        groups = group_by_repo(items)
+        assert len(groups) == 1
+        assert groups[0].repo_full_name == "org/a"
+        assert groups[0].total_score == pytest.approx(80.0)
+        assert len(groups[0].items) == 2
+
+    def test_multiple_repos_sorted_by_total_score(self) -> None:
+        items = [
+            self._make_item("org/low", 10.0),
+            self._make_item("org/high", 90.0),
+            self._make_item("org/high", 20.0),
+            self._make_item("org/mid", 50.0),
+        ]
+        groups = group_by_repo(items)
+        assert len(groups) == 3
+        assert groups[0].repo_full_name == "org/high"
+        assert groups[0].total_score == pytest.approx(110.0)
+        assert groups[1].repo_full_name == "org/mid"
+        assert groups[2].repo_full_name == "org/low"
+
+    def test_tier_derived_from_total_score(self) -> None:
+        items = [self._make_item("org/crit", 80.0), self._make_item("org/crit", 10.0)]
+        groups = group_by_repo(items)
+        assert groups[0].tier == "critical"
+        assert groups[0].tier_class == "error"
+
+    def test_items_order_preserved_within_group(self) -> None:
+        items = [
+            self._make_item("org/a", 100.0),
+            self._make_item("org/a", 50.0),
+            self._make_item("org/a", 10.0),
+        ]
+        groups = group_by_repo(items)
+        scores = [i.score for i in groups[0].items]
+        assert scores == [100.0, 50.0, 10.0]
+
+
+# ---------------------------------------------------------------------------
+# Route tests for grouped backlog view
+# ---------------------------------------------------------------------------
+
+
+class TestBacklogGroupedRoutes:
+    """Tests for the backlog grouped-by-repo route."""
+
+    async def test_backlog_page_grouped(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/backlog?group_by=repo")
+        assert resp.status_code == 200
+        # Should contain a <details> element for grouped view
+        assert "<details" in resp.text
+
+    async def test_backlog_partial_grouped(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/backlog-items?group_by=repo")
+        assert resp.status_code == 200
+        assert "<details" in resp.text
+
+    async def test_backlog_partial_flat_default(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/backlog-items")
+        assert resp.status_code == 200
+        # Flat view should NOT have <details> grouping
+        assert "<details" not in resp.text

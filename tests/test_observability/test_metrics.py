@@ -14,7 +14,6 @@ from grimoire.observability.metrics import (
     OPEN_ISSUES,
     OPEN_PRS,
     REPOS_TOTAL,
-    STALE_BRANCHES,
     STALE_ISSUES,
     STALE_PRS,
     TOTAL_BRANCHES,
@@ -47,7 +46,6 @@ async def test_update_repo_metrics_sets_gauges() -> None:
             open_pull_requests=3,
             stale_pull_requests=1,
             total_branches=8,
-            stale_branches=3,
             last_commit_at=last_commit,
             fetched_at=fetched,
             workflows=[
@@ -86,7 +84,6 @@ async def test_update_repo_metrics_sets_gauges() -> None:
 
     # Branch gauges
     assert TOTAL_BRANCHES.labels(repo="org/alpha")._value.get() == 8  # type: ignore[union-attr]
-    assert STALE_BRANCHES.labels(repo="org/alpha")._value.get() == 3  # type: ignore[union-attr]
 
     # Workflow gauges
     assert (

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
@@ -25,7 +26,6 @@ class BacklogCategory(str, Enum):
     FAILING_CHECK_WARNING = "failing_check_warning"
     STALE_PR = "stale_pr"
     STALE_ISSUE = "stale_issue"
-    STALE_BRANCHES = "stale_branches"
 
 
 # Labels and icons used in templates
@@ -35,7 +35,6 @@ CATEGORY_DISPLAY = {
     BacklogCategory.FAILING_CHECK_WARNING: ("Check Warning", "fa-solid fa-clipboard-check"),
     BacklogCategory.STALE_PR: ("Stale PR", "fa-solid fa-code-pull-request"),
     BacklogCategory.STALE_ISSUE: ("Stale Issue", "fa-solid fa-circle-exclamation"),
-    BacklogCategory.STALE_BRANCHES: ("Stale Branches", "fa-solid fa-code-branch"),
 }
 
 # Priority tier thresholds (score → tier name)
@@ -45,6 +44,14 @@ PRIORITY_TIERS = [
     (20, "medium", "info"),
     (0, "low", "ghost"),
 ]
+
+# Tier → (FontAwesome arrow icon, DaisyUI text color class)
+TIER_DISPLAY = {
+    "critical": ("fa-solid fa-angles-up", "text-error"),
+    "high": ("fa-solid fa-angle-up", "text-warning"),
+    "medium": ("fa-solid fa-minus", "text-info"),
+    "low": ("fa-solid fa-angle-down", "opacity-40"),
+}
 
 
 @dataclass
@@ -83,6 +90,16 @@ class BacklogItem:
             if self.score >= threshold:
                 return cls
         return "ghost"
+
+    @property
+    def tier_icon(self) -> str:
+        """FontAwesome arrow icon for the priority tier."""
+        return TIER_DISPLAY.get(self.tier, TIER_DISPLAY["low"])[0]
+
+    @property
+    def tier_color(self) -> str:
+        """DaisyUI text color class for the priority tier."""
+        return TIER_DISPLAY.get(self.tier, TIER_DISPLAY["low"])[1]
 
     def to_markdown(self) -> str:
         """Render this item as a single Markdown checklist line."""
@@ -131,7 +148,6 @@ def _get_category_weight(
         BacklogCategory.FAILING_CHECK_WARNING: weights.failing_check_warning,
         BacklogCategory.STALE_PR: weights.stale_pr,
         BacklogCategory.STALE_ISSUE: weights.stale_issue,
-        BacklogCategory.STALE_BRANCHES: weights.stale_branches,
     }
     return mapping.get(category, 1.0)
 
@@ -140,9 +156,9 @@ def _get_workflow_multiplier(
     workflow_name: str,
     config: BacklogConfig,
 ) -> float:
-    """Look up per-workflow-name weight override (glob matching)."""
+    """Look up per-workflow-name weight override (regex matching)."""
     for pattern, multiplier in config.workflow_weights.items():
-        if fnmatch(workflow_name, pattern):
+        if re.search(pattern, workflow_name):
             return multiplier
     return 1.0
 
@@ -308,38 +324,6 @@ def _collect_stale_issue_items(
     return items
 
 
-def _collect_stale_branch_items(
-    stats: RepositoryStats,
-    repo: TrackedRepository,
-    config: BacklogConfig,
-    staleness: StalenessConfig,
-    now: datetime,
-) -> list[BacklogItem]:
-    """Create a summary backlog item for stale branches (if any).
-
-    Score includes a count multiplier since more stale branches = more cleanup.
-    """
-    if stats.stale_branches <= 0:
-        return []
-
-    category_weight = _get_category_weight(BacklogCategory.STALE_BRANCHES, config)
-    count_factor = 1.0 + math.log2(stats.stale_branches)
-    score = category_weight * resolve_repo_weight(repo.full_name, config) * count_factor
-    url = f"https://github.com/{repo.full_name}/branches/stale"
-    count = stats.stale_branches
-    desc = f"{count} stale branch{'es' if count != 1 else ''}"
-    return [
-        BacklogItem(
-            category=BacklogCategory.STALE_BRANCHES,
-            repo_full_name=repo.full_name,
-            description=desc,
-            url=url,
-            age_days=0.0,
-            score=score,
-        )
-    ]
-
-
 def _collect_check_items(
     repo: TrackedRepository,
     branches: list[str],
@@ -414,7 +398,6 @@ def build_backlog_items(
         all_items.extend(_collect_workflow_items(stats, repo, config, now))
         all_items.extend(_collect_stale_pr_items(stats, repo, config, staleness, now))
         all_items.extend(_collect_stale_issue_items(stats, repo, config, staleness, now))
-        all_items.extend(_collect_stale_branch_items(stats, repo, config, staleness, now))
         all_items.extend(
             _collect_check_items(
                 repo, branches, check_targets, results_by_key, check_defs, config, now
@@ -456,3 +439,64 @@ def export_markdown(items: list[BacklogItem], title_date: str = "") -> str:
         lines.append("")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Group-by-repository view
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RepoGroup:
+    """A repository's aggregated backlog summary for the grouped view."""
+
+    repo_full_name: str
+    items: list[BacklogItem]
+    total_score: float = 0.0
+
+    @property
+    def tier(self) -> str:
+        for threshold, tier_name, _ in PRIORITY_TIERS:
+            if self.total_score >= threshold:
+                return tier_name
+        return "low"
+
+    @property
+    def tier_class(self) -> str:
+        """DaisyUI badge class for the cumulative priority tier."""
+        for threshold, _, cls in PRIORITY_TIERS:
+            if self.total_score >= threshold:
+                return cls
+        return "ghost"
+
+    @property
+    def tier_icon(self) -> str:
+        """FontAwesome arrow icon for the cumulative priority tier."""
+        return TIER_DISPLAY.get(self.tier, TIER_DISPLAY["low"])[0]
+
+    @property
+    def tier_color(self) -> str:
+        """DaisyUI text color class for the cumulative priority tier."""
+        return TIER_DISPLAY.get(self.tier, TIER_DISPLAY["low"])[1]
+
+
+def group_by_repo(items: list[BacklogItem]) -> list[RepoGroup]:
+    """Group backlog items by repository with cumulative scores.
+
+    Returns groups sorted by total_score descending.  Items within each
+    group retain their original (score-descending) order.
+    """
+    buckets: dict[str, list[BacklogItem]] = {}
+    for item in items:
+        buckets.setdefault(item.repo_full_name, []).append(item)
+
+    groups = [
+        RepoGroup(
+            repo_full_name=repo,
+            items=repo_items,
+            total_score=sum(i.score for i in repo_items),
+        )
+        for repo, repo_items in buckets.items()
+    ]
+    groups.sort(key=lambda g: g.total_score, reverse=True)
+    return groups

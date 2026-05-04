@@ -105,8 +105,7 @@ async def fetch_repository_stats(
         (no pushes or comments in staleness.pull_requests_days)
       - workflow statuses for each observed branch
       - last commit time across all observed branches
-      - total branch count + stale branch count
-        (no commits in staleness.branches_days)
+      - total branch count
     Return a RepositoryStats object. On failure, return stats with
     warnings populated and counts from the last cached values.
 
@@ -139,8 +138,8 @@ All fetched data is persisted to the SQLite database as the **persistent cache**
 
 | Table | Columns |
 |---|---|
-| `cached_repository` | full_name, default_branch, archived, source, last_commit_at, total_branches, stale_branches, fetched_at |
-| `cached_issue` | repo_full_name, title, number, url, created_at, last_comment_at, fetched_at |
+| `cached_repository` | full_name, default_branch, archived, source, last_commit_at, total_branches, fetched_at |
+| `cached_issue` | repo_full_name, title, number, url, author, created_at, last_comment_at, fetched_at |
 | `cached_pull_request` | repo_full_name, title, number, url, author, created_at, last_push_at, last_comment_at, fetched_at |
 | `cached_workflow_status` | repo_full_name, workflow_name, branch, status, url, run_url, fetched_at |
 | `cached_etag` | endpoint_url, etag, last_modified |
@@ -151,7 +150,7 @@ Per-repo backlog weights are not persisted in this layer; the backlog engine res
 
 Alongside cache writes, `save_stats_to_db()` also upserts one `StatsSnapshot` row per repo per calendar day. This provides daily time-series data for the History page (Module 8).
 
-- Age-bucketed counts (issues, PRs, branches) are computed in `fetch_repository_stats()` from raw API data and carried in `RepositoryStats.issues_by_age`, `prs_by_age`, `branches_by_age`.
+- Age-bucketed counts (issues, PRs) are computed in `fetch_repository_stats()` from raw API data and carried in `RepositoryStats.issues_by_age`, `prs_by_age`.
 - Retention cleanup (delete snapshots older than `history.retention_days`) runs at the start of each `save_stats_to_db()` call.
 - See `docs/08-history.md` for full details.
 
@@ -201,7 +200,6 @@ class RepoSummary(BaseModel):
     check_failures: int             # count of failing checks across all branches
     last_commit_at: datetime | None # most recent commit across observed branches
     total_branches: int             # total number of branches in the repo
-    stale_branches: int             # branches with no commits in staleness.branches_days
     warnings: list[str]
     fetched_at: datetime
 

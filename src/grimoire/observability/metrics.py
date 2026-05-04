@@ -20,7 +20,6 @@ STALE_ISSUES = Gauge("grimoire_stale_issues_total", "Stale issues", ["repo"])
 OPEN_PRS = Gauge("grimoire_open_pull_requests_total", "Open PRs", ["repo"])
 STALE_PRS = Gauge("grimoire_stale_pull_requests_total", "Stale PRs", ["repo"])
 TOTAL_BRANCHES = Gauge("grimoire_total_branches", "Total branches", ["repo"])
-STALE_BRANCHES = Gauge("grimoire_stale_branches_total", "Stale branches", ["repo"])
 WORKFLOW_STATUS = Gauge(
     "grimoire_workflow_status",
     "Workflow status (1=success, 0=failure)",
@@ -99,7 +98,6 @@ def update_repo_metrics(stats_list: list[RepositoryStats]) -> None:
         OPEN_PRS.labels(repo=repo).set(stats.open_pull_requests)
         STALE_PRS.labels(repo=repo).set(stats.stale_pull_requests)
         TOTAL_BRANCHES.labels(repo=repo).set(stats.total_branches)
-        STALE_BRANCHES.labels(repo=repo).set(stats.stale_branches)
         for wf in stats.workflows:
             val = 1 if wf.status == "success" else 0
             WORKFLOW_STATUS.labels(repo=repo, workflow=wf.name, branch=wf.branch).set(val)

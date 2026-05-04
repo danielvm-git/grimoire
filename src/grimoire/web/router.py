@@ -23,6 +23,7 @@ from grimoire.web.backlog import (
     BacklogItem,
     build_backlog_items,
     export_markdown,
+    group_by_repo,
 )
 
 router = APIRouter(tags=["web"])
@@ -88,7 +89,6 @@ class RepoViewModel:
     fetched_at: datetime | None = None
     last_commit_at: datetime | None = None
     total_branches: int = 0
-    stale_branches: int = 0
 
     @property
     def has_problems(self) -> bool:
@@ -203,6 +203,7 @@ SORT_KEYS: dict[str, Any] = {
     "stale_issues": lambda r: r.stale_issues,
     "prs": lambda r: r.open_prs,
     "stale_prs": lambda r: r.stale_prs,
+    "branches": lambda r: r.total_branches,
     "workflow_failures": lambda r: r.workflow_failures,
     "check_failures": lambda r: r.check_failures,
     "last_activity": lambda r: r.last_commit_at or datetime.min.replace(tzinfo=timezone.utc),
@@ -215,6 +216,7 @@ SORT_LABELS: dict[str, str] = {
     "stale_issues": "Stale Issues",
     "prs": "Open PRs",
     "stale_prs": "Stale PRs",
+    "branches": "Branches",
     "workflow_failures": "Failing Workflows",
     "check_failures": "Failing Checks",
     "last_activity": "Last Activity",
@@ -440,7 +442,6 @@ async def _build_repo_viewmodels() -> list[RepoViewModel]:
                 fetched_at=stats.fetched_at,
                 last_commit_at=stats.last_commit_at,
                 total_branches=stats.total_branches,
-                stale_branches=stats.stale_branches,
             )
         )
     return viewmodels
@@ -518,6 +519,7 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
         workflows_by_branch.setdefault(wf.branch, []).append(wf)
 
     workflow_failures = sum(1 for w in stats.workflows if w.status == "failure")
+    workflow_pending = sum(1 for w in stats.workflows if w.status == "pending")
 
     check_targets, results_by_key = await _load_check_context([full_name])
     checks_by_branch, check_failures, check_warnings = _build_checks_for_repo(
@@ -535,7 +537,9 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
             "workflows_by_branch": workflows_by_branch,
             "checks_by_branch": checks_by_branch,
             "workflow_failures": workflow_failures,
+            "workflow_pending": workflow_pending,
             "check_failures": check_failures,
+            "check_warnings": check_warnings,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
         },
@@ -1143,6 +1147,7 @@ async def _build_backlog_items(
     repos_filter: list[str] | None = None,
     min_score: float = 0.0,
     config_override: BacklogConfig | None = None,
+    search: str = "",
 ) -> list[BacklogItem]:
     """Collect and optionally filter backlog items."""
     from grimoire.github.router import _cache, _repos
@@ -1176,6 +1181,17 @@ async def _build_backlog_items(
     if min_score > 0:
         items = [i for i in items if i.score >= min_score]
 
+    if search:
+        q = search.lower()
+        items = [
+            i
+            for i in items
+            if q in i.repo_full_name.lower()
+            or q in i.description.lower()
+            or q in i.category_label.lower()
+            or q in i.branch.lower()
+        ]
+
     return items
 
 
@@ -1192,11 +1208,17 @@ async def backlog_page(request: Request) -> HTMLResponse:
     # Count unique repos with problems
     repos_with_items = len({i.repo_full_name for i in items})
 
+    # Check if grouped view was requested (via query param)
+    group_by = request.query_params.get("group_by", "")
+    groups = group_by_repo(items) if group_by == "repo" else None
+
     return templates.TemplateResponse(
         request,
         "backlog.html",
         context={
             "items": items,
+            "groups": groups,
+            "group_by": group_by,
             "tier_counts": tier_counts,
             "total_items": len(items),
             "repos_with_items": repos_with_items,
@@ -1212,12 +1234,13 @@ async def backlog_items_partial(
     categories: str = "",
     repos: str = "",
     min_score: float = 0.0,
+    group_by: str = "",
+    search: str = "",
     w_failing_workflow: float = -1,
     w_failing_check_error: float = -1,
     w_failing_check_warning: float = -1,
     w_stale_pr: float = -1,
     w_stale_issue: float = -1,
-    w_stale_branches: float = -1,
 ) -> HTMLResponse:
     """Return filtered backlog items as an HTMX partial."""
     cat_list = [c for c in categories.split(",") if c] or None
@@ -1231,7 +1254,6 @@ async def backlog_items_partial(
         "failing_check_warning": w_failing_check_warning,
         "stale_pr": w_stale_pr,
         "stale_issue": w_stale_issue,
-        "stale_branches": w_stale_branches,
     }
     if any(v >= 0 for v in weight_params.values()):
         from grimoire.config import BacklogCategoryWeights
@@ -1248,13 +1270,17 @@ async def backlog_items_partial(
         repos_filter=repo_list,
         min_score=min_score,
         config_override=config_override,
+        search=search,
     )
+
+    groups = group_by_repo(items) if group_by == "repo" else None
 
     return templates.TemplateResponse(
         request,
         "partials/backlog_items.html",
         context={
             "items": items,
+            "groups": groups,
             "time_ago": _time_ago,
         },
     )

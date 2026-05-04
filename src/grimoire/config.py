@@ -102,7 +102,6 @@ class StalenessConfig(BaseModel):
 
     pull_requests_days: int = 30
     issues_days: int = 365
-    branches_days: int = 90
 
     # Percentage thresholds: highlight stale counts as problematic
     # when stale/open >= this percentage.
@@ -124,7 +123,6 @@ class BacklogCategoryWeights(BaseModel):
     failing_check_warning: float = 30.0
     stale_pr: float = 50.0
     stale_issue: float = 20.0
-    stale_branches: float = 10.0
 
 
 class RepositoryWeightRule(BaseModel):

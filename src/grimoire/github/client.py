@@ -180,6 +180,11 @@ class GitHubClient:
         owner, repo = full_name.split("/", 1)
         return await self._request("GET", f"/repos/{owner}/{repo}/branches/{branch}")
 
+    async def get_git_commit(self, full_name: str, sha: str) -> dict[str, Any] | None:
+        """Return a Git commit object (lightweight, includes committer date)."""
+        owner, repo = full_name.split("/", 1)
+        return await self._request("GET", f"/repos/{owner}/{repo}/git/commits/{sha}")
+
     # -- internal helpers ----------------------------------------------------
 
     async def _paginated_get(

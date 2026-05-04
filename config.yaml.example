@@ -35,7 +35,6 @@ repositories:
 staleness:
   pull_requests_days: 30   # PRs with no push/comment for this many days
   issues_days: 365         # Issues with no comment for this many days
-  branches_days: 90        # Branches with no commits for this many days
 
   # Percentage thresholds for highlighting stale counts as problematic (yellow).
   # When stale/open >= this percentage, the count is highlighted.
@@ -54,7 +53,6 @@ refresh_schedule: "*/5 * * * *"
 #     failing_check_warning: 30
 #     stale_pr: 50
 #     stale_issue: 20
-#     stale_branches: 10
 #   workflow_weights:           # per-workflow-name multiplier (glob patterns)
 #     "Release *": 2.0
 #     "Lint": 0.5
