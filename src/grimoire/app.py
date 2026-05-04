@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -103,6 +104,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Load data — prefer DB cache if fresh enough, otherwise do API refresh
     repos: list[TrackedRepository] = []
+    need_background_refresh = False
     try:
         cached_repos, cached_stats = await load_stats_from_db(engine)
         cache_is_fresh = False
@@ -132,11 +134,20 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             update_repo_metrics(cached_stats)
             repos = cached_repos
             logger.info("Using cached data — %d repositories loaded", len(repos))
+        elif cached_repos:
+            # Stale cache — serve it immediately, refresh in background
+            update_cache(cached_repos, cached_stats)
+            update_repo_metrics(cached_stats)
+            repos = cached_repos
+            need_background_refresh = True
+            logger.info(
+                "Serving stale cache (%d repos) — background refresh scheduled",
+                len(repos),
+            )
         else:
-            repos, stats = await refresh_all_stats(config, client)
-            update_cache(repos, stats)
-            update_repo_metrics(stats)
-            logger.info("Initial refresh complete — %d repositories loaded", len(repos))
+            # No cache at all — start server immediately, refresh in background
+            need_background_refresh = True
+            logger.info("No cached data — background refresh scheduled")
     except Exception:
         logger.exception("Data loading failed — falling back to cached data")
         try:
@@ -165,7 +176,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     set_actions_state(actions, repos, workspace, engine)
 
     # Refresh callback for POST /api/refresh
-    async def _do_refresh() -> None:
+    async def _do_refresh() -> list[TrackedRepository]:
         with DATA_REFRESH_DURATION.time():
             refreshed_repos, refreshed_stats = await refresh_all_stats(config, client)
         update_cache(refreshed_repos, refreshed_stats)
@@ -189,6 +200,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         except Exception:
             logger.exception("Failed to update snapshot check metrics")
 
+        return refreshed_repos
+
     set_refresh_callback(_do_refresh)
 
     # Scheduler
@@ -208,6 +221,26 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     scheduler.start()
     logger.info("Scheduler started (refresh schedule: %s)", config.refresh_schedule)
+
+    # Launch background refresh if needed (server is already accepting requests)
+    if need_background_refresh:
+
+        async def _initial_refresh() -> None:
+            try:
+                logger.info("Background initial refresh starting")
+                refreshed_repos = await _do_refresh()
+                try:
+                    await workspace.setup(refreshed_repos)
+                except Exception:
+                    logger.exception("Workspace re-setup failed after initial refresh")
+                logger.info(
+                    "Background initial refresh complete — %d repos",
+                    len(refreshed_repos),
+                )
+            except Exception:
+                logger.exception("Background initial refresh failed")
+
+        asyncio.create_task(_initial_refresh())
 
     yield
 

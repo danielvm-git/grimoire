@@ -615,3 +615,80 @@ class TestActionProgressUI:
         resp = await web_client_with_actions.get("/partials/action-run-status/test?was_running=1")
         assert resp.status_code == 200
         assert resp.headers.get("HX-Trigger") == "actionRunCompleted"
+
+
+class TestLoadingState:
+    """Tests for the loading page when cache is empty and refresh is running."""
+
+    async def test_dashboard_shows_loading_when_cache_empty_and_refreshing(
+        self, web_client: AsyncClient
+    ) -> None:
+        """When cache is empty and a refresh is running, show loading page."""
+        from unittest.mock import patch
+
+        from grimoire.github.router import _cache
+        from grimoire.github.service import RefreshProgress
+
+        saved = dict(_cache)
+        _cache.clear()
+        try:
+            with (
+                patch(
+                    "grimoire.github.service.is_refresh_running",
+                    return_value=True,
+                ),
+                patch(
+                    "grimoire.github.service.get_refresh_progress",
+                    return_value=RefreshProgress(completed=2, total=5),
+                ),
+            ):
+                resp = await web_client.get("/")
+                assert resp.status_code == 200
+                assert "Fetching repository data" in resp.text
+                assert "2 of 5" in resp.text
+        finally:
+            _cache.update(saved)
+
+    async def test_dashboard_shows_normal_when_cache_populated(
+        self, web_client: AsyncClient
+    ) -> None:
+        """When cache has repos, show normal dashboard even if refresh is running."""
+        resp = await web_client.get("/")
+        assert resp.status_code == 200
+        assert "Dashboard" in resp.text
+        assert "Fetching repository data" not in resp.text
+
+    async def test_loading_status_partial_redirects_when_done(
+        self, web_client: AsyncClient
+    ) -> None:
+        """When refresh is no longer running, loading-status returns HX-Redirect."""
+        from unittest.mock import patch
+
+        with patch(
+            "grimoire.github.service.is_refresh_running",
+            return_value=False,
+        ):
+            resp = await web_client.get("/partials/loading-status")
+            assert resp.status_code == 200
+            assert resp.headers.get("HX-Redirect") == "/"
+
+    async def test_loading_status_partial_returns_progress(self, web_client: AsyncClient) -> None:
+        """When refresh is running, loading-status returns progress info."""
+        from unittest.mock import patch
+
+        from grimoire.github.service import RefreshProgress
+
+        with (
+            patch(
+                "grimoire.github.service.is_refresh_running",
+                return_value=True,
+            ),
+            patch(
+                "grimoire.github.service.get_refresh_progress",
+                return_value=RefreshProgress(completed=3, total=7),
+            ),
+        ):
+            resp = await web_client.get("/partials/loading-status")
+            assert resp.status_code == 200
+            assert "3 of 7" in resp.text
+            assert "HX-Redirect" not in resp.headers

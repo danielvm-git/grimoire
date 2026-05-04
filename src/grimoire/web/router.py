@@ -458,7 +458,22 @@ async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> H
     from grimoire.github.router import _last_refresh
     from grimoire.github.service import get_refresh_progress, is_refresh_running
 
+    refresh_running = is_refresh_running()
+    refresh_progress = get_refresh_progress()
+
     repos = await _build_repo_viewmodels()
+
+    # Initial loading state: no repos yet and a refresh is in progress
+    if not repos and refresh_running:
+        return templates.TemplateResponse(
+            request,
+            "loading.html",
+            context={
+                "progress_completed": refresh_progress.completed if refresh_progress else 0,
+                "progress_total": refresh_progress.total if refresh_progress else 0,
+            },
+        )
+
     repos = _sort_repos(repos, sort, dir)
     totals = _compute_totals(repos)
 
@@ -975,6 +990,33 @@ async def refresh_status_partial(request: Request, was_running: bool = False) ->
     if was_running and not running:
         resp.headers["HX-Trigger"] = "refreshCompleted"
     return resp
+
+
+@router.get("/partials/loading-status", response_class=HTMLResponse)
+async def loading_status_partial(request: Request) -> HTMLResponse:
+    """Return the loading progress partial.
+
+    When the refresh is no longer running, sends an HX-Redirect to reload
+    the dashboard (which will now show the real content).
+    """
+    from grimoire.github.service import get_refresh_progress, is_refresh_running
+
+    running = is_refresh_running()
+    progress = get_refresh_progress()
+
+    if not running:
+        resp = HTMLResponse("")
+        resp.headers["HX-Redirect"] = "/"
+        return resp
+
+    return templates.TemplateResponse(
+        request,
+        "partials/loading_progress.html",
+        context={
+            "progress_completed": progress.completed if progress else 0,
+            "progress_total": progress.total if progress else 0,
+        },
+    )
 
 
 @router.post("/partials/refresh-trigger", response_class=HTMLResponse)
