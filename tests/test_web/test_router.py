@@ -523,7 +523,7 @@ class TestActionRunStatusPartial:
     async def test_idle_state_shows_run_button(self, web_client_with_actions: AsyncClient) -> None:
         resp = await web_client_with_actions.get("/partials/action-run-status/test")
         assert resp.status_code == 200
-        assert "/api/actions/test/run" in resp.text
+        assert "/partials/action-run/test" in resp.text
         assert "Running" not in resp.text
 
     async def test_transition_sends_hx_trigger(self, web_client_with_actions: AsyncClient) -> None:

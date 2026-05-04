@@ -16,9 +16,10 @@
 {% else %}
 <div id="action-run-btn-{{ slug }}">
     <button class="btn btn-primary btn-sm gap-1"
-            hx-post="/api/actions/{{ slug }}/run"
-            hx-swap="none"
-            hx-on::after-request="if(event.detail.successful) { showToast('Action triggered', 'success'); htmx.ajax('GET', '/partials/action-run-status/{{ slug }}', {target: '#action-run-btn-{{ slug }}', swap: 'outerHTML'}); } else { showToast(event.detail.xhr?.status === 409 ? 'Action is already running' : 'Failed to trigger action', 'error'); }">
+            hx-post="/partials/action-run/{{ slug }}"
+            hx-target="#action-run-btn-{{ slug }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(!event.detail.successful) { showToast(event.detail.xhr?.status === 409 ? 'Action is already running' : 'Failed to trigger action', 'error'); }">
         <i class="fa-solid fa-play text-xs"></i>
         <span class="btn-label">Run</span>
         <span class="htmx-indicator loading loading-spinner loading-xs"></span>
