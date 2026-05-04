@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.database import CheckResultRecord
+from grimoire.database import CheckResultRecord, CheckRunRecord
 from grimoire.models import CheckResult
 from grimoire.observability.metrics import update_check_metrics
 from grimoire.script import create_script_process
@@ -59,6 +59,7 @@ async def run_check(
     branch: str,
     workspace: WorkspaceManager,
     engine: AsyncEngine,
+    run_id: int | None = None,
 ) -> CheckResult:
     """Run a single check script against a repo+branch and persist the result."""
     passed = False
@@ -69,7 +70,7 @@ async def run_check(
         workdir = await workspace.reset_workdir(repo.full_name, branch)
     except Exception as exc:
         output = f"Workspace setup failed: {exc}"
-        return await _persist_result(check, repo, branch, passed, output, engine)
+        return await _persist_result(check, repo, branch, passed, output, engine, run_id)
 
     env = {**os.environ, **workspace.get_env()}
 
@@ -128,7 +129,7 @@ async def run_check(
     duration = time.monotonic() - start_time
     update_check_metrics(check.slug, repo.full_name, branch, passed, duration)
 
-    return await _persist_result(check, repo, branch, passed, output, engine)
+    return await _persist_result(check, repo, branch, passed, output, engine, run_id)
 
 
 async def _persist_result(
@@ -138,6 +139,7 @@ async def _persist_result(
     passed: bool,
     output: str,
     engine: AsyncEngine,
+    run_id: int | None = None,
 ) -> CheckResult:
     """Create a CheckResult, persist it to the database, and return it."""
     now = datetime.now(timezone.utc)
@@ -152,6 +154,7 @@ async def _persist_result(
     )
 
     record = CheckResultRecord(
+        run_id=run_id,
         check_slug=check.slug,
         check_name=check.name,
         repo_full_name=repo.full_name,
@@ -173,8 +176,26 @@ async def run_check_for_all_targets(
     workspace: WorkspaceManager,
     engine: AsyncEngine,
     specific_repo: str | None = None,
+    triggered_by: str = "manual",
 ) -> list[CheckResult]:
     """Resolve targets and run the check for every repo × branch combination."""
+    now = datetime.now(timezone.utc)
+
+    # Create a run record to group all results
+    run_record = CheckRunRecord(
+        check_slug=check.slug,
+        check_name=check.name,
+        triggered_by=triggered_by,
+        status="running",
+        started_at=now,
+    )
+    async with AsyncSession(engine) as session:
+        session.add(run_record)
+        await session.commit()
+        await session.refresh(run_record)
+
+    run_id: int = run_record.id  # type: ignore[assignment]
+
     progress = CheckProgress()
     _running_checks[check.slug] = progress
     try:
@@ -196,7 +217,7 @@ async def run_check_for_all_targets(
 
         async def _run(repo: TrackedRepository, branch: str) -> CheckResult:
             async with sem:
-                result = await run_check(check, repo, branch, workspace, engine)
+                result = await run_check(check, repo, branch, workspace, engine, run_id)
                 progress.completed += 1
                 return result
 
@@ -205,8 +226,19 @@ async def run_check_for_all_targets(
             tasks.append(asyncio.create_task(_run(repo, branch)))
 
         if not tasks:
-            return []
+            results: list[CheckResult] = []
+        else:
+            results = list(await asyncio.gather(*tasks))
 
-        return list(await asyncio.gather(*tasks))
+        # Mark run as completed
+        async with AsyncSession(engine) as session:
+            record = await session.get(CheckRunRecord, run_id)
+            assert record is not None
+            record.status = "completed"
+            record.finished_at = datetime.now(timezone.utc)
+            session.add(record)
+            await session.commit()
+
+        return results
     finally:
         _running_checks.pop(check.slug, None)

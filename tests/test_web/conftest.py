@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.app import create_app
 from grimoire.checks.loader import CheckDefinition
-from grimoire.database import CheckResultRecord, create_tables, get_engine
+from grimoire.database import CheckResultRecord, CheckRunRecord, create_tables, get_engine
 from grimoire.github.router import update_cache
 from grimoire.models import (
     IssueDetail,
@@ -182,11 +182,23 @@ async def web_client_with_checks(tmp_path: object) -> AsyncIterator[AsyncClient]
     checks_router._checks.extend([watchdog, operator_check])
     checks_router._engine = engine
 
-    # Insert check results
+    # Insert check run and results
     async with AsyncSession(engine) as session:
+        run = CheckRunRecord(
+            check_slug="watchdog",
+            check_name="Watchdog",
+            triggered_by="manual",
+            status="completed",
+            started_at=datetime(2026, 4, 10, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 4, 10, 0, 1, tzinfo=timezone.utc),
+        )
+        session.add(run)
+        await session.flush()
+
         # Watchdog passed for acme/api
         session.add(
             CheckResultRecord(
+                run_id=run.id,
                 check_slug="watchdog",
                 check_name="Watchdog",
                 repo_full_name="acme/api",
@@ -199,6 +211,7 @@ async def web_client_with_checks(tmp_path: object) -> AsyncIterator[AsyncClient]
         # Watchdog failed for acme/frontend main
         session.add(
             CheckResultRecord(
+                run_id=run.id,
                 check_slug="watchdog",
                 check_name="Watchdog",
                 repo_full_name="acme/frontend",

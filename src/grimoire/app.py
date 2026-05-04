@@ -189,7 +189,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         default_checks = [c for c in checks if c.enabled and not c.schedule]
         for check in default_checks:
             try:
-                await run_check_for_all_targets(check, refreshed_repos, workspace, engine)
+                await run_check_for_all_targets(
+                    check, refreshed_repos, workspace, engine, triggered_by="refresh"
+                )
             except Exception:
                 logger.exception("Default-schedule check '%s' failed", check.slug)
 

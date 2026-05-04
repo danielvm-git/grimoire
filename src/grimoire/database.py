@@ -20,12 +20,27 @@ def _utcnow() -> datetime:
 # ---------------------------------------------------------------------------
 
 
+class CheckRunRecord(SQLModel, table=True):
+    """Metadata for a complete check run (one execution across all targets)."""
+
+    __tablename__ = "check_run"  # type: ignore[assignment]
+
+    id: int | None = Field(default=None, primary_key=True)
+    check_slug: str = Field(index=True)
+    check_name: str
+    triggered_by: str  # "manual" | "cron" | "refresh"
+    status: str = "running"  # "running" | "completed"
+    started_at: datetime = Field(default_factory=_utcnow)
+    finished_at: Optional[datetime] = None
+
+
 class CheckResultRecord(SQLModel, table=True):
     """Persistent record of a single check execution."""
 
     __tablename__ = "check_result"  # type: ignore[assignment]
 
     id: int | None = Field(default=None, primary_key=True)
+    run_id: int | None = Field(default=None, index=True, foreign_key="check_run.id")
     check_slug: str = Field(index=True)
     check_name: str
     repo_full_name: str = Field(index=True)

@@ -788,52 +788,75 @@ async def action_run_partial(request: Request, run_id: int) -> HTMLResponse:
 async def action_results_partial(
     request: Request, slug: str, sort: str = "repo", dir: str = "asc"
 ) -> HTMLResponse:
-    """Return per-action latest results table for inline expansion."""
+    """Return per-action results grouped by run for inline expansion."""
     from grimoire.actions.router import _engine as _actions_engine
 
-    results_list: list[dict[str, Any]] = []
+    runs: list[dict[str, Any]] = []
     if _actions_engine is not None:
-        # Find the latest run for this action and return its per-repo results
-        query = text(
-            "SELECT arrr.id, arrr.repo_full_name, arrr.branch, arrr.passed "
-            "FROM action_run_repo arrr "
-            "JOIN action_run ar ON ar.id = arrr.run_id "
-            "WHERE ar.action_slug = :slug "
-            "AND ar.id = ("
-            "  SELECT id FROM action_run "
-            "  WHERE action_slug = :slug "
-            "  ORDER BY started_at DESC LIMIT 1"
-            ")"
+        # Fetch recent completed runs for this action (limit to last 10)
+        run_query = text(
+            "SELECT id, triggered_by, started_at "
+            "FROM action_run "
+            "WHERE action_slug = :slug AND status = 'completed' "
+            "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_actions_engine) as session:
-            rows = (await session.execute(query, params={"slug": slug})).all()
-        for row in rows:
-            results_list.append(
+            run_rows = (await session.execute(run_query, params={"slug": slug})).all()
+
+        # For each run, fetch its per-repo results
+        result_query = text(
+            "SELECT id, repo_full_name, branch, passed "
+            "FROM action_run_repo WHERE run_id = :run_id "
+            "ORDER BY repo_full_name, branch"
+        )
+        for run_row in run_rows:
+            run_id = run_row[0]
+            async with AsyncSession(_actions_engine) as session:
+                result_rows = (
+                    await session.execute(result_query, params={"run_id": run_id})
+                ).all()
+
+            results_list = [
                 {
-                    "id": row[0],
-                    "repo_full_name": row[1],
-                    "branch": row[2],
-                    "passed": bool(row[3]),
+                    "id": r[0],
+                    "repo_full_name": r[1],
+                    "branch": r[2],
+                    "passed": bool(r[3]),
+                }
+                for r in result_rows
+            ]
+
+            # Sort results within the run
+            sort_keys: dict[str, Any] = {
+                "repo": lambda r: r["repo_full_name"].lower(),
+                "branch": lambda r: r["branch"].lower(),
+                "status": lambda r: 0 if r["passed"] else 1,
+            }
+            key_fn = sort_keys.get(sort, sort_keys["repo"])
+            results_list.sort(key=key_fn, reverse=(dir == "desc"))
+
+            pass_count = sum(1 for r in results_list if r["passed"])
+            fail_count = len(results_list) - pass_count
+            runs.append(
+                {
+                    "run_id": run_id,
+                    "triggered_by": run_row[1],
+                    "started_at": run_row[2],
+                    "pass_count": pass_count,
+                    "fail_count": fail_count,
+                    "results": results_list,
                 }
             )
-
-    # Sort results
-    sort_keys: dict[str, Any] = {
-        "repo": lambda r: r["repo_full_name"].lower(),
-        "branch": lambda r: r["branch"].lower(),
-        "status": lambda r: 0 if r["passed"] else 1,
-    }
-    key_fn = sort_keys.get(sort, sort_keys["repo"])
-    results_list.sort(key=key_fn, reverse=(dir == "desc"))
 
     return templates.TemplateResponse(
         request,
         "partials/action_results.html",
         context={
-            "results": results_list,
+            "runs": runs,
             "slug": slug,
             "sort": sort,
             "dir": dir,
+            "time_ago": _time_ago,
         },
     )
 
@@ -894,7 +917,7 @@ async def check_output_partial(request: Request, result_id: int) -> HTMLResponse
 async def check_results_partial(
     request: Request, slug: str, sort: str = "repo", dir: str = "asc"
 ) -> HTMLResponse:
-    """Return per-check latest results table for inline expansion."""
+    """Return per-check results grouped by run for inline expansion."""
     from grimoire.checks.router import _checks
     from grimoire.checks.router import _engine as _checks_engine
 
@@ -905,53 +928,111 @@ async def check_results_partial(
             severity = c.severity
             break
 
-    results_list: list[dict[str, Any]] = []
+    runs: list[dict[str, Any]] = []
     if _checks_engine is not None:
-        query = text(
-            "SELECT cr.id, cr.check_name, cr.check_slug, cr.repo_full_name, "
-            "cr.branch, cr.passed, cr.timestamp "
-            "FROM check_result cr "
-            "INNER JOIN ("
-            "  SELECT repo_full_name, branch, MAX(timestamp) AS max_ts "
-            "  FROM check_result WHERE check_slug = :slug "
-            "  GROUP BY repo_full_name, branch"
-            ") latest ON cr.repo_full_name = latest.repo_full_name "
-            "AND cr.branch = latest.branch "
-            "AND cr.timestamp = latest.max_ts "
-            "AND cr.check_slug = :slug "
-            "ORDER BY cr.timestamp DESC"
+        # Fetch recent runs for this check (limit to last 10)
+        run_query = text(
+            "SELECT id, triggered_by, started_at "
+            "FROM check_run "
+            "WHERE check_slug = :slug AND status = 'completed' "
+            "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(query, params={"slug": slug})
-            rows = result.all()
-        for row in rows:
-            results_list.append(
+            run_rows = (await session.execute(run_query, params={"slug": slug})).all()
+
+        # For each run, fetch its per-repo results
+        result_query = text(
+            "SELECT id, repo_full_name, branch, passed, timestamp "
+            "FROM check_result WHERE run_id = :run_id "
+            "ORDER BY repo_full_name, branch"
+        )
+        for run_row in run_rows:
+            run_id = run_row[0]
+            async with AsyncSession(_checks_engine) as session:
+                result_rows = (
+                    await session.execute(result_query, params={"run_id": run_id})
+                ).all()
+
+            results_list = [
                 {
-                    "id": row[0],
-                    "check_name": row[1],
-                    "check_slug": row[2],
-                    "repo_full_name": row[3],
-                    "branch": row[4],
-                    "passed": bool(row[5]),
-                    "timestamp": row[6],
+                    "id": r[0],
+                    "repo_full_name": r[1],
+                    "branch": r[2],
+                    "passed": bool(r[3]),
+                    "timestamp": r[4],
+                }
+                for r in result_rows
+            ]
+
+            # Sort results within the run
+            sort_keys: dict[str, Any] = {
+                "repo": lambda r: r["repo_full_name"].lower(),
+                "branch": lambda r: r["branch"].lower(),
+                "status": lambda r: 0 if r["passed"] else 1,
+                "time": lambda r: r["timestamp"] or "",
+            }
+            key_fn = sort_keys.get(sort, sort_keys["repo"])
+            results_list.sort(key=key_fn, reverse=(dir == "desc"))
+
+            pass_count = sum(1 for r in results_list if r["passed"])
+            fail_count = len(results_list) - pass_count
+            runs.append(
+                {
+                    "run_id": run_id,
+                    "triggered_by": run_row[1],
+                    "started_at": run_row[2],
+                    "pass_count": pass_count,
+                    "fail_count": fail_count,
+                    "results": results_list,
                 }
             )
 
-    # Sort results
-    sort_keys: dict[str, Any] = {
-        "repo": lambda r: r["repo_full_name"].lower(),
-        "branch": lambda r: r["branch"].lower(),
-        "status": lambda r: 0 if r["passed"] else 1,
-        "time": lambda r: r["timestamp"] or "",
-    }
-    key_fn = sort_keys.get(sort, sort_keys["repo"])
-    results_list.sort(key=key_fn, reverse=(dir == "desc"))
+        # Fallback: if no runs found, check for orphan results (pre-migration data)
+        if not runs:
+            orphan_query = text(
+                "SELECT cr.id, cr.repo_full_name, cr.branch, cr.passed, cr.timestamp "
+                "FROM check_result cr "
+                "INNER JOIN ("
+                "  SELECT repo_full_name, branch, MAX(timestamp) AS max_ts "
+                "  FROM check_result WHERE check_slug = :slug "
+                "  GROUP BY repo_full_name, branch"
+                ") latest ON cr.repo_full_name = latest.repo_full_name "
+                "AND cr.branch = latest.branch "
+                "AND cr.timestamp = latest.max_ts "
+                "AND cr.check_slug = :slug "
+                "ORDER BY cr.timestamp DESC"
+            )
+            async with AsyncSession(_checks_engine) as session:
+                orphan_rows = (await session.execute(orphan_query, params={"slug": slug})).all()
+            if orphan_rows:
+                results_list = [
+                    {
+                        "id": r[0],
+                        "repo_full_name": r[1],
+                        "branch": r[2],
+                        "passed": bool(r[3]),
+                        "timestamp": r[4],
+                    }
+                    for r in orphan_rows
+                ]
+                pass_count = sum(1 for r in results_list if r["passed"])
+                fail_count = len(results_list) - pass_count
+                runs.append(
+                    {
+                        "run_id": None,
+                        "triggered_by": "unknown",
+                        "started_at": results_list[0]["timestamp"] if results_list else None,
+                        "pass_count": pass_count,
+                        "fail_count": fail_count,
+                        "results": results_list,
+                    }
+                )
 
     return templates.TemplateResponse(
         request,
         "partials/check_results.html",
         context={
-            "results": results_list,
+            "runs": runs,
             "slug": slug,
             "severity": severity,
             "sort": sort,

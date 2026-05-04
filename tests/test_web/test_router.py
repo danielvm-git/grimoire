@@ -295,10 +295,10 @@ class TestActionResultsPartial:
         assert "/partials/action-output/" in resp.text
         assert "Output" in resp.text
 
-    async def test_sortable_headers(self, web_client_with_actions: AsyncClient) -> None:
-        resp = await web_client_with_actions.get("/partials/action-results/test?sort=repo&dir=asc")
-        assert "hx-get" in resp.text
-        assert "/partials/action-results/test" in resp.text
+    async def test_shows_run_grouping(self, web_client_with_actions: AsyncClient) -> None:
+        resp = await web_client_with_actions.get("/partials/action-results/test")
+        assert "<details" in resp.text
+        assert "manual" in resp.text
 
 
 class TestActionOutputPartial:
