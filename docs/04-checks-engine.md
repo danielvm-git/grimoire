@@ -215,6 +215,8 @@ See Module 7 (`docker-entrypoint.sh`) for implementation details.
 |--------|------|-------------|
 | `GET` | `/api/checks` | List all check definitions + enabled status |
 | `GET` | `/api/checks/{slug}/results` | Latest results for a check, grouped by repo+branch |
+| `GET` | `/api/checks/{slug}/runs` | List run history (reverse chronological) |
+| `GET` | `/api/checks/{slug}/runs/{run_id}` | Get a specific run with per-repo results |
 | `GET` | `/api/checks/{slug}/status` | Check if currently running: `{"slug": ..., "running": bool}` |
 | `POST` | `/api/checks/{slug}/run` | Trigger a check run. Optional query: `?repo=owner/repo` to target a single repo |
 | `POST` | `/api/checks/{slug}/toggle` | Toggle check enabled/disabled |
@@ -238,11 +240,32 @@ class CheckResultResponse(BaseModel):
     output: str
     timestamp: datetime
 
-class CheckRunResponse(BaseModel):
+class CheckRepoResultResponse(BaseModel):
+    repo_full_name: str
+    branch: str
+    passed: bool
+    output: str
+
+class CheckRunSummary(BaseModel):
+    id: int
+    check_slug: str
     check_name: str
-    results: list[CheckResultResponse]
+    triggered_by: str
+    status: str
     started_at: datetime
-    finished_at: datetime
+    finished_at: datetime | None
+    total_repos: int
+    passed_repos: int
+
+class CheckRunDetail(BaseModel):
+    id: int
+    check_slug: str
+    check_name: str
+    triggered_by: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    results: list[CheckRepoResultResponse]
 ```
 
 ## Acceptance Criteria

@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.checks.engine import is_check_running, run_check_for_all_targets
-from grimoire.database import CheckToggleRecord
+from grimoire.database import CheckResultRecord, CheckRunRecord, CheckToggleRecord
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,34 @@ class CheckResultResponse(BaseModel):
     timestamp: datetime
 
 
-class CheckRunResponse(BaseModel):
+class CheckRepoResultResponse(BaseModel):
+    repo_full_name: str
+    branch: str
+    passed: bool
+    output: str
+
+
+class CheckRunSummary(BaseModel):
+    id: int
     check_slug: str
-    results: list[CheckResultResponse]
+    check_name: str
+    triggered_by: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    total_repos: int
+    passed_repos: int
+
+
+class CheckRunDetail(BaseModel):
+    id: int
+    check_slug: str
+    check_name: str
+    triggered_by: str
+    status: str
+    started_at: datetime
+    finished_at: datetime | None
+    results: list[CheckRepoResultResponse]
 
 
 # ---------------------------------------------------------------------------
@@ -145,15 +171,90 @@ async def get_check_results(slug: str) -> list[CheckResultResponse]:
     ]
 
 
-@router.post("/{slug}/run", response_model=CheckRunResponse)
+@router.get("/{slug}/runs", response_model=list[CheckRunSummary])
+async def list_check_runs(slug: str) -> list[CheckRunSummary]:
+    """List run history for a check (reverse chronological)."""
+    _find_check(slug)
+    assert _engine is not None
+
+    async with AsyncSession(_engine) as session:
+        stmt = (
+            select(CheckRunRecord)
+            .where(CheckRunRecord.check_slug == slug)
+            .order_by(CheckRunRecord.started_at.desc())  # type: ignore[union-attr]
+        )
+        runs = (await session.exec(stmt)).all()
+
+        summaries: list[CheckRunSummary] = []
+        for run in runs:
+            repo_stmt = select(CheckResultRecord).where(CheckResultRecord.run_id == run.id)
+            repo_results = (await session.exec(repo_stmt)).all()
+            total = len(repo_results)
+            passed = sum(1 for r in repo_results if r.passed)
+            summaries.append(
+                CheckRunSummary(
+                    id=run.id,  # type: ignore[arg-type]
+                    check_slug=run.check_slug,
+                    check_name=run.check_name,
+                    triggered_by=run.triggered_by,
+                    status=run.status,
+                    started_at=run.started_at,
+                    finished_at=run.finished_at,
+                    total_repos=total,
+                    passed_repos=passed,
+                )
+            )
+
+    return summaries
+
+
+@router.get("/{slug}/runs/{run_id}", response_model=CheckRunDetail)
+async def get_check_run(slug: str, run_id: int) -> CheckRunDetail:
+    """Get a specific run with per-repo results."""
+    _find_check(slug)
+    assert _engine is not None
+
+    async with AsyncSession(_engine) as session:
+        stmt = select(CheckRunRecord).where(
+            CheckRunRecord.id == run_id,
+            CheckRunRecord.check_slug == slug,
+        )
+        run = (await session.exec(stmt)).first()
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+        result_stmt = select(CheckResultRecord).where(CheckResultRecord.run_id == run_id)
+        results = (await session.exec(result_stmt)).all()
+
+    return CheckRunDetail(
+        id=run.id,  # type: ignore[arg-type]
+        check_slug=run.check_slug,
+        check_name=run.check_name,
+        triggered_by=run.triggered_by,
+        status=run.status,
+        started_at=run.started_at,
+        finished_at=run.finished_at,
+        results=[
+            CheckRepoResultResponse(
+                repo_full_name=r.repo_full_name,
+                branch=r.branch,
+                passed=r.passed,
+                output=r.output,
+            )
+            for r in results
+        ],
+    )
+
+
+@router.post("/{slug}/run", response_model=CheckRunDetail)
 async def run_check_endpoint(
     slug: str,
     repo: str | None = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
-) -> CheckRunResponse:
+) -> CheckRunDetail:
     """Trigger a check run. Optionally filter to a single repo.
 
-    Returns immediately with an empty results list. The check runs in the
+    Returns immediately with status ``"running"``. The check runs in the
     background — poll ``is_check_running()`` or the run-status partial for
     completion.
     """
@@ -175,8 +276,14 @@ async def run_check_endpoint(
 
     background_tasks.add_task(_run_in_background)
 
-    return CheckRunResponse(
+    return CheckRunDetail(
+        id=0,
         check_slug=slug,
+        check_name=check.name,
+        triggered_by="manual",
+        status="running",
+        started_at=datetime.now(timezone.utc),
+        finished_at=None,
         results=[],
     )
 
