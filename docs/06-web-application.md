@@ -237,14 +237,16 @@ This pattern is shared across all long-running operations:
 - Repository full name (e.g., `lucabello/grimoire`).
 - Link to GitHub: `https://github.com/{owner}/{name}`.
 - Default branch name.
-- Source: "static" or "team: org/team-name".
-- Observed branches list.
+- Observed branches list (plain text, dot-separated, matching stats bar style).
 - Warning banner if any warnings exist.
 
 **2. Compact Stats Bar**
 - Single horizontal row: `(icon) X issues (Y stale) · (icon) X PRs (Y stale) · (icon) N branches · (icon) Last activity: …`
 - Font-awesome icons: `fa-circle-dot` (issues), `fa-code-pull-request` (PRs), `fa-code-branch` (branches), `fa-clock` (last activity).
+- Issues count links to `https://github.com/{owner}/{name}/issues`, PRs count links to `.../pulls`, branches count links to `.../branches`.
+- Stale counts are not linked.
 - Stale counts color-coded with `text-warning` when stale/open ≥ configured threshold.
+- No card/shadow styling — sits flat on the page background.
 - Last activity is right-aligned.
 
 **3. Stale Issues Table**
