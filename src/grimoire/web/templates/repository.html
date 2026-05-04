@@ -15,10 +15,10 @@
 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
     <div>
         <h1 class="text-3xl font-bold">{{ repo_name }}</h1>
-        <div class="flex flex-wrap gap-2 mt-2">
-            <span class="badge badge-primary badge-outline">{{ repo.source }}</span>
+        <div class="flex flex-wrap items-center gap-x-1 text-sm mt-2">
             {% for branch in branches %}
-            <span class="badge badge-ghost gap-1">
+            {% if not loop.first %}<span class="opacity-40 mx-1">·</span>{% endif %}
+            <span class="opacity-70">
                 <i class="fa-solid fa-code-branch" style="font-size:10px"></i>
                 {{ branch }}
             </span>
@@ -49,17 +49,17 @@
 {# ── Compact Stats Bar ─────────────────────────────────────────────── #}
 {% set stale_issues_pct = (stats.stale_issues * 100 / stats.open_issues) if stats.open_issues > 0 else 0 %}
 {% set stale_prs_pct = (stats.stale_pull_requests * 100 / stats.open_pull_requests) if stats.open_pull_requests > 0 else 0 %}
-<div class="bg-base-100 rounded-lg shadow px-5 py-3 mb-6">
+<div class="px-5 py-3 mb-6">
     <div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm font-mono-nums">
         <span class="opacity-70">
-            <i class="fa-solid fa-circle-dot" style="font-size:12px"></i> {{ stats.open_issues }} issues
+            <i class="fa-solid fa-circle-dot" style="font-size:12px"></i> <a href="https://github.com/{{ repo_name }}/issues" target="_blank" rel="noopener" class="hover:underline">{{ stats.open_issues }} issues</a>
             {% if stats.stale_issues %}
             <span class="{% if stale_issues_pct >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">({{ stats.stale_issues }} stale)</span>
             {% endif %}
         </span>
         <span class="opacity-40 mx-1">·</span>
         <span class="opacity-70">
-            <i class="fa-solid fa-code-pull-request" style="font-size:12px"></i> {{ stats.open_pull_requests }} PRs
+            <i class="fa-solid fa-code-pull-request" style="font-size:12px"></i> <a href="https://github.com/{{ repo_name }}/pulls" target="_blank" rel="noopener" class="hover:underline">{{ stats.open_pull_requests }} PRs</a>
             {% if stats.stale_pull_requests %}
             <span class="{% if stale_prs_pct >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">({{ stats.stale_pull_requests }} stale)</span>
             {% endif %}
