@@ -132,7 +132,9 @@ class TestRunCheck:
         assert resp.status_code == 200
         body = resp.json()
         assert body["check_slug"] == "test-check"
-        # Run is now async — results come back empty immediately
+        assert body["check_name"] == "Test Check"
+        assert body["triggered_by"] == "manual"
+        assert body["status"] == "running"
         assert body["results"] == []
 
     async def test_run_check_not_found(self, check_client: AsyncClient) -> None:
@@ -143,7 +145,7 @@ class TestRunCheck:
         resp = await check_client.post("/api/checks/test-check/run?repo=acme/repo")
         assert resp.status_code == 200
         body = resp.json()
-        # Run is now async — results come back empty immediately
+        assert body["status"] == "running"
         assert body["results"] == []
 
     async def test_run_then_get_results(self, check_client: AsyncClient) -> None:
@@ -154,6 +156,50 @@ class TestRunCheck:
         assert len(results) == 1
         assert results[0]["check_slug"] == "test-check"
         assert results[0]["passed"] is True
+
+
+class TestCheckRunHistory:
+    async def test_runs_empty(self, check_client: AsyncClient) -> None:
+        resp = await check_client.get("/api/checks/test-check/runs")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    async def test_runs_after_execution(self, check_client: AsyncClient) -> None:
+        await check_client.post("/api/checks/test-check/run")
+        resp = await check_client.get("/api/checks/test-check/runs")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["check_slug"] == "test-check"
+        assert data[0]["status"] == "completed"
+        assert data[0]["total_repos"] == 1
+        assert data[0]["passed_repos"] == 1
+
+    async def test_runs_not_found(self, check_client: AsyncClient) -> None:
+        resp = await check_client.get("/api/checks/nonexistent/runs")
+        assert resp.status_code == 404
+
+
+class TestCheckRunDetail:
+    async def test_run_detail(self, check_client: AsyncClient) -> None:
+        await check_client.post("/api/checks/test-check/run")
+
+        runs_resp = await check_client.get("/api/checks/test-check/runs")
+        runs = runs_resp.json()
+        assert len(runs) >= 1
+        run_id = runs[0]["id"]
+
+        resp = await check_client.get(f"/api/checks/test-check/runs/{run_id}")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["id"] == run_id
+        assert body["check_slug"] == "test-check"
+        assert len(body["results"]) == 1
+        assert body["results"][0]["passed"] is True
+
+    async def test_run_detail_not_found(self, check_client: AsyncClient) -> None:
+        resp = await check_client.get("/api/checks/test-check/runs/99999")
+        assert resp.status_code == 404
 
 
 class TestCheckStatus:
