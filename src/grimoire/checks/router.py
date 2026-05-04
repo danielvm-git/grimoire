@@ -168,7 +168,9 @@ async def run_check_endpoint(
     engine = _engine
 
     async def _run_in_background() -> None:
-        await run_check_for_all_targets(check, _repos, workspace, engine, specific_repo=repo)
+        await run_check_for_all_targets(
+            check, _repos, workspace, engine, specific_repo=repo, triggered_by="manual"
+        )
         await _update_snapshot_checks()
 
     background_tasks.add_task(_run_in_background)

@@ -44,7 +44,7 @@ def register_checks(
             """Return an async wrapper that ``AsyncIOScheduler`` can invoke."""
 
             async def _job() -> None:
-                await run_check_for_all_targets(c, repos, workspace, engine)
+                await run_check_for_all_targets(c, repos, workspace, engine, triggered_by="cron")
 
             # APScheduler 3 AsyncIOScheduler expects a callable; for sync
             # schedulers fall back to running the coroutine in the loop.
@@ -54,7 +54,7 @@ def register_checks(
             # BackgroundScheduler — wrap in run-until-complete
             def _sync_job() -> None:
                 asyncio.get_event_loop().run_until_complete(
-                    run_check_for_all_targets(c, repos, workspace, engine)
+                    run_check_for_all_targets(c, repos, workspace, engine, triggered_by="cron")
                 )
 
             return _sync_job

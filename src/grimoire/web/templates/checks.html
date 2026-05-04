@@ -140,6 +140,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const target = document.getElementById('check-results-' + expandSlug);
     if (target) {
         htmx.ajax('GET', '/partials/check-results/' + expandSlug, target).then(function() {
+            // Open the first run's details to show results
+            var firstDetails = target.querySelector('details');
+            if (firstDetails) firstDetails.open = true;
             // After results load, auto-expand the specific result's output
             if (resultId) {
                 setTimeout(function() {

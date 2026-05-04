@@ -294,9 +294,9 @@ One action per row in a vertical list. Each row contains:
 
 **Expandable sections** below each row:
 - **Script** — toggle button reveals a collapsible `<pre><code class="language-bash">` block with highlight.js syntax highlighting.
-- **Results** — toggle button loads per-action results inline via HTMX (`GET /partials/action-results/{slug}`), showing repo/branch/status for the latest run. Each result row has an "Output" button that lazy-loads the log via `GET /partials/action-output/{result_id}`.
+- **Results** — toggle button loads per-action results inline via HTMX (`GET /partials/action-results/{slug}`). Results are grouped by **run** (most recent first), each shown as a collapsible `<details>` element displaying: trigger type badge (manual/cron), timestamp, pass/fail summary. Expanding a run reveals the per-repo result table with status icons and per-row output expansion via `GET /partials/action-output/{result_id}`.
 
-The results table mirrors the checks results partial — sortable columns (Repository, Branch, Status) and per-row output expansion.
+Up to 10 recent completed runs are shown.
 
 The "Run" button triggers the action via HTMX and reloads the page after 1.5s:
 
@@ -332,7 +332,7 @@ Disabled checks are visually dimmed (reduced opacity) and show `· disabled` inl
 
 **Expandable sections** below each row:
 - **Script** — toggle button reveals a collapsible `<pre><code class="language-bash">` block with highlight.js syntax highlighting (loaded from CDN on the checks page only).
-- **Results** — toggle button loads per-check results inline via HTMX (`GET /partials/check-results/{slug}`), showing repo/branch/status/output for the latest run of each target.
+- **Results** — toggle button loads per-check results inline via HTMX (`GET /partials/check-results/{slug}`). Results are grouped by **run** (most recent first), each shown as a collapsible `<details>` element displaying: trigger type badge (manual/cron/refresh), timestamp, pass/fail summary. Expanding a run reveals the per-repo result table with status icons and per-row output expansion. Up to 10 recent completed runs are shown.
 
 ```html
 <button hx-post="/api/checks/{slug}/toggle" hx-swap="none" ...>Toggle</button>
@@ -458,10 +458,10 @@ These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 | `GET /partials/dashboard-list?sort=...&dir=...` | List view: compact rows |
 | `GET /partials/dashboard-table?sort=...&dir=...` | Table view: data table |
 | `GET /partials/action-run/{run_id}` | Expanded action run details |
-| `GET /partials/action-results/{slug}?sort=...&dir=...` | Per-action latest results table |
+| `GET /partials/action-results/{slug}?sort=...&dir=...` | Per-action results grouped by run (collapsible) |
 | `GET /partials/action-output/{result_id}` | Expanded action output text |
 | `GET /partials/check-output/{result_id}` | Expanded check output text |
-| `GET /partials/check-results/{slug}` | Per-check latest results table |
+| `GET /partials/check-results/{slug}?sort=...&dir=...` | Per-check results grouped by run (collapsible) |
 | `GET /partials/backlog-items` | Filtered/sorted backlog item list |
 | `GET /partials/refresh-status` | Refresh button (idle/running with progress) |
 | `POST /partials/refresh-trigger` | Starts refresh, returns running-state button |

@@ -119,6 +119,7 @@ async def run_check(
     repo: TrackedRepository,
     branch: str,
     workspace: WorkspaceManager,
+    run_id: int | None = None,
 ) -> CheckResult:
     """
     1. Call workspace.reset_workdir(full_name, branch) to ensure clean state.
@@ -126,19 +127,22 @@ async def run_check(
     3. Set env vars (GH_TOKEN, GITHUB_TOKEN, etc.) from workspace.get_env().
     4. Capture stdout+stderr (combined).
     5. Return CheckResult (passed = exit code 0).
-    6. Store result in database (CheckResultRecord).
+    6. Store result in database (CheckResultRecord linked to run_id).
     """
 
 async def run_check_for_all_targets(
     check: CheckDefinition,
     repos: list[TrackedRepository],
     workspace: WorkspaceManager,
+    triggered_by: str = "manual",
 ) -> list[CheckResult]:
     """
-    1. Resolve targets.
-    2. For each target repo × each observed branch, run the check.
-    3. Execute concurrently (bounded by semaphore).
-    4. Return all results.
+    1. Create a CheckRunRecord (triggered_by = "manual" | "cron" | "refresh").
+    2. Resolve targets.
+    3. For each target repo × each observed branch, run the check (linked to run).
+    4. Execute concurrently (bounded by semaphore).
+    5. Mark CheckRunRecord as completed.
+    6. Return all results.
     """
 ```
 
@@ -151,6 +155,34 @@ async def run_check_for_all_targets(
 - Apply a timeout (configurable, default 5 minutes per check per repo).
 - On timeout, kill the process and record as failure with "Timed out" in output.
 - **Output size cap:** Store at most 64KB of output. If exceeded, keep the last 64KB and prepend `"[output truncated — showing last 64KB]\n"`.
+
+### Database records
+
+**`CheckRunRecord`** (table: `check_run`) — groups all results from a single execution:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | int PK | Auto-increment |
+| `check_slug` | str (indexed) | Which check was run |
+| `check_name` | str | Human-readable name |
+| `triggered_by` | str | `"manual"` / `"cron"` / `"refresh"` |
+| `status` | str | `"running"` / `"completed"` |
+| `started_at` | datetime | When the run started |
+| `finished_at` | datetime (nullable) | When it completed |
+
+**`CheckResultRecord`** (table: `check_result`) — one row per repo×branch within a run:
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | int PK | Auto-increment |
+| `run_id` | int FK (nullable, indexed) | Links to `check_run.id` |
+| `check_slug` | str (indexed) | Which check |
+| `check_name` | str | Human-readable name |
+| `repo_full_name` | str (indexed) | Target repository |
+| `branch` | str | Branch checked |
+| `passed` | bool | Exit code 0 = True |
+| `output` | str | stdout + stderr |
+| `timestamp` | datetime | When this result was recorded |
 
 ## 4.5 — External Tool Dependencies
 
