@@ -291,7 +291,7 @@ class GitHubClient:
 
                 return response.json()
 
-            except (httpx.TimeoutException, httpx.ConnectError) as exc:
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
                 last_exc = exc
                 if attempt < _MAX_RETRIES - 1:
                     await asyncio.sleep(self._backoff_factors[attempt])

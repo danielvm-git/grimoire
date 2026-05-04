@@ -40,6 +40,25 @@ _CONCURRENCY_LIMIT = 10
 AGE_BUCKET_THRESHOLDS = [7, 14, 30, 60, 90, 180, 365]
 
 
+def _brief_error(exc: Exception) -> str:
+    """Return a concise, user-friendly description of a fetch error."""
+    import httpx
+
+    msg = str(exc)
+    if isinstance(exc, httpx.RemoteProtocolError) or "disconnected" in msg.lower():
+        return "GitHub disconnected — likely a transient issue. Will retry on next refresh."
+    if isinstance(exc, httpx.TimeoutException) or "timeout" in msg.lower():
+        return "Request timed out — GitHub may be slow. Will retry on next refresh."
+    if "rate limit" in msg.lower():
+        return "GitHub API rate limit exceeded. Will resume when the limit resets."
+    if isinstance(exc, httpx.ConnectError):
+        return "Connection failed — check network connectivity."
+    # Generic fallback: truncate long messages
+    if len(msg) > 120:
+        msg = msg[:117] + "…"
+    return msg
+
+
 # ---------------------------------------------------------------------------
 # Refresh progress tracking
 # ---------------------------------------------------------------------------
@@ -253,7 +272,7 @@ async def fetch_repository_stats(
                     )
             issues_by_age = _compute_age_buckets(issue_activity_dates, now)
     except Exception as exc:
-        warnings.append(f"Failed to fetch issues: {exc}")
+        warnings.append(f"Could not fetch issues for {repo.full_name}: {_brief_error(exc)}")
 
     # -- Pull Requests -------------------------------------------------------
     open_prs = previous.open_pull_requests if previous else 0
@@ -285,7 +304,7 @@ async def fetch_repository_stats(
                     )
             prs_by_age = _compute_age_buckets(pr_activity_dates, now)
     except Exception as exc:
-        warnings.append(f"Failed to fetch pull requests: {exc}")
+        warnings.append(f"Could not fetch PRs for {repo.full_name}: {_brief_error(exc)}")
 
     # -- Workflows -----------------------------------------------------------
     workflow_statuses: list[WorkflowStatus] = list(previous.workflows) if previous else []
@@ -332,10 +351,10 @@ async def fetch_repository_stats(
                         pass  # Non-existing branches from config are silently ignored
                     except Exception as exc:
                         warnings.append(
-                            f"Failed to fetch runs for workflow {wf_name} on {branch}: {exc}"
+                            f"Could not fetch runs for workflow '{wf_name}' on {branch}: {_brief_error(exc)}"
                         )
     except Exception as exc:
-        warnings.append(f"Failed to fetch workflows: {exc}")
+        warnings.append(f"Could not fetch workflows for {repo.full_name}: {_brief_error(exc)}")
 
     # -- Branches & last commit ----------------------------------------------
     last_commit_at: datetime | None = previous.last_commit_at if previous else None
@@ -359,7 +378,7 @@ async def fetch_repository_stats(
         except NotFoundError:
             pass  # Non-existing branches from config are silently ignored
         except Exception as exc:
-            warnings.append(f"Failed to fetch branch {branch} info: {exc}")
+            warnings.append(f"Could not fetch branch '{branch}' info: {_brief_error(exc)}")
 
     if branch_commit_dates:
         last_commit_at = max(branch_commit_dates)
@@ -370,7 +389,7 @@ async def fetch_repository_stats(
         if all_branches is not None:
             total_branches = len(all_branches)
     except Exception as exc:
-        warnings.append(f"Failed to fetch branches: {exc}")
+        warnings.append(f"Could not fetch branches for {repo.full_name}: {_brief_error(exc)}")
 
     return RepositoryStats(
         full_name=repo.full_name,

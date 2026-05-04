@@ -48,7 +48,45 @@ def create_app() -> FastAPI:
     return app
 ```
 
-## 6.2 — Dashboard Page
+## 6.2 — Loading Page
+
+**Route:** `GET /` (when cache is empty and a refresh is running)
+**Template:** `templates/loading.html`
+
+When Grimoire starts for the first time (no DB cache), the initial data refresh runs as a background task so the web server starts immediately. The dashboard route detects this "initial loading" state (no repos in cache AND `is_refresh_running()` returns `True`) and renders a loading page instead of the normal dashboard.
+
+### Layout
+
+- Centered card with the Grimoire crystal ball icon (🔮)
+- "Fetching repository data…" heading
+- Explanatory text: "Grimoire is loading data from GitHub. This may take a moment on first startup."
+- DaisyUI `<progress>` bar showing `completed / total` (indeterminate when `total == 0`)
+- Text: "X of Y repositories fetched"
+
+### HTMX Polling
+
+The loading page contains a container that polls `GET /partials/loading-status` every 2 seconds. The partial:
+
+- Returns updated progress HTML while the refresh is running
+- Returns an empty body with `HX-Redirect: /` header when the refresh completes, causing a full page reload to the now-populated dashboard
+
+### Non-blocking Startup (`app.py`)
+
+When the DB cache is stale or empty, `lifespan()` launches `refresh_all_stats()` as an `asyncio.create_task()` instead of awaiting it. This allows the server to start serving immediately:
+
+- **Fresh cache**: Load synchronously (instant), no background task
+- **Stale cache**: Serve stale data immediately, background refresh updates it
+- **No cache**: Show loading page, background refresh populates data
+
+The background task calls the same `_do_refresh()` callback used by the scheduler and manual refresh button, then runs `workspace.setup()` with the refreshed repos.
+
+### Loading Status Endpoint
+
+**Route:** `GET /partials/loading-status`
+
+Returns the `partials/loading_progress.html` template with current `RefreshProgress` data. When the refresh is no longer running, returns `HX-Redirect: /` to redirect the browser to the dashboard.
+
+## 6.3 — Dashboard Page
 
 **Route:** `GET /`
 **Template:** `templates/dashboard.html`
@@ -188,7 +226,7 @@ This pattern is shared across all long-running operations:
 - **Checks:** `CheckProgress` in `checks/engine.py`, polled via `GET /partials/check-run-status/{slug}`
 - **Actions:** `ActionProgress` in `actions/engine.py`, polled via `GET /partials/action-run-status/{slug}`
 
-## 6.3 — Repository Detail Page
+## 6.4 — Repository Detail Page
 
 **Route:** `GET /repo/{owner}/{name}`
 **Template:** `templates/repository.html`
@@ -230,7 +268,7 @@ This pattern is shared across all long-running operations:
 - Branch labels shown only when multiple branches are tracked.
 - Check rows include an "Output" button (HTMX `hx-get` to fetch full output on demand).
 
-## 6.4 — Actions Page
+## 6.5 — Actions Page
 
 **Route:** `GET /actions`
 **Template:** `templates/actions.html`
@@ -268,7 +306,7 @@ The "Run" button triggers the action via HTMX and reloads the page after 1.5s:
 </button>
 ```
 
-## 6.5 — Checks Page
+## 6.6 — Checks Page
 
 **Route:** `GET /checks`
 **Template:** `templates/checks.html`
@@ -300,7 +338,7 @@ Disabled checks are visually dimmed (reduced opacity) and show `· disabled` inl
 <button hx-get="/partials/check-results/{slug}" hx-target="#check-results-{slug}" ...>Results</button>
 ```
 
-## 6.6 — Backlog Page
+## 6.7 — Backlog Page
 
 **Route:** `GET /backlog`
 **Template:** `templates/backlog.html`
@@ -388,7 +426,7 @@ Individual items can be copied via the per-row clipboard button.
 | Stale PR | `PullRequestDetail` from cache | ✅ individual items |
 | Stale issue | `IssueDetail` from cache | ✅ individual items |
 
-## 6.7 — Styling
+## 6.8 — Styling
 
 **Framework:** Tailwind CSS (via CDN for development, standalone CLI for production build) + DaisyUI for component classes + FontAwesome 6 for status icons (via CDN).
 
@@ -408,7 +446,7 @@ Individual items can be copied via the per-row clipboard button.
 - `actions.html` extends `base.html`.
 - `checks.html` extends `base.html`.
 
-## 6.8 — HTMX Partial Endpoints
+## 6.9 — HTMX Partial Endpoints
 
 These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 
@@ -428,8 +466,9 @@ These endpoints return HTML fragments (not full pages) for HTMX to swap in:
 | `GET /partials/check-run-status/{slug}` | Check run button with progress counter |
 | `POST /partials/check-run/{slug}` | Starts check run, returns running-state button |
 | `GET /partials/action-run-status/{slug}` | Action run button with progress counter |
+| `GET /partials/loading-status` | Loading progress bar; redirects (`HX-Redirect: /`) when done |
 
-## 6.9 — Empty States
+## 6.10 — Empty States
 
 Every section must render a helpful message when there's no data:
 
