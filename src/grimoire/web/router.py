@@ -1195,7 +1195,9 @@ async def check_run_trigger(
     assert checks_engine is not None
 
     async def _run_in_background() -> None:
-        await run_check_for_all_targets(check, checks_repos, checks_workspace, checks_engine)
+        await run_check_for_all_targets(
+            check, checks_repos, checks_workspace, checks_engine, triggered_by="manual"
+        )
         await _update_snapshot_checks()
 
     background_tasks.add_task(_run_in_background)
@@ -1203,6 +1205,53 @@ async def check_run_trigger(
     return templates.TemplateResponse(
         request,
         "partials/check_run_button.html",
+        context={"slug": slug, "running": True, "progress_completed": 0, "progress_total": 0},
+    )
+
+
+@router.post("/partials/action-run/{slug}", response_class=HTMLResponse)
+async def action_run_trigger(
+    request: Request, slug: str, background_tasks: BackgroundTasks
+) -> HTMLResponse:
+    """Trigger an action run and return the 'Running...' button partial.
+
+    The action is started as a background task — the response is immediate.
+    The returned partial includes polling to detect completion.
+    """
+    from grimoire.actions.engine import ActionConflictError, is_action_running, run_action
+    from grimoire.actions.router import _actions
+    from grimoire.actions.router import _engine as actions_engine
+    from grimoire.actions.router import _repos as actions_repos
+    from grimoire.actions.router import _workspace as actions_workspace
+
+    # Find the action definition
+    action = None
+    for a in _actions:
+        if a.slug == slug:
+            action = a
+            break
+    if action is None:
+        raise HTTPException(status_code=404, detail=f"Action '{slug}' not found")
+
+    if is_action_running(slug):
+        raise HTTPException(status_code=409, detail="Action is already running")
+
+    assert actions_workspace is not None
+    assert actions_engine is not None
+
+    async def _run_in_background() -> None:
+        try:
+            await run_action(
+                action, actions_repos, actions_workspace, actions_engine, triggered_by="manual"
+            )
+        except ActionConflictError:
+            pass
+
+    background_tasks.add_task(_run_in_background)
+
+    return templates.TemplateResponse(
+        request,
+        "partials/action_run_button.html",
         context={"slug": slug, "running": True, "progress_completed": 0, "progress_total": 0},
     )
 

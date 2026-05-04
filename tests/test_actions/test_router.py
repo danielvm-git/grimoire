@@ -7,12 +7,11 @@ from typing import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.actions.loader import ActionDefinition
 from grimoire.actions.router import router, set_actions_state
 from grimoire.app import create_app
-from grimoire.database import ActionRunRecord, create_tables, get_engine
+from grimoire.database import create_tables, get_engine
 from grimoire.models import TrackedRepository
 from grimoire.targeting import TargetSpec
 
@@ -120,9 +119,8 @@ class TestRunAction:
         assert resp.status_code == 200
         body = resp.json()
         assert body["action_slug"] == "test-action"
-        assert body["status"] == "completed"
-        assert len(body["results"]) == 1
-        assert body["results"][0]["passed"] is True
+        assert body["status"] == "running"
+        assert body["results"] == []
 
     async def test_run_action_not_found(self, action_client: AsyncClient) -> None:
         resp = await action_client.post("/api/actions/nonexistent/run")
@@ -133,27 +131,22 @@ class TestRunAction:
         action_client_with_engine: tuple[AsyncClient, object],
     ) -> None:
         client, engine = action_client_with_engine
-        # Insert a running record to trigger conflict
-        async with AsyncSession(engine) as session:  # type: ignore[arg-type]
-            session.add(
-                ActionRunRecord(
-                    action_slug="test-action",
-                    action_name="Test Action",
-                    triggered_by="manual",
-                    status="running",
-                )
-            )
-            await session.commit()
+        # Use in-memory tracker to simulate a running action
+        from grimoire.actions.engine import ActionProgress, _running_actions
 
-        resp = await client.post("/api/actions/test-action/run")
-        assert resp.status_code == 409
-        assert "already running" in resp.json()["detail"]
+        _running_actions["test-action"] = ActionProgress(completed=0, total=1)
+        try:
+            resp = await client.post("/api/actions/test-action/run")
+            assert resp.status_code == 409
+            assert "already running" in resp.json()["detail"]
+        finally:
+            _running_actions.pop("test-action", None)
 
     async def test_run_action_with_repo_filter(self, action_client: AsyncClient) -> None:
         resp = await action_client.post("/api/actions/test-action/run?repo=acme/repo")
         assert resp.status_code == 200
         body = resp.json()
-        assert len(body["results"]) == 1
+        assert body["status"] == "running"
 
 
 class TestRunHistory:
@@ -180,9 +173,14 @@ class TestRunHistory:
 
 class TestRunDetail:
     async def test_run_detail(self, action_client: AsyncClient) -> None:
-        # First, trigger a run
-        run_resp = await action_client.post("/api/actions/test-action/run")
-        run_id = run_resp.json()["id"]
+        # Trigger a run (background task runs before response completes in test)
+        await action_client.post("/api/actions/test-action/run")
+
+        # Fetch run history to get the actual run ID
+        runs_resp = await action_client.get("/api/actions/test-action/runs")
+        runs = runs_resp.json()
+        assert len(runs) >= 1
+        run_id = runs[0]["id"]
 
         resp = await action_client.get(f"/api/actions/test-action/runs/{run_id}")
         assert resp.status_code == 200

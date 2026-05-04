@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -205,8 +205,17 @@ async def get_action_run(slug: str, run_id: int) -> ActionRunDetail:
 
 
 @router.post("/{slug}/run", response_model=ActionRunDetail)
-async def run_action_endpoint(slug: str, repo: str | None = None) -> ActionRunDetail:
-    """Trigger an action. Returns 409 if already running."""
+async def run_action_endpoint(
+    slug: str,
+    repo: str | None = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+) -> ActionRunDetail:
+    """Trigger an action. Returns immediately while the action runs in the background.
+
+    Returns 409 if already running.
+    """
+    from grimoire.actions.engine import is_action_running
+
     action = _find_action(slug)
     assert _workspace is not None
     assert _engine is not None
@@ -217,45 +226,31 @@ async def run_action_endpoint(slug: str, repo: str | None = None) -> ActionRunDe
             detail="repo parameter is not valid for global actions (no targets)",
         )
 
-    try:
-        result = await run_action(
-            action,
-            _repos,
-            _workspace,
-            _engine,
-            triggered_by="manual",
-            specific_repo=repo,
-        )
-    except ActionConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if is_action_running(slug):
+        raise HTTPException(status_code=409, detail="Action is already running")
 
-    # Fetch the run record to get the DB id
-    async with AsyncSession(_engine) as session:
-        stmt = (
-            select(ActionRunRecord)
-            .where(ActionRunRecord.action_slug == slug)
-            .order_by(ActionRunRecord.started_at.desc())  # type: ignore[union-attr]
-        )
-        run = (await session.exec(stmt)).first()
-        assert run is not None
+    workspace = _workspace
+    engine = _engine
+
+    async def _run_in_background() -> None:
+        try:
+            await run_action(
+                action, _repos, workspace, engine, triggered_by="manual", specific_repo=repo
+            )
+        except ActionConflictError:
+            pass  # Another trigger won the race
+
+    background_tasks.add_task(_run_in_background)
 
     return ActionRunDetail(
-        id=run.id,  # type: ignore[arg-type]
-        action_slug=result.action_slug,
-        action_name=result.action_name,
-        triggered_by=result.triggered_by,
-        status=run.status,
-        started_at=result.started_at,
-        finished_at=result.finished_at,
-        results=[
-            ActionRepoResultResponse(
-                repo_full_name=r.repo_full_name,
-                branch=r.branch,
-                passed=r.passed,
-                output=r.output,
-            )
-            for r in result.results
-        ],
+        id=0,
+        action_slug=slug,
+        action_name=action.name,
+        triggered_by="manual",
+        status="running",
+        started_at=datetime.now(),
+        finished_at=None,
+        results=[],
     )
 
 
