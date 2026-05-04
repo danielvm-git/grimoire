@@ -19,7 +19,7 @@
             <span class="badge badge-primary badge-outline">{{ repo.source }}</span>
             {% for branch in branches %}
             <span class="badge badge-ghost gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+                <i class="fa-solid fa-code-branch" style="font-size:10px"></i>
                 {{ branch }}
             </span>
             {% endfor %}
@@ -39,53 +39,36 @@
 </div>
 {% endif %}
 
-{# ── Stats Grid ────────────────────────────────────────────────────── #}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <div class="stat bg-base-100 rounded-box shadow">
-        <div class="stat-title">Open Issues</div>
-        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.open_issues == 0 else ('text-warning' if stats.open_issues < 6 else 'text-error') }}">{{ stats.open_issues }}</div>
-    </div>
-    <div class="stat bg-base-100 rounded-box shadow">
-        <div class="stat-title">Stale Issues</div>
-        {% set stale_issues_pct = (stats.stale_issues * 100 / stats.open_issues) if stats.open_issues > 0 else 0 %}
-        <div class="stat-value font-mono-nums text-2xl {{ 'text-warning' if stale_issues_pct >= staleness.problematic_stale_issues_pct else 'text-success' }}">{{ stats.stale_issues }}</div>
-        {% if stats.open_issues > 0 %}
-        <div class="stat-desc">{{ '%.0f' | format(stale_issues_pct) }}% of open</div>
-        {% endif %}
-    </div>
-    <div class="stat bg-base-100 rounded-box shadow">
-        <div class="stat-title">Open PRs</div>
-        <div class="stat-value font-mono-nums text-2xl {{ 'text-success' if stats.open_pull_requests == 0 else ('text-warning' if stats.open_pull_requests < 6 else 'text-error') }}">{{ stats.open_pull_requests }}</div>
-    </div>
-    <div class="stat bg-base-100 rounded-box shadow">
-        <div class="stat-title">Stale PRs</div>
-        {% set stale_prs_pct = (stats.stale_pull_requests * 100 / stats.open_pull_requests) if stats.open_pull_requests > 0 else 0 %}
-        <div class="stat-value font-mono-nums text-2xl {{ 'text-warning' if stale_prs_pct >= staleness.problematic_stale_prs_pct else 'text-success' }}">{{ stats.stale_pull_requests }}</div>
-        {% if stats.open_pull_requests > 0 %}
-        <div class="stat-desc">{{ '%.0f' | format(stale_prs_pct) }}% of open</div>
-        {% endif %}
-    </div>
-</div>
-
-{# ── Activity & Branches ──────────────────────────────────────────── #}
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <div class="stat bg-base-100 rounded-box shadow">
-        <div class="stat-title">Last Activity</div>
-        {% if stats.last_commit_at %}
-        <div class="stat-value font-mono-nums text-2xl">{{ time_ago(stats.last_commit_at) }}</div>
-        <div class="stat-desc">{{ stats.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}</div>
-        {% else %}
-        <div class="stat-value text-2xl opacity-50">—</div>
-        {% endif %}
-    </div>
-    <div class="stat bg-base-100 rounded-box shadow">
-        <div class="stat-title">Branches</div>
-        <div class="stat-value font-mono-nums text-2xl">{{ stats.total_branches }}</div>
-        {% if stats.stale_branches %}
-        <div class="stat-desc">
-            <a href="https://github.com/{{ repo_name }}/branches/stale" target="_blank" rel="noopener" class="link link-hover text-warning">{{ stats.stale_branches }} stale</a>
-        </div>
-        {% endif %}
+{# ── Compact Stats Bar ─────────────────────────────────────────────── #}
+{% set stale_issues_pct = (stats.stale_issues * 100 / stats.open_issues) if stats.open_issues > 0 else 0 %}
+{% set stale_prs_pct = (stats.stale_pull_requests * 100 / stats.open_pull_requests) if stats.open_pull_requests > 0 else 0 %}
+<div class="bg-base-100 rounded-lg shadow px-5 py-3 mb-6">
+    <div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm font-mono-nums">
+        <span class="opacity-70">
+            <i class="fa-solid fa-circle-dot" style="font-size:12px"></i> {{ stats.open_issues }} issues
+            {% if stats.stale_issues %}
+            <span class="{% if stale_issues_pct >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">({{ stats.stale_issues }} stale)</span>
+            {% endif %}
+        </span>
+        <span class="opacity-40 mx-1">·</span>
+        <span class="opacity-70">
+            <i class="fa-solid fa-code-pull-request" style="font-size:12px"></i> {{ stats.open_pull_requests }} PRs
+            {% if stats.stale_pull_requests %}
+            <span class="{% if stale_prs_pct >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">({{ stats.stale_pull_requests }} stale)</span>
+            {% endif %}
+        </span>
+        <span class="opacity-40 mx-1">·</span>
+        <span class="opacity-70">
+            <i class="fa-solid fa-code-branch" style="font-size:12px"></i> <a href="https://github.com/{{ repo_name }}/branches" target="_blank" rel="noopener" class="hover:underline">{{ stats.total_branches }} branches</a>
+        </span>
+        <span class="flex-1"></span>
+        <span class="opacity-70">
+            {% if stats.last_commit_at %}
+            <span title="{{ stats.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}"><i class="fa-regular fa-clock" style="font-size:12px"></i> Last activity: <span class="inline-block text-right" style="min-width: 8ch">{{ time_ago(stats.last_commit_at) }}</span></span>
+            {% else %}
+            <i class="fa-regular fa-clock" style="font-size:12px"></i> Last activity: <span class="opacity-50">—</span>
+            {% endif %}
+        </span>
     </div>
 </div>
 
@@ -95,7 +78,10 @@
     <div class="card-body">
         <div class="flex items-center justify-between mb-2">
             <h2 class="card-title text-lg">Stale Issues</h2>
-            <span class="badge badge-warning font-mono-nums">{{ stats.stale_issue_items | length }}</span>
+            <span class="flex items-center gap-3 text-sm font-mono-nums">
+                <span class="opacity-60"><i class="fa-solid fa-circle-dot"></i> {{ stats.open_issues }} total</span>
+                <span class="{% if stale_issues_pct >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-60{% endif %}"><i class="fa-solid fa-clock"></i> {{ stats.stale_issues }} stale{% if stats.open_issues > 0 %} <span class="opacity-70">({{ '%.0f' | format(stale_issues_pct) }}%)</span>{% endif %}</span>
+            </span>
         </div>
         <div class="overflow-x-auto">
         <table class="table table-sm">
@@ -133,7 +119,10 @@
     <div class="card-body">
         <div class="flex items-center justify-between mb-2">
             <h2 class="card-title text-lg">Stale Pull Requests</h2>
-            <span class="badge badge-warning font-mono-nums">{{ stats.stale_pr_items | length }}</span>
+            <span class="flex items-center gap-3 text-sm font-mono-nums">
+                <span class="opacity-60"><i class="fa-solid fa-code-pull-request"></i> {{ stats.open_pull_requests }} total</span>
+                <span class="{% if stale_prs_pct >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-60{% endif %}"><i class="fa-solid fa-clock"></i> {{ stats.stale_pull_requests }} stale{% if stats.open_pull_requests > 0 %} <span class="opacity-70">({{ '%.0f' | format(stale_prs_pct) }}%)</span>{% endif %}</span>
+            </span>
         </div>
         <div class="overflow-x-auto">
         <table class="table table-sm">
@@ -165,137 +154,96 @@
 </div>
 {% endif %}
 
-{# ── Workflows ─────────────────────────────────────────────────────── #}
-{% if workflows_by_branch %}
+{# ── Workflows & Checks (compact two-column) ──────────────────────── #}
+{% if workflows_by_branch or checks_by_branch %}
 <div class="card bg-base-100 shadow mb-6">
     <div class="card-body">
-        <div class="flex items-center justify-between mb-2">
-            <h2 class="card-title text-lg">Workflows</h2>
-            {% if workflow_failures %}
-            <span class="badge badge-error font-mono-nums">{{ workflow_failures }} failing</span>
-            {% else %}
-            <span class="badge badge-success">All passing</span>
-            {% endif %}
-        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
 
-        {% for branch, workflows in workflows_by_branch.items() %}
-        <details class="collapse collapse-arrow bg-base-200 rounded-box mb-2" {% if loop.first %}open{% endif %}>
-            <summary class="collapse-title font-medium py-3 min-h-0">
-                <span class="flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
-                    {{ branch }}
-                    <span class="flex gap-1 ml-2">
-                        {% for wf in workflows %}
-                        {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success" style="font-size:10px"></i>
-                        {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure" style="font-size:10px"></i>
-                        {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending" style="font-size:10px"></i>
-                        {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown" style="font-size:10px"></i>{% endif %}
-                        {% endfor %}
+            {# ── Workflows Column ── #}
+            <div>
+                {% if workflows_by_branch %}
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="card-title text-lg">Workflows</h2>
+                    <span class="flex items-center gap-2 text-sm font-mono-nums">
+                        {%- set wf_total = stats.workflows | length -%}
+                        {%- set wf_passing = wf_total - workflow_failures - workflow_pending -%}
+                        {%- if wf_passing %}<span class="text-success"><i class="fa-solid fa-check status-icon status-icon-success"></i> {{ wf_passing }} passing</span>{% endif -%}
+                        {%- if wf_passing and workflow_pending %}<span class="opacity-40 mx-0.5">·</span>{% endif -%}
+                        {%- if workflow_pending %}<span class="text-warning"><i class="fa-solid fa-clock status-icon status-icon-pending"></i> {{ workflow_pending }} pending</span>{% endif -%}
+                        {%- if (wf_passing or workflow_pending) and workflow_failures %}<span class="opacity-40 mx-0.5">·</span>{% endif -%}
+                        {%- if workflow_failures %}<span class="text-error"><i class="fa-solid fa-xmark status-icon status-icon-failure"></i> {{ workflow_failures }} failing</span>{% endif -%}
                     </span>
-                </span>
-            </summary>
-            <div class="collapse-content">
-                <div class="overflow-x-auto">
-                <table class="table table-sm">
-                    <tbody>
-                        {% for wf in workflows %}
-                        <tr>
-                            <td class="flex items-center gap-2">
-                                {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
-                                {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
-                                {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
-                                {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
-                                {{ wf.name }}
-                            </td>
-                            <td class="text-sm opacity-70">{{ wf.status }}</td>
-                            <td class="text-right">
-                                {% if wf.run_url or wf.url %}
-                                <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener" class="link link-primary text-sm">View run ↗</a>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
                 </div>
+                {% for branch, workflows in workflows_by_branch.items() %}
+                    {% if workflows_by_branch | length > 1 %}
+                    <div class="text-xs opacity-40 mt-1 mb-0.5">{{ branch }}</div>
+                    {% endif %}
+                    {% for wf in workflows %}
+                    <div class="flex items-center gap-2 py-0.5">
+                        <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener" class="flex items-center gap-2 hover:opacity-80">
+                            {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
+                            {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
+                            {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
+                            {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
+                            <span class="text-sm">{{ wf.name }}</span>
+                        </a>
+                        <span class="text-xs opacity-40">{{ wf.status }}</span>
+                    </div>
+                    {% endfor %}
+                {% endfor %}
+                {% else %}
+                <div class="text-xs font-semibold opacity-50 uppercase tracking-wider mb-1">Workflows</div>
+                <p class="text-sm opacity-50">No workflows found.</p>
+                {% endif %}
             </div>
-        </details>
-        {% endfor %}
-    </div>
-</div>
-{% else %}
-<div class="card bg-base-100 shadow mb-6">
-    <div class="card-body">
-        <h2 class="card-title text-lg">Workflows</h2>
-        <p class="text-sm opacity-50">No workflows found for this repository.</p>
-    </div>
-</div>
-{% endif %}
 
-{# ── Checks ────────────────────────────────────────────────────────── #}
-{% if checks_by_branch %}
-<div class="card bg-base-100 shadow mb-6">
-    <div class="card-body">
-        <div class="flex items-center justify-between mb-2">
-            <h2 class="card-title text-lg">Checks</h2>
-            {% if check_failures %}
-            <span class="badge badge-error font-mono-nums">{{ check_failures }} failing</span>
-            {% else %}
-            <span class="badge badge-success">All passing</span>
-            {% endif %}
-        </div>
-
-        {% for branch, checks in checks_by_branch.items() %}
-        <details class="collapse collapse-arrow bg-base-200 rounded-box mb-2" {% if loop.first %}open{% endif %}>
-            <summary class="collapse-title font-medium py-3 min-h-0">
-                <span class="flex items-center gap-2">
-                    {{ branch }}
-                    <span class="flex gap-1 ml-2">
-                        {% for chk in checks %}
-                        {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass" style="font-size:10px"></i>
-                        {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail" style="font-size:10px"></i>
-                        {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run" style="font-size:10px"></i>{% endif %}
-                        {% endfor %}
+            {# ── Checks Column ── #}
+            <div>
+                {% if checks_by_branch %}
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="card-title text-lg">Checks</h2>
+                    <span class="flex items-center gap-2 text-sm font-mono-nums">
+                        {%- set chk_total = checks_by_branch.values() | map('length') | sum -%}
+                        {%- set chk_passing = chk_total - check_failures - check_warnings -%}
+                        {%- if chk_passing %}<span class="text-success"><i class="fa-solid fa-check status-icon status-icon-pass"></i> {{ chk_passing }} passing</span>{% endif -%}
+                        {%- if chk_passing and check_warnings %}<span class="opacity-40 mx-0.5">·</span>{% endif -%}
+                        {%- if check_warnings %}<span class="text-warning"><i class="fa-solid fa-triangle-exclamation status-icon status-icon-pending"></i> {{ check_warnings }} warning</span>{% endif -%}
+                        {%- if (chk_passing or check_warnings) and check_failures %}<span class="opacity-40 mx-0.5">·</span>{% endif -%}
+                        {%- if check_failures %}<span class="text-error"><i class="fa-solid fa-xmark status-icon status-icon-fail"></i> {{ check_failures }} failing</span>{% endif -%}
                     </span>
-                </span>
-            </summary>
-            <div class="collapse-content">
-                <div class="overflow-x-auto">
-                <table class="table table-sm">
-                    <tbody>
-                        {% for chk in checks %}
-                        <tr>
-                            <td class="flex items-center gap-2">
-                                {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
-                                {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
-                                {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
-                                <div>
-                                    <div class="font-medium">{{ chk.check_name }}</div>
-                                </div>
-                            </td>
-                            <td class="text-sm">
-                                {% if chk.status == 'pass' %}Passed{% elif chk.status == 'fail' %}Failed{% else %}Not run{% endif %}
-                            </td>
-                            <td class="text-right">
-                                {% if chk.id %}
-                                <button class="btn btn-ghost btn-xs"
-                                        hx-get="/partials/check-output/{{ chk.id }}"
-                                        hx-target="#check-output-{{ chk.id }}"
-                                        hx-swap="innerHTML"
-                                        hx-on::before-request="var t = document.getElementById('check-output-{{ chk.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
-                                    Output
-                                </button>
-                                <div id="check-output-{{ chk.id }}"></div>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
                 </div>
+                {% for branch, checks in checks_by_branch.items() %}
+                    {% if checks_by_branch | length > 1 %}
+                    <div class="text-xs opacity-40 mt-1 mb-0.5">{{ branch }}</div>
+                    {% endif %}
+                    {% for chk in checks %}
+                    <div class="flex items-center gap-2 py-0.5">
+                        <a href="/checks?expand={{ chk.check_slug }}{% if chk.id %}&result={{ chk.id }}{% endif %}#check-card-{{ chk.check_slug }}" class="flex items-center gap-2 hover:opacity-80">
+                        {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
+                        {% elif chk.status == "fail" and chk.severity == "warning" %}<i class="fa-solid fa-triangle-exclamation status-icon status-icon-pending"></i>
+                        {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
+                        {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
+                        <span class="text-sm">{{ chk.check_name }}</span>
+                        </a>
+                        <span class="text-xs opacity-40">{{ chk.status }}</span>
+                        {% if chk.id %}
+                        <button class="btn btn-ghost btn-xs ml-auto"
+                                hx-get="/partials/check-output/{{ chk.id }}"
+                                hx-target="#check-output-{{ chk.id }}"
+                                hx-swap="innerHTML"
+                                hx-on::before-request="var t = document.getElementById('check-output-{{ chk.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
+                            Output
+                        </button>
+                        <div id="check-output-{{ chk.id }}"></div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% endfor %}
+                {% endif %}
             </div>
-        </details>
-        {% endfor %}
+
+        </div>
     </div>
 </div>
 {% endif %}

@@ -19,7 +19,19 @@
             {% if tier_counts.get('medium', 0) + tier_counts.get('low', 0) %}<span class="opacity-60">{{ tier_counts.get('medium', 0) + tier_counts.get('low', 0) }} other</span>{% endif %}
             {% endif %}
         </p>
-        <div class="flex gap-2">
+        <div class="flex gap-2 items-center">
+            <label class="input input-sm input-bordered flex items-center gap-2">
+                <i class="fa-solid fa-magnifying-glass text-xs opacity-50"></i>
+                <input id="backlog-search" type="text" class="grow w-40" placeholder="Search…" />
+            </label>
+            <div class="join">
+                <button id="view-flat-btn" class="btn btn-sm join-item {{ '' if group_by == 'repo' else 'btn-active' }} tooltip" data-tip="Flat list">
+                    <i class="fa-solid fa-list"></i>
+                </button>
+                <button id="view-grouped-btn" class="btn btn-sm join-item {{ 'btn-active' if group_by == 'repo' else '' }} tooltip" data-tip="Group by repo">
+                    <i class="fa-solid fa-layer-group"></i>
+                </button>
+            </div>
             <div class="dropdown dropdown-end">
                 <label tabindex="0" class="btn btn-outline btn-sm gap-2">
                     <i class="fa-solid fa-file-export"></i> Export
@@ -50,10 +62,6 @@
                 <label class="label cursor-pointer gap-2">
                     <input type="checkbox" class="checkbox checkbox-sm category-filter" value="stale_pr" checked />
                     <span class="label-text text-sm">Stale PRs</span>
-                </label>
-                <label class="label cursor-pointer gap-2">
-                    <input type="checkbox" class="checkbox checkbox-sm category-filter" value="stale_branches" checked />
-                    <span class="label-text text-sm">Stale Branches</span>
                 </label>
                 <label class="label cursor-pointer gap-2">
                     <input type="checkbox" class="checkbox checkbox-sm category-filter" value="failing_workflow" checked />
@@ -96,10 +104,6 @@
                 <label class="label pb-0"><span class="label-text text-xs">Stale Issue: <span class="weight-val" data-key="stale_issue">{{ backlog_config.category_weights.stale_issue | int }}</span></span></label>
                 <input type="range" class="range range-xs range-info weight-slider" data-key="stale_issue" min="0" max="200" value="{{ backlog_config.category_weights.stale_issue | int }}" />
             </div>
-            <div>
-                <label class="label pb-0"><span class="label-text text-xs">Stale Branches: <span class="weight-val" data-key="stale_branches">{{ backlog_config.category_weights.stale_branches | int }}</span></span></label>
-                <input type="range" class="range range-xs weight-slider" data-key="stale_branches" min="0" max="200" value="{{ backlog_config.category_weights.stale_branches | int }}" />
-            </div>
         </div>
         <div class="flex justify-end gap-2 mt-3">
             <button id="save-weights-btn" class="btn btn-primary btn-sm gap-1">
@@ -127,20 +131,25 @@
     const CATEGORY_MAP = {
         'stale_issue': ['stale_issue'],
         'stale_pr': ['stale_pr'],
-        'stale_branches': ['stale_branches'],
         'failing_workflow': ['failing_workflow'],
         'failing_check': ['failing_check_error', 'failing_check_warning'],
     };
     const ALL_CATEGORIES = Object.values(CATEGORY_MAP).flat();
+
+    // --- View mode state ---
+    let currentGroupBy = '{{ group_by }}';
 
     // --- Filtering via HTMX ---
     function applyFilters() {
         const checkedBoxes = Array.from(document.querySelectorAll('.category-filter:checked')).map(c => c.value);
         const cats = checkedBoxes.flatMap(v => CATEGORY_MAP[v] || [v]);
         const minScore = document.getElementById('min-score-slider').value;
+        const searchVal = document.getElementById('backlog-search').value.trim();
         const params = new URLSearchParams();
         if (cats.length < ALL_CATEGORIES.length) params.set('categories', cats.join(','));
         if (parseFloat(minScore) > 0) params.set('min_score', minScore);
+        if (currentGroupBy) params.set('group_by', currentGroupBy);
+        if (searchVal) params.set('search', searchVal);
         // Include weight slider values for live recalculation
         document.querySelectorAll('.weight-slider').forEach(s => {
             params.set('w_' + s.dataset.key, s.value);
@@ -155,6 +164,13 @@
         document.getElementById('min-score-label').textContent = this.value;
     });
     slider.addEventListener('change', applyFilters);
+
+    // --- Search box with debounce ---
+    let searchDebounce = null;
+    document.getElementById('backlog-search').addEventListener('input', function() {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(applyFilters, 300);
+    });
 
     // --- Weight slider labels + live recalculation ---
     let weightDebounce = null;
@@ -213,6 +229,24 @@
             () => showToast('Copied to clipboard', 'success'),
             () => showToast('Failed to copy', 'error')
         );
+    });
+
+    // --- View toggle (flat / grouped) ---
+    function updateToggleButtons() {
+        const flatBtn = document.getElementById('view-flat-btn');
+        const groupedBtn = document.getElementById('view-grouped-btn');
+        flatBtn.classList.toggle('btn-active', currentGroupBy !== 'repo');
+        groupedBtn.classList.toggle('btn-active', currentGroupBy === 'repo');
+    }
+    document.getElementById('view-flat-btn').addEventListener('click', function() {
+        currentGroupBy = '';
+        updateToggleButtons();
+        applyFilters();
+    });
+    document.getElementById('view-grouped-btn').addEventListener('click', function() {
+        currentGroupBy = 'repo';
+        updateToggleButtons();
+        applyFilters();
     });
 })();
 </script>

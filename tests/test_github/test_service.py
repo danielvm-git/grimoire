@@ -247,14 +247,28 @@ async def test_fetch_stats_stale_detection(client: GitHubClient) -> None:
             json=[
                 {
                     "name": "main",
-                    "commit": {"sha": "abc", "commit": {"committer": {"date": fresh_date}}},
+                    "commit": {"sha": "abc"},
                 },
                 {
                     "name": "old-feature",
-                    "commit": {"sha": "def", "commit": {"committer": {"date": old_date}}},
+                    "commit": {"sha": "def"},
                 },
             ],
             headers={"X-RateLimit-Remaining": "4995", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    respx.get("https://api.github.com/repos/owner/repo1/git/commits/abc").mock(
+        return_value=httpx.Response(
+            200,
+            json={"sha": "abc", "committer": {"date": fresh_date}},
+            headers={"X-RateLimit-Remaining": "4994", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    respx.get("https://api.github.com/repos/owner/repo1/git/commits/def").mock(
+        return_value=httpx.Response(
+            200,
+            json={"sha": "def", "committer": {"date": old_date}},
+            headers={"X-RateLimit-Remaining": "4993", "X-RateLimit-Limit": "5000"},
         )
     )
 
@@ -268,7 +282,6 @@ async def test_fetch_stats_stale_detection(client: GitHubClient) -> None:
     assert stats.stale_pull_requests == 1  # only the 400-day-old one
     assert stats.last_commit_at is not None
     assert stats.total_branches == 2
-    assert stats.stale_branches == 1  # the old-feature branch
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +319,6 @@ async def test_save_and_load_stats(engine: AsyncEngine) -> None:
             fetched_at=now,
             last_commit_at=now,
             total_branches=5,
-            stale_branches=2,
         )
     ]
 
@@ -319,7 +331,6 @@ async def test_save_and_load_stats(engine: AsyncEngine) -> None:
         assert cached[0].full_name == "owner/repo1"
         assert json.loads(cached[0].branches_json) == ["main", "develop"]
         assert cached[0].total_branches == 5
-        assert cached[0].stale_branches == 2
         assert cached[0].last_commit_at is not None
 
         wf_rows = (await session.exec(select(CachedWorkflowStatus))).all()
@@ -335,7 +346,6 @@ async def test_save_and_load_stats(engine: AsyncEngine) -> None:
     assert len(loaded_stats) == 1
     assert loaded_stats[0].workflows[0].name == "CI"
     assert loaded_stats[0].total_branches == 5
-    assert loaded_stats[0].stale_branches == 2
     assert loaded_stats[0].last_commit_at is not None
 
 

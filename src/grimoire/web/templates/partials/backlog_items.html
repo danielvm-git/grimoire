@@ -1,11 +1,13 @@
 {# Backlog items partial — rendered inside #backlog-items container #}
-<div class="flex flex-col gap-2">
-{% for item in items %}
+
+{# ── Reusable item row macro ─────────────────────────────────────── #}
+{% macro item_row(item, show_repo=true) %}
 <div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow px-4 py-3">
     <div class="flex items-center gap-3">
-        {# Priority badge #}
-        <div class="badge badge-{{ item.tier_class }} badge-sm font-mono-nums w-12 justify-center" title="Score: {{ '%.0f' | format(item.score) }}">
-            {{ '%.0f' | format(item.score) }}
+        {# Priority indicator: arrow icon + score #}
+        <div class="flex items-center gap-1.5 w-14 justify-end shrink-0 {{ item.tier_color }}" title="Score: {{ '%.0f' | format(item.score) }}">
+            <i class="{{ item.tier_icon }} text-xs"></i>
+            <span class="font-mono-nums text-sm font-semibold">{{ '%.0f' | format(item.score) }}</span>
         </div>
 
         {# Category icon #}
@@ -13,10 +15,12 @@
             <i class="{{ item.category_icon }} text-sm opacity-60 w-5 text-center"></i>
         </div>
 
+        {% if show_repo %}
         {# Repo name #}
         <a href="/repo/{{ item.repo_full_name }}" class="text-sm font-semibold hover:text-primary whitespace-nowrap">
             {{ item.repo_full_name }}
         </a>
+        {% endif %}
 
         {# Description #}
         <span class="text-sm opacity-80 truncate flex-1" title="{{ item.description }}">
@@ -48,11 +52,45 @@
         </div>
     </div>
 </div>
-{% endfor %}
+{% endmacro %}
 
-{% if not items %}
+{# ── Grouped view ────────────────────────────────────────────────── #}
+{% if groups is defined and groups %}
+<div class="flex flex-col gap-3">
+{% for group in groups %}
+    <details class="bg-base-100 rounded-lg shadow-sm" {{ 'open' if loop.first else '' }}>
+        <summary class="cursor-pointer px-4 py-3 flex items-center gap-3 hover:bg-base-200 rounded-lg select-none">
+            <div class="flex items-center gap-1.5 w-16 justify-end shrink-0 {{ group.tier_color }}" title="Cumulative score: {{ '%.0f' | format(group.total_score) }}">
+                <i class="{{ group.tier_icon }} text-xs"></i>
+                <span class="font-mono-nums text-sm font-semibold">{{ '%.0f' | format(group.total_score) }}</span>
+            </div>
+            <a href="/repo/{{ group.repo_full_name }}" class="font-semibold hover:text-primary" onclick="event.stopPropagation()">
+                {{ group.repo_full_name }}
+            </a>
+            <span class="text-xs opacity-50">
+                {{ group.items | length }} item{{ 's' if group.items | length != 1 else '' }}
+            </span>
+            <i class="fa-solid fa-chevron-down text-xs opacity-40 ml-auto transition-transform"></i>
+        </summary>
+        <div class="flex flex-col gap-1 px-3 pb-3">
+            {% for item in group.items %}
+                {{ item_row(item, show_repo=false) }}
+            {% endfor %}
+        </div>
+    </details>
+{% endfor %}
+</div>
+
+{# ── Flat view (default) ─────────────────────────────────────────── #}
+{% elif items %}
+<div class="flex flex-col gap-2">
+{% for item in items %}
+    {{ item_row(item) }}
+{% endfor %}
+</div>
+
+{% else %}
 <div class="text-center py-8 opacity-50">
     <p>No items match the current filters.</p>
 </div>
 {% endif %}
-</div>

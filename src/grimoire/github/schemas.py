@@ -55,7 +55,6 @@ class RepoSummary(BaseModel):
     workflow_failures: int = 0
     last_commit_at: datetime | None = None
     total_branches: int = 0
-    stale_branches: int = 0
     warnings: list[str] = []
     fetched_at: datetime | None = None
 
@@ -80,7 +79,6 @@ class RepoDetailResponse(BaseModel):
     stale_pull_requests: int = 0
     last_commit_at: datetime | None = None
     total_branches: int = 0
-    stale_branches: int = 0
     workflows: list[WorkflowStatusResponse] = []
     warnings: list[str] = []
     fetched_at: datetime | None = None

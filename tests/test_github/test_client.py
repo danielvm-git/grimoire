@@ -343,3 +343,20 @@ async def test_get_branch_304(client: GitHubClient) -> None:
     )
     data = await client.get_branch("owner/repo", "main")
     assert data is None
+
+
+@respx.mock
+async def test_get_git_commit(client: GitHubClient) -> None:
+    respx.get("https://api.github.com/repos/owner/repo/git/commits/abc123").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "sha": "abc123",
+                "committer": {"date": "2026-04-10T12:00:00Z"},
+            },
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    data = await client.get_git_commit("owner/repo", "abc123")
+    assert data is not None
+    assert data["committer"]["date"] == "2026-04-10T12:00:00Z"

@@ -23,6 +23,10 @@
                     <span class="{% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">({{ repo.stale_prs }} stale)</span>
                     {% endif %}
                 </span>
+                <span class="opacity-40 mx-1">·</span>
+                <span class="opacity-70">
+                    <a href="https://github.com/{{ repo.full_name }}/branches" target="_blank" rel="noopener" class="hover:underline">{{ repo.total_branches }} branches</a>
+                </span>
             </div>
 
             <div class="flex items-center gap-2 flex-shrink-0">
@@ -42,7 +46,7 @@
         {# ── Branches ── #}
         <div class="flex flex-wrap gap-1 mt-1.5">
             {% for branch in repo.branches %}
-            <span class="badge badge-ghost badge-sm">{{ branch }}</span>
+            <span class="badge badge-ghost badge-sm gap-1"><i class="fa-solid fa-code-branch" style="font-size:10px"></i>{{ branch }}</span>
             {% endfor %}
         </div>
 

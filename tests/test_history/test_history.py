@@ -50,7 +50,6 @@ def _stats(
     workflows: list[WorkflowStatus] | None = None,
     issues_by_age: dict[int, int] | None = None,
     prs_by_age: dict[int, int] | None = None,
-    branches_by_age: dict[int, int] | None = None,
 ) -> RepositoryStats:
     return RepositoryStats(
         full_name=name,
@@ -61,10 +60,8 @@ def _stats(
         stale_pull_requests=1,
         workflows=workflows or [],
         total_branches=5,
-        stale_branches=1,
         issues_by_age=issues_by_age or {7: 8, 14: 6, 30: 4, 60: 2, 90: 1, 180: 0, 365: 0},
         prs_by_age=prs_by_age or {7: 2, 14: 1, 30: 0, 60: 0, 90: 0, 180: 0, 365: 0},
-        branches_by_age=branches_by_age or {7: 4, 14: 3, 30: 2, 60: 1, 90: 1, 180: 0, 365: 0},
         fetched_at=datetime.now(UTC),
     )
 
@@ -78,7 +75,6 @@ def _snapshot(
     stale_prs: int = 1,
     issues_by_age: dict | None = None,
     prs_by_age: dict | None = None,
-    branches_by_age: dict | None = None,
 ) -> StatsSnapshot:
     return StatsSnapshot(
         snapshot_date=snapshot_date or date.today(),
@@ -91,10 +87,8 @@ def _snapshot(
         workflow_total=2,
         workflow_failures=1,
         total_branches=5,
-        stale_branches=1,
         issues_by_age_json=json.dumps(issues_by_age or {"7": 8, "30": 4, "365": 0}),
         prs_by_age_json=json.dumps(prs_by_age or {"7": 2, "30": 0}),
-        branches_by_age_json=json.dumps(branches_by_age or {"30": 2, "90": 1}),
     )
 
 
@@ -296,7 +290,6 @@ class TestBuildSeries:
         assert "workflow_total" in series
         assert "workflow_failures" in series
         assert "total_branches" in series
-        assert "stale_branches" in series
         assert "backlog_total" in series
         assert len(series["open_issues"]) == 2
 
@@ -304,22 +297,19 @@ class TestBuildSeries:
         snap = _snapshot()
         snap.stale_issues = 7
         snap.stale_prs = 3
-        snap.stale_branches = 2
         series = _build_series([snap])
         assert series["stale_issues"] == [7]
         assert series["stale_prs"] == [3]
-        assert series["stale_branches"] == [2]
 
     def test_build_series_backlog_total(self) -> None:
         snap = _snapshot()
         snap.workflow_failures = 2
         snap.stale_prs = 3
         snap.stale_issues = 1
-        snap.stale_branches = 4
         snap.check_failures = 5
         snap.check_warnings = 1
         series = _build_series([snap])
-        assert series["backlog_total"] == [2 + 3 + 1 + 4 + 5 + 1]
+        assert series["backlog_total"] == [2 + 3 + 1 + 5 + 1]
 
 
 class TestFillDateGaps:
@@ -378,10 +368,8 @@ class TestHistoryAPI:
                     workflow_total=4,
                     workflow_failures=1,
                     total_branches=8,
-                    stale_branches=2,
                     issues_by_age_json=json.dumps({"7": 8, "30": 5, "365": 1}),
                     prs_by_age_json=json.dumps({"7": 2, "30": 1}),
-                    branches_by_age_json=json.dumps({"30": 3, "90": 2}),
                 )
             )
             session.add(
@@ -396,10 +384,8 @@ class TestHistoryAPI:
                     workflow_total=2,
                     workflow_failures=0,
                     total_branches=3,
-                    stale_branches=0,
                     issues_by_age_json=json.dumps({"7": 4, "30": 2, "365": 0}),
                     prs_by_age_json=json.dumps({"7": 1, "30": 0}),
-                    branches_by_age_json=json.dumps({"30": 1, "90": 0}),
                 )
             )
             await session.commit()
@@ -434,7 +420,6 @@ class TestHistoryAPI:
                         open_issues=issues,
                         issues_by_age_json="{}",
                         prs_by_age_json="{}",
-                        branches_by_age_json="{}",
                     )
                 )
             await session.commit()
@@ -468,7 +453,6 @@ class TestHistoryAPI:
                         open_issues=5,
                         issues_by_age_json="{}",
                         prs_by_age_json="{}",
-                        branches_by_age_json="{}",
                     )
                 )
             await session.commit()
@@ -504,10 +488,8 @@ class TestHistoryAPI:
                         workflow_total=2,
                         workflow_failures=0,
                         total_branches=4,
-                        stale_branches=0,
                         issues_by_age_json=json.dumps({"30": issues}),
                         prs_by_age_json="{}",
-                        branches_by_age_json="{}",
                     )
                 )
             await session.commit()
@@ -542,7 +524,6 @@ class TestHistoryAPI:
                     open_issues=10,
                     issues_by_age_json="{}",
                     prs_by_age_json="{}",
-                    branches_by_age_json="{}",
                 )
             )
             await session.commit()
@@ -567,7 +548,6 @@ class TestHistoryAPI:
                     open_issues=10,
                     issues_by_age_json="{}",
                     prs_by_age_json="{}",
-                    branches_by_age_json="{}",
                 )
             )
             await session.commit()

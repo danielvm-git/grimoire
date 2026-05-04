@@ -66,15 +66,15 @@ class TestRepositoryDetail:
 
     async def test_repo_detail_shows_branches(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/repo/acme/api")
-        assert "Branches" in resp.text
-        # 8 total branches, 3 stale
-        assert ">8<" in resp.text or ">8</div>" in resp.text
+        assert "branches" in resp.text
+        # 8 total branches shown in compact stats bar
+        assert "8 branches" in resp.text
 
     async def test_repo_detail_stale_threshold_highlighting(self, web_client: AsyncClient) -> None:
         """acme/api has 2 stale out of 5 issues (40%) which exceeds 20% threshold → warning."""
         resp = await web_client.get("/repo/acme/api")
         assert "text-warning" in resp.text
-        assert "40% of open" in resp.text
+        assert "(40%)" in resp.text
 
     async def test_repo_detail_no_warning_when_below_threshold(
         self, web_client: AsyncClient

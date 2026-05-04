@@ -23,6 +23,11 @@
                 hx-target="#repo-grid" hx-swap="innerHTML">
                 PRs {% if sort == 'prs' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
             </th>
+            <th class="cursor-pointer hover:text-primary text-right py-1"
+                hx-get="{{ hx_base }}?sort=branches&dir={% if sort == 'branches' %}{{ next_dir }}{% else %}desc{% endif %}"
+                hx-target="#repo-grid" hx-swap="innerHTML">
+                Branches {% if sort == 'branches' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
             <th class="text-center py-1">Workflows</th>
             <th class="text-center py-1">Checks</th>
         </tr>
@@ -55,6 +60,11 @@
             {# ── PRs ── #}
             <td class="text-right font-mono-nums text-sm py-0.5">
                 {{ repo.open_prs }}{% if repo.stale_prs %}<span class="text-xs {% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-50{% endif %}">({{ repo.stale_prs }})</span>{% endif %}
+            </td>
+
+            {# ── Branches ── #}
+            <td class="text-right font-mono-nums text-sm py-0.5">
+                {{ repo.total_branches }}
             </td>
 
             {# ── Workflows ── #}

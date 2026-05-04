@@ -203,39 +203,32 @@ This pattern is shared across all long-running operations:
 - Observed branches list.
 - Warning banner if any warnings exist.
 
-**2. Stats Grid**
-- Open issues, stale issues, open PRs, stale PRs.
-- Stale counts are color-coded based on percentage thresholds (yellow when stale/open ≥ configured %; green otherwise). Percentage is shown as "X% of open".
-- Last Activity: time since last commit across observed branches, with absolute timestamp.
-- Branches: total count with link to stale branches on GitHub if any are stale.
+**2. Compact Stats Bar**
+- Single horizontal row: `(icon) X issues (Y stale) · (icon) X PRs (Y stale) · (icon) N branches · (icon) Last activity: …`
+- Font-awesome icons: `fa-circle-dot` (issues), `fa-code-pull-request` (PRs), `fa-code-branch` (branches), `fa-clock` (last activity).
+- Stale counts color-coded with `text-warning` when stale/open ≥ configured threshold.
+- Last activity is right-aligned.
 
-**3. Issues**
-- Total open issues count.
-- **Stale issues table** (issues with no comments in `staleness.issues_days`):
+**3. Stale Issues Table**
+- Header shows icon-based indicators: `(fa-circle-dot) N total · (fa-clock) N stale (X%)`, with stale count highlighted in warning color when above threshold.
+- Table columns:
 
-| Title | # | Last Activity | Age | Link |
-|-------|---|---------------|-----|------|
+| # | Title | Author | Last Activity |
+|---|-------|--------|---------------|
 
-**3. Pull Requests**
-- Total open PR count.
-- **Stale PRs table** (PRs with no pushes or comments in `staleness.pull_requests_days`):
+**4. Stale PRs Table**
+- Same header format as stale issues: `(fa-code-pull-request) N total · (fa-clock) N stale (X%)`.
+- Table columns:
 
-| Title | # | Author | Last Activity | Age | Link |
-|-------|---|--------|---------------|-----|------|
+| # | Title | Author | Last Activity |
+|---|-------|--------|---------------|
 
-**4. Workflows**
-- Expanded table — one row per workflow × branch combination:
-
-| Workflow | Branch | Status | Last Run | Link |
-|----------|--------|--------|----------|------|
-
-**5. Checks**
-- Expanded table — one row per check × branch:
-
-| Check | Description | Branch | Status | Last Run | Output |
-|-------|-------------|--------|--------|----------|--------|
-
-The "Output" column has an expandable/collapsible section (HTMX `hx-get` to fetch the full output on demand, to keep the initial page load light).
+**5. Workflows & Checks (two-column card)**
+- Combined into a single card with a two-column grid layout (workflows left, checks right).
+- Each column has a header with a breakdown summary: `X passing · Y warning/pending · Z failing` (success → warnings → failures order), using status icons.
+- Flat list per column — one row per item with status icon, name, status text, and link.
+- Branch labels shown only when multiple branches are tracked.
+- Check rows include an "Output" button (HTMX `hx-get` to fetch full output on demand).
 
 ## 6.4 — Actions Page
 
@@ -317,9 +310,11 @@ The backlog page flattens every problem across all repos into a single prioritiz
 
 ### Data Model
 
-**`BacklogCategory`** — enum of item types: `FAILING_WORKFLOW`, `FAILING_CHECK_ERROR`, `FAILING_CHECK_WARNING`, `STALE_PR`, `STALE_ISSUE`, `STALE_BRANCHES`.
+**`BacklogCategory`** — enum of item types: `FAILING_WORKFLOW`, `FAILING_CHECK_ERROR`, `FAILING_CHECK_WARNING`, `STALE_PR`, `STALE_ISSUE`.
 
 **`BacklogItem`** — dataclass with: `category`, `repo_full_name`, `description`, `url`, `age_days` (optional), `score` (computed), `repo_weight`, `workflow_multiplier`.
+
+**`RepoGroup`** — dataclass for the grouped-by-repository view: `repo_full_name`, `items: list[BacklogItem]`, `total_score: float` (sum of item scores). Properties: `tier` and `tier_class` derived from `total_score` using `PRIORITY_TIERS`.
 
 ### Priority Scoring
 
@@ -327,8 +322,8 @@ Each item gets a priority score: `score = category_weight × repo_weight × work
 
 - **`category_weight`** — base weight from `backlog.category_weights` config.
 - **`repo_weight`** — resolved by `resolve_repo_weight(repo_full_name, config)` against `backlog.repository_weights`. Rules are evaluated top-to-bottom, the last match wins, and the default is `1.0` if nothing matches. Set a matching rule to `0.0` to hide a repo from the backlog.
-- **`workflow_multiplier`** — per-workflow-name weight from `backlog.workflow_weights` (glob patterns, default 1.0). Only applies to workflow/check items.
-- **`age_factor`** — automatic boost for older problems. Stale items use excess age over threshold: `1.0 + log2(1 + max(0, age_days - threshold))`. Workflows/checks use flat factor (1.0) since failure start time is not tracked. Stale branches use count multiplier: `1 + log2(count)`.
+- **`workflow_multiplier`** — per-workflow-name weight from `backlog.workflow_weights` (regex patterns via `re.search()`, default 1.0). Only applies to workflow/check items. First matching pattern wins. Example patterns: `"Release .*"`, `"^(CI|Build)$"`, `"Deploy"`.
+- **`age_factor`** — automatic boost for older problems. Stale items use excess age over threshold: `1.0 + log2(1 + max(0, age_days - threshold))`. Workflows/checks use flat factor (1.0) since failure start time is not tracked.
 - **`compute_score(category, repo_weight, age_days, reference_days, config, workflow_name="")`** — scoring helper that accepts the resolved repository weight instead of reading per-repo metadata.
 
 **Priority tiers:** score ≥80 = Critical (red), ≥50 = High (orange), ≥20 = Medium (yellow), <20 = Low (gray).
@@ -338,6 +333,8 @@ Each item gets a priority score: `score = category_weight × repo_weight × work
 **Header:**
 - Title: "Backlog"
 - Summary: "N items across M repos — X critical, Y high, Z medium, W low"
+- Search input: always-visible text box with magnifying-glass icon. Filters items via server-side substring match (case-insensitive) against repo name, description, category label, and branch name. Input is debounced (300 ms) and triggers HTMX partial reload.
+- View toggle: flat list / group by repository (DaisyUI `join` button group)
 - Export dropdown: "Export All as Markdown" / "Copy to Clipboard"
 - Filters toggle
 
@@ -350,7 +347,10 @@ Each item gets a priority score: `score = category_weight × repo_weight × work
 
 **Item list** (HTMX partial: `GET /partials/backlog-items`):
 
-Each row shows: priority badge (color-coded), category icon, repo name (link to detail page), description, age, GitHub link, copy-as-markdown button.
+- **Flat view** (default): Each row shows: priority badge (color-coded), category icon, repo name (link to detail page), description, age, GitHub link, copy-as-markdown button.
+- **Grouped view** (`group_by=repo`): Items grouped under collapsible `<details>` sections per repository. Each group header shows: cumulative score badge (Σ), repo name (link to detail page), item count. Items within each group are listed without the repo name column. Groups sorted by cumulative score descending; first group is open by default.
+
+**`group_by_repo(items) -> list[RepoGroup]`** — groups items by `repo_full_name`, computes `total_score` as sum of item scores, sorts groups by `total_score` descending. Items within each group retain their original score-descending order.
 
 ### Markdown Export
 
@@ -373,8 +373,8 @@ Individual items can be copied via the per-row clipboard button.
 
 | Endpoint | Method | Returns |
 |----------|--------|---------|
-| `GET /backlog` | GET | Full page |
-| `GET /partials/backlog-items` | GET | HTMX partial (item list). Accepts query params: `category`, `repo`, weight overrides. |
+| `GET /backlog` | GET | Full page. Accepts `?group_by=repo` for grouped view. |
+| `GET /partials/backlog-items` | GET | HTMX partial (item list). Accepts query params: `category`, `repo`, `group_by`, `search`, weight overrides. |
 | `GET /api/backlog/export` | GET | Full backlog as Markdown text |
 | `POST /api/backlog/save-weights` | POST | Persists category weight changes to `config.yaml` and reloads in-memory config |
 
@@ -387,7 +387,6 @@ Individual items can be copied via the per-row clipboard button.
 | Failing check (warning) | Same, with `severity == "warning"` | ✅ |
 | Stale PR | `PullRequestDetail` from cache | ✅ individual items |
 | Stale issue | `IssueDetail` from cache | ✅ individual items |
-| Stale branches | `stale_branches` count per repo | ⚠️ Summary item per repo |
 
 ## 6.7 — Styling
 

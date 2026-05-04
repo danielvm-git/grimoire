@@ -85,7 +85,6 @@ backlog:                        # optional — backlog scoring weights
     failing_check_warning: 30
     stale_pr: 50
     stale_issue: 20
-    stale_branches: 10
   workflow_weights:             # glob pattern → multiplier
     "Release *": 2.0
     "Lint": 0.5
@@ -98,7 +97,6 @@ backlog:                        # optional — backlog scoring weights
 staleness:
   pull_requests_days: 30   # default: 30
   issues_days: 365         # default: 365
-  branches_days: 90        # default: 90 — branches with no commits for this many days
   problematic_stale_issues_pct: 20  # highlight when stale/open issues >= 20%
   problematic_stale_prs_pct: 20     # highlight when stale/open PRs >= 20%
 
@@ -123,9 +121,9 @@ log_file: "./grimoire.log"
 - `TeamRepoSource(team: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
 - `WorkflowFilter(include: list[str] = [], exclude: list[str] = [])` — glob patterns (fnmatch) on workflow name
 - `RepoSource` — discriminated union of the above (by field presence)
-- `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, branches_days: int = 90, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
+- `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
 - `HistoryConfig(retention_days: int = 90)`
-- `BacklogCategoryWeights(failing_workflow: float = 100, failing_check_error: float = 80, failing_check_warning: float = 30, stale_pr: float = 50, stale_issue: float = 20, stale_branches: float = 10)`
+- `BacklogCategoryWeights(failing_workflow: float = 100, failing_check_error: float = 80, failing_check_warning: float = 30, stale_pr: float = 50, stale_issue: float = 20)`
 - `RepositoryWeightRule(regex: str | None = None, repos: list[str] | None = None, weight: float = 1.0)` — exactly one of `regex` or `repos` must be set; rules are evaluated top-to-bottom and the last match wins
 - `BacklogConfig(category_weights: BacklogCategoryWeights = BacklogCategoryWeights(), workflow_weights: dict[str, float] = {}, repository_weights: list[RepositoryWeightRule] = [])` — `workflow_weights` maps glob patterns on workflow name to multipliers; `repository_weights` maps repos to backlog score multipliers and defaults to `1.0` when no rule matches
 - `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional); `history: HistoryConfig = HistoryConfig()` (optional); `backlog: BacklogConfig = BacklogConfig()` (optional)

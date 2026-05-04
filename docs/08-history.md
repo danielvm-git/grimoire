@@ -32,10 +32,8 @@ Added to `GrimoireConfig` as `history: HistoryConfig = Field(default_factory=His
 | `workflow_total` | int | Number of tracked workflows |
 | `workflow_failures` | int | Workflows with status "failure" |
 | `total_branches` | int | Total branch count |
-| `stale_branches` | int | Branches past staleness threshold (snapshot-time config) |
 | `issues_by_age_json` | str | JSON `{"7": n, "14": n, ...}` — issues older than N days |
 | `prs_by_age_json` | str | Same format for PRs |
-| `branches_by_age_json` | str | Same format for branches |
 
 **Unique constraint:** `(repo_full_name, snapshot_date)` — enforced at DB level, upserted via `ON CONFLICT DO UPDATE`.
 
@@ -43,10 +41,9 @@ Added to `GrimoireConfig` as `history: HistoryConfig = Field(default_factory=His
 
 Fixed thresholds: `[7, 14, 30, 60, 90, 180, 365]` days.
 
-For each snapshot, the number of issues/PRs/branches with age ≥ each threshold is computed and stored as JSON. "Age" uses the same reference as existing staleness logic:
+For each snapshot, the number of issues/PRs with age ≥ each threshold is computed and stored as JSON. "Age" uses the same reference as existing staleness logic:
 
 - **Issues/PRs:** `updated_at` (fallback `created_at`)
-- **Branches:** last commit committer date
 
 At query time, the API reads the current `StalenessConfig` (e.g. `issues_days=365`), picks the nearest available bucket, and uses that count as the stale series. This allows retroactive recomputation when thresholds change — the charts update instantly.
 
@@ -93,13 +90,12 @@ Uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` for atomic upsert.
     "check_failures": [1, 0, ...],
     "check_warnings": [2, 1, ...],
     "total_branches": [80, 82, ...],
-    "stale_branches": [5, 4, ...],
     "backlog_total": [18, 14, ...]
   }
 }
 ```
 
-`backlog_total` is a derived series computed at query time: `workflow_failures + stale_prs + stale_issues + stale_branches + check_failures + check_warnings`. It is not stored in the database.
+`backlog_total` is a derived series computed at query time: `workflow_failures + stale_prs + stale_issues + check_failures + check_warnings`. It is not stored in the database.
 
 **Global aggregation:** Groups by `snapshot_date`, sums numeric fields, merges age bucket JSON dicts. Filtered by `repos` when provided.
 

@@ -97,7 +97,6 @@ class CachedRepository(SQLModel, table=True):
     stale_pull_requests: int = 0
     last_commit_at: Optional[datetime] = None
     total_branches: int = 0
-    stale_branches: int = 0
     workflow_include_json: str = "[]"  # JSON-encoded glob patterns
     workflow_exclude_json: str = "[]"  # JSON-encoded glob patterns
     fetched_at: datetime = Field(default_factory=_utcnow)
@@ -113,6 +112,7 @@ class CachedIssue(SQLModel, table=True):
     title: str
     number: int
     url: str
+    author: str = ""
     created_at: datetime
     last_comment_at: Optional[datetime] = None
     fetched_at: datetime = Field(default_factory=_utcnow)
@@ -187,12 +187,10 @@ class StatsSnapshot(SQLModel, table=True):
     check_failures: int = 0
     check_warnings: int = 0
     total_branches: int = 0
-    stale_branches: int = 0
     # Age-bucketed counts: JSON {"7": n, "14": n, "30": n, ...}
     # Allows retroactive staleness recomputation for any threshold.
     issues_by_age_json: str = "{}"
     prs_by_age_json: str = "{}"
-    branches_by_age_json: str = "{}"
 
 
 # ---------------------------------------------------------------------------

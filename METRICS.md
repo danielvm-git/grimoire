@@ -12,7 +12,6 @@ All Prometheus metrics exposed at `GET /metrics`. Scraped using standard Prometh
 | `grimoire_open_pull_requests_total` | Gauge | `repo` | Open pull request count |
 | `grimoire_stale_pull_requests_total` | Gauge | `repo` | Stale pull request count (exceeds configured staleness threshold) |
 | `grimoire_total_branches` | Gauge | `repo` | Total branch count |
-| `grimoire_stale_branches_total` | Gauge | `repo` | Stale branch count (exceeds configured staleness threshold) |
 | `grimoire_workflow_status` | Gauge | `repo`, `workflow`, `branch` | Workflow status: 1 = success, 0 = failure |
 | `grimoire_workflow_failures_total` | Gauge | `repo` | Number of failing workflows |
 | `grimoire_check_status` | Gauge | `repo`, `check`, `branch` | Check status: 1 = pass, 0 = fail |

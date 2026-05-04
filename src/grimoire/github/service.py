@@ -340,8 +340,6 @@ async def fetch_repository_stats(
     # -- Branches & last commit ----------------------------------------------
     last_commit_at: datetime | None = previous.last_commit_at if previous else None
     total_branches: int = previous.total_branches if previous else 0
-    stale_branches: int = previous.stale_branches if previous else 0
-    branches_by_age: dict[int, int] = dict(previous.branches_by_age) if previous else {}
 
     # Fetch last commit time for each observed branch
     branch_commit_dates: list[datetime] = []
@@ -366,26 +364,11 @@ async def fetch_repository_stats(
     if branch_commit_dates:
         last_commit_at = max(branch_commit_dates)
 
-    # Fetch all branches for total/stale counts
+    # Fetch all branches for total count
     try:
         all_branches = await client.get_branches(repo.full_name)
         if all_branches is not None:
             total_branches = len(all_branches)
-            stale_cutoff = now - timedelta(days=staleness.branches_days)
-            stale_branches = 0
-            all_branch_dates: list[datetime | None] = []
-            for b in all_branches:
-                commit_date_str = (
-                    b.get("commit", {}).get("commit", {}).get("committer", {}).get("date")
-                )
-                # Branches list returns shallow commit; date may be at top level
-                if not commit_date_str:
-                    commit_date_str = b.get("commit", {}).get("committer", {}).get("date")
-                dt = _parse_dt(commit_date_str)
-                all_branch_dates.append(dt)
-                if dt is not None and dt < stale_cutoff:
-                    stale_branches += 1
-            branches_by_age = _compute_age_buckets(all_branch_dates, now)
     except Exception as exc:
         warnings.append(f"Failed to fetch branches: {exc}")
 
@@ -403,10 +386,8 @@ async def fetch_repository_stats(
         fetched_at=now,
         last_commit_at=last_commit_at,
         total_branches=total_branches,
-        stale_branches=stale_branches,
         issues_by_age=issues_by_age,
         prs_by_age=prs_by_age,
-        branches_by_age=branches_by_age,
     )
 
 
@@ -591,7 +572,6 @@ async def save_stats_to_db(
                     stale_pull_requests=stats.stale_pull_requests,
                     last_commit_at=stats.last_commit_at,
                     total_branches=stats.total_branches,
-                    stale_branches=stats.stale_branches,
                     workflow_include_json=json.dumps(repo.workflow_include),
                     workflow_exclude_json=json.dumps(repo.workflow_exclude),
                     fetched_at=stats.fetched_at or now,
@@ -620,6 +600,7 @@ async def save_stats_to_db(
                         title=item.title,
                         number=item.number,
                         url=item.url,
+                        author=item.author,
                         created_at=item.created_at,
                         last_comment_at=item.last_activity_at,
                         fetched_at=stats.fetched_at or now,
@@ -657,10 +638,8 @@ async def save_stats_to_db(
                 workflow_total=wf_total,
                 workflow_failures=wf_failures,
                 total_branches=stats.total_branches,
-                stale_branches=stats.stale_branches,
                 issues_by_age_json=json.dumps(stats.issues_by_age),
                 prs_by_age_json=json.dumps(stats.prs_by_age),
-                branches_by_age_json=json.dumps(stats.branches_by_age),
             )
 
         await session.commit()
@@ -679,10 +658,8 @@ async def _upsert_snapshot(
     workflow_total: int,
     workflow_failures: int,
     total_branches: int,
-    stale_branches: int,
     issues_by_age_json: str,
     prs_by_age_json: str,
-    branches_by_age_json: str,
 ) -> None:
     """Insert or update a daily snapshot for a single repo."""
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -698,10 +675,8 @@ async def _upsert_snapshot(
         "workflow_total": workflow_total,
         "workflow_failures": workflow_failures,
         "total_branches": total_branches,
-        "stale_branches": stale_branches,
         "issues_by_age_json": issues_by_age_json,
         "prs_by_age_json": prs_by_age_json,
-        "branches_by_age_json": branches_by_age_json,
     }
     update_values = {
         k: v for k, v in values.items() if k not in ("snapshot_date", "repo_full_name")
@@ -852,6 +827,7 @@ async def load_stats_from_db(
                     url=i.url,
                     created_at=i.created_at,
                     last_activity_at=i.last_comment_at,
+                    author=i.author,
                 )
                 for i in issue_rows
             ]
@@ -890,7 +866,6 @@ async def load_stats_from_db(
                     fetched_at=cr.fetched_at,
                     last_commit_at=cr.last_commit_at,
                     total_branches=cr.total_branches,
-                    stale_branches=cr.stale_branches,
                 )
             )
 
