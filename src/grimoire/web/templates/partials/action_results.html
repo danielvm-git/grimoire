@@ -6,8 +6,6 @@
     {% for run in runs %}
     <details class="border border-base-300 rounded-box">
         <summary class="px-3 py-2 cursor-pointer hover:bg-base-200 flex items-center gap-3 text-sm">
-            <span class="font-mono-nums opacity-70">{{ time_ago(run.started_at) }}</span>
-            <span class="opacity-30">│</span>
             <span class="badge badge-ghost badge-xs">{{ run.triggered_by }}</span>
             <span class="opacity-30">│</span>
             {% if run.pass_count %}
@@ -16,6 +14,8 @@
             {% if run.fail_count %}
             <span class="text-error"><i class="fa-solid fa-xmark"></i> {{ run.fail_count }}</span>
             {% endif %}
+            <span class="opacity-30">│</span>
+            <span class="font-mono-nums opacity-70">{{ time_ago(run.started_at) }}</span>
         </summary>
         <div class="max-h-72 overflow-y-auto">
         <table class="table table-xs w-full">
