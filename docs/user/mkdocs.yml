@@ -35,7 +35,7 @@ theme:
     - content.tabs.link
   icon:
     repo: fontawesome/brands/github
-  logo: ../../logo.png
+  logo: assets/logo-nav.png
 
 nav:
   - Home: index.md
