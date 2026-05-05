@@ -1,7 +1,7 @@
 # 🔮 Grimoire
 
 <p align="center">
-  <img src="logo.png" alt="Grimoire logo" width="200">
+  <img src="logo.png" alt="Grimoire logo" width="280">
 </p>
 
 <p align="center">

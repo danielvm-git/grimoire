@@ -1,4 +1,4 @@
-# 🔮 Grimoire
+# ![Grimoire](assets/logo-nav.png){: style="height: 1.5em; vertical-align: middle" } Grimoire
 
 Grimoire is a **self-hostable GitHub repository monitoring dashboard**. It aggregates repository health data — CI status, stale PRs and issues — and lets you run custom checks and automated actions across all your repos.
 
