@@ -1,4 +1,4 @@
-# Grimoire
+<h1 align="center">Grimoire</h1>
 
 <p align="center">
   <img src="logo.png" alt="Grimoire logo" width="280">
