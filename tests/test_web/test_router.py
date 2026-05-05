@@ -539,39 +539,6 @@ class TestActionRunStatusPartial:
         assert resp.headers.get("HX-Trigger") == "actionRunCompleted"
 
 
-class TestHistoryPage:
-    """Tests for GET /history route."""
-
-    async def test_history_returns_html(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/history")
-        assert resp.status_code == 200
-        assert "text/html" in resp.headers.get("content-type", "")
-
-    async def test_history_contains_title(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/history")
-        assert "History" in resp.text
-
-    async def test_history_has_chart_script(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/history")
-        assert "chart.js" in resp.text.lower() or "Chart" in resp.text
-
-    async def test_history_has_tom_select(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/history")
-        assert "tom-select" in resp.text
-
-    async def test_history_has_repo_select(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/history")
-        assert 'id="repo-select"' in resp.text
-
-    async def test_history_has_reset_button(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/history")
-        assert 'id="reset-filter"' in resp.text
-
-    async def test_history_nav_link(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/history")
-        assert 'href="/history"' in resp.text
-
-
 class TestRefreshPartials:
     """Tests for refresh progress partials."""
 

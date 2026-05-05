@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from sqlalchemy import UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -183,39 +182,6 @@ class CachedETag(SQLModel, table=True):
     endpoint_url: str = Field(primary_key=True)
     etag: str = ""
     last_modified: str = ""
-
-
-# ---------------------------------------------------------------------------
-# Historical snapshots
-# ---------------------------------------------------------------------------
-
-
-class StatsSnapshot(SQLModel, table=True):
-    """Daily historical snapshot of per-repo metrics for trend charts."""
-
-    __tablename__ = "stats_snapshot"  # type: ignore[assignment]
-    __table_args__ = (
-        UniqueConstraint("repo_full_name", "snapshot_date", name="uq_snapshot_repo_date"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    snapshot_date: date = Field(index=True)
-    timestamp: datetime = Field(default_factory=_utcnow)
-    repo_full_name: str = Field(index=True)
-    open_issues: int = 0
-    stale_issues: int = 0
-    open_prs: int = 0
-    stale_prs: int = 0
-    workflow_total: int = 0
-    workflow_failures: int = 0
-    check_total: int = 0
-    check_failures: int = 0
-    check_warnings: int = 0
-    total_branches: int = 0
-    # Age-bucketed counts: JSON {"7": n, "14": n, "30": n, ...}
-    # Allows retroactive staleness recomputation for any threshold.
-    issues_by_age_json: str = "{}"
-    prs_by_age_json: str = "{}"
 
 
 # ---------------------------------------------------------------------------

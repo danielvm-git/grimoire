@@ -6,13 +6,13 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncEngine
-from sqlmodel import col, delete, select
+from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import GrimoireConfig, StalenessConfig, StaticRepoSource, TeamRepoSource
@@ -22,7 +22,6 @@ from grimoire.database import (
     CachedRepository,
     CachedWorkflowStatus,
     CheckResultRecord,
-    StatsSnapshot,
 )
 from grimoire.github.client import GitHubClient, NotFoundError
 from grimoire.models import (
@@ -36,8 +35,6 @@ from grimoire.models import (
 logger = logging.getLogger(__name__)
 
 _CONCURRENCY_LIMIT = 10
-
-AGE_BUCKET_THRESHOLDS = [7, 14, 30, 60, 90, 180, 365]
 
 
 def _brief_error(exc: Exception) -> str:
@@ -97,24 +94,6 @@ def _workflow_matches_filter(wf_name: str, include: list[str], exclude: list[str
     if exclude and any(fnmatch(wf_name, pat) for pat in exclude):
         return False
     return True
-
-
-def _compute_age_buckets(
-    activity_dates: list[datetime | None],
-    now: datetime,
-) -> dict[int, int]:
-    """Compute how many items have age >= each threshold in AGE_BUCKET_THRESHOLDS.
-
-    ``activity_dates`` should be the last-activity datetime for each item.
-    Returns e.g. ``{7: 12, 14: 10, 30: 8, 60: 5, 90: 3, 180: 1, 365: 0}``.
-    """
-    ages_days: list[float] = []
-    for dt in activity_dates:
-        if dt is None:
-            ages_days.append(float("inf"))
-        else:
-            ages_days.append((now - dt).total_seconds() / 86400)
-    return {t: sum(1 for a in ages_days if a >= t) for t in AGE_BUCKET_THRESHOLDS}
 
 
 # ---------------------------------------------------------------------------
@@ -244,7 +223,6 @@ async def fetch_repository_stats(
     open_issues = previous.open_issues if previous else 0
     stale_issues = previous.stale_issues if previous else 0
     stale_issue_items: list[IssueDetail] = list(previous.stale_issue_items) if previous else []
-    issues_by_age: dict[int, int] = dict(previous.issues_by_age) if previous else {}
     try:
         issues = await client.get_open_issues(repo.full_name)
         if issues is not None:
@@ -252,12 +230,10 @@ async def fetch_repository_stats(
             stale_issues = 0
             stale_issue_items = []
             stale_cutoff = now - timedelta(days=staleness.issues_days)
-            issue_activity_dates: list[datetime | None] = []
             for issue in issues:
                 last_activity = _parse_dt(issue.get("updated_at")) or _parse_dt(
                     issue.get("created_at")
                 )
-                issue_activity_dates.append(last_activity)
                 if _is_issue_stale(issue, stale_cutoff):
                     issue_number = issue.get("number")
                     if not issue_number or issue_number <= 0:
@@ -273,7 +249,6 @@ async def fetch_repository_stats(
                             author=issue.get("user", {}).get("login", ""),
                         )
                     )
-            issues_by_age = _compute_age_buckets(issue_activity_dates, now)
     except Exception as exc:
         warnings.append(f"Could not fetch issues for {repo.full_name}: {_brief_error(exc)}")
 
@@ -281,7 +256,6 @@ async def fetch_repository_stats(
     open_prs = previous.open_pull_requests if previous else 0
     stale_prs = previous.stale_pull_requests if previous else 0
     stale_pr_items: list[PullRequestDetail] = list(previous.stale_pr_items) if previous else []
-    prs_by_age: dict[int, int] = dict(previous.prs_by_age) if previous else {}
     try:
         prs = await client.get_open_pull_requests(repo.full_name)
         if prs is not None:
@@ -289,10 +263,8 @@ async def fetch_repository_stats(
             stale_prs = 0
             stale_pr_items = []
             stale_cutoff = now - timedelta(days=staleness.pull_requests_days)
-            pr_activity_dates: list[datetime | None] = []
             for pr in prs:
                 last_activity = _parse_dt(pr.get("updated_at")) or _parse_dt(pr.get("created_at"))
-                pr_activity_dates.append(last_activity)
                 if _is_pr_stale(pr, stale_cutoff):
                     pr_number = pr.get("number")
                     if not pr_number or pr_number <= 0:
@@ -308,7 +280,6 @@ async def fetch_repository_stats(
                             author=pr.get("user", {}).get("login", ""),
                         )
                     )
-            prs_by_age = _compute_age_buckets(pr_activity_dates, now)
     except Exception as exc:
         warnings.append(f"Could not fetch PRs for {repo.full_name}: {_brief_error(exc)}")
 
@@ -411,8 +382,6 @@ async def fetch_repository_stats(
         fetched_at=now,
         last_commit_at=last_commit_at,
         total_branches=total_branches,
-        issues_by_age=issues_by_age,
-        prs_by_age=prs_by_age,
     )
 
 
@@ -524,7 +493,6 @@ async def refresh_all_stats(
             client._engine,
             stats_list,
             repos,
-            retention_days=config.history.retention_days,
         )
         return repos, stats_list
     finally:
@@ -540,24 +508,12 @@ async def save_stats_to_db(
     engine: AsyncEngine,
     stats_list: list[RepositoryStats],
     repos: list[TrackedRepository],
-    *,
-    retention_days: int = 90,
 ) -> None:
-    """Clear old cached data for each repo and write fresh records.
-
-    Also upserts daily history snapshots and prunes expired ones.
-    """
+    """Clear old cached data for each repo and write fresh records."""
     now = datetime.now(UTC)
-    today = now.date()
     repo_map = {r.full_name: r for r in repos}
 
     async with AsyncSession(engine) as session:
-        # -- Retention: prune expired snapshots --------------------------------
-        cutoff = today - timedelta(days=retention_days)
-        await session.exec(  # type: ignore[call-overload]
-            delete(StatsSnapshot).where(StatsSnapshot.snapshot_date < cutoff)  # type: ignore[arg-type]
-        )
-
         for stats in stats_list:
             repo = repo_map.get(stats.full_name)
             if repo is None:
@@ -647,151 +603,7 @@ async def save_stats_to_db(
                     )
                 )
 
-            # -- Upsert daily history snapshot ---------------------------------
-            wf_total = len(stats.workflows)
-            wf_failures = sum(1 for w in stats.workflows if w.status == "failure")
-
-            await _upsert_snapshot(
-                session,
-                snapshot_date=today,
-                timestamp=now,
-                repo_full_name=fn,
-                open_issues=stats.open_issues,
-                stale_issues=stats.stale_issues,
-                open_prs=stats.open_pull_requests,
-                stale_prs=stats.stale_pull_requests,
-                workflow_total=wf_total,
-                workflow_failures=wf_failures,
-                total_branches=stats.total_branches,
-                issues_by_age_json=json.dumps(stats.issues_by_age),
-                prs_by_age_json=json.dumps(stats.prs_by_age),
-            )
-
         await session.commit()
-
-
-async def _upsert_snapshot(
-    session: AsyncSession,
-    *,
-    snapshot_date: date,
-    timestamp: datetime,
-    repo_full_name: str,
-    open_issues: int,
-    stale_issues: int,
-    open_prs: int,
-    stale_prs: int,
-    workflow_total: int,
-    workflow_failures: int,
-    total_branches: int,
-    issues_by_age_json: str,
-    prs_by_age_json: str,
-) -> None:
-    """Insert or update a daily snapshot for a single repo."""
-    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-
-    values = {
-        "snapshot_date": snapshot_date,
-        "timestamp": timestamp,
-        "repo_full_name": repo_full_name,
-        "open_issues": open_issues,
-        "stale_issues": stale_issues,
-        "open_prs": open_prs,
-        "stale_prs": stale_prs,
-        "workflow_total": workflow_total,
-        "workflow_failures": workflow_failures,
-        "total_branches": total_branches,
-        "issues_by_age_json": issues_by_age_json,
-        "prs_by_age_json": prs_by_age_json,
-    }
-    update_values = {
-        k: v for k, v in values.items() if k not in ("snapshot_date", "repo_full_name")
-    }
-
-    stmt = sqlite_insert(StatsSnapshot).values(**values)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=["repo_full_name", "snapshot_date"],
-        set_=update_values,
-    )
-    await session.execute(stmt)
-
-
-async def update_snapshot_checks(
-    engine: AsyncEngine,
-    check_counts: dict[str, tuple[int, int, int]],
-) -> None:
-    """Update today's snapshots with check totals after checks complete.
-
-    Args:
-        engine: Database engine.
-        check_counts: Mapping of repo_full_name → (total, failures, warnings).
-    """
-    today = date.today()
-    async with AsyncSession(engine) as session:
-        for repo_name, (total, failures, warnings) in check_counts.items():
-            stmt = (
-                select(StatsSnapshot)
-                .where(StatsSnapshot.repo_full_name == repo_name)
-                .where(col(StatsSnapshot.snapshot_date) == today)
-            )
-            snap = (await session.exec(stmt)).first()
-            if snap:
-                snap.check_total = total
-                snap.check_failures = failures
-                snap.check_warnings = warnings
-                session.add(snap)
-        await session.commit()
-
-
-async def compute_check_counts(
-    engine: AsyncEngine,
-    checks: list | None = None,
-) -> dict[str, tuple[int, int, int]]:
-    """Compute per-repo check totals from latest check results in the DB.
-
-    Args:
-        engine: Database engine.
-        checks: Optional list of CheckDefinition objects for severity lookup.
-            If not provided, all failures count as errors.
-
-    Returns mapping of repo_full_name → (total, failures, warnings).
-    """
-    from sqlalchemy import text
-
-    # Build severity lookup: slug → severity
-    severity_map: dict[str, str] = {}
-    if checks:
-        for c in checks:
-            severity_map[c.slug] = c.severity
-
-    query = text(
-        "SELECT cr.check_slug, cr.repo_full_name, cr.passed "
-        "FROM check_result cr "
-        "INNER JOIN ("
-        "  SELECT check_slug, repo_full_name, branch, MAX(timestamp) AS max_ts "
-        "  FROM check_result "
-        "  GROUP BY check_slug, repo_full_name, branch"
-        ") latest ON cr.check_slug = latest.check_slug "
-        "AND cr.repo_full_name = latest.repo_full_name "
-        "AND cr.branch = latest.branch "
-        "AND cr.timestamp = latest.max_ts"
-    )
-    counts: dict[str, tuple[int, int, int]] = {}
-    async with AsyncSession(engine) as session:
-        result = await session.execute(query)
-        for row in result.all():
-            slug = row[0]
-            repo_name = row[1]
-            passed = bool(row[2])
-            total, failures, warnings = counts.get(repo_name, (0, 0, 0))
-            total += 1
-            if not passed:
-                severity = severity_map.get(slug, "error")
-                if severity == "warning":
-                    warnings += 1
-                else:
-                    failures += 1
-            counts[repo_name] = (total, failures, warnings)
-    return counts
 
 
 async def load_stats_from_db(

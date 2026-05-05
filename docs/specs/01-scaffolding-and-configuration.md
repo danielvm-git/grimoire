@@ -100,9 +100,6 @@ staleness:
   problematic_stale_issues_pct: 20  # highlight when stale/open issues >= 20%
   problematic_stale_prs_pct: 20     # highlight when stale/open PRs >= 20%
 
-history:
-  retention_days: 90       # default: 90 — keep daily snapshots for this many days
-
 refresh_schedule: "*/5 * * * *"  # default: "*/5 * * * *" — cron expression for data refresh
 
 data_dir: "./data"           # checks/ and actions/ subdirectories
@@ -122,11 +119,10 @@ log_file: "./grimoire.log"
 - `WorkflowFilter(include: list[str] = [], exclude: list[str] = [])` — glob patterns (fnmatch) on workflow name
 - `RepoSource` — discriminated union of the above (by field presence)
 - `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`
-- `HistoryConfig(retention_days: int = 90)`
 - `BacklogCategoryWeights(failing_workflow: float = 100, failing_check_error: float = 80, failing_check_warning: float = 30, stale_pr: float = 50, stale_issue: float = 20)`
 - `RepositoryWeightRule(regex: str | None = None, repos: list[str] | None = None, weight: float = 1.0)` — exactly one of `regex` or `repos` must be set; rules are evaluated top-to-bottom and the last match wins
 - `BacklogConfig(category_weights: BacklogCategoryWeights = BacklogCategoryWeights(), workflow_weights: dict[str, float] = {}, repository_weights: list[RepositoryWeightRule] = [])` — `workflow_weights` maps glob patterns on workflow name to multipliers; `repository_weights` maps repos to backlog score multipliers and defaults to `1.0` when no rule matches
-- `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional); `history: HistoryConfig = HistoryConfig()` (optional); `backlog: BacklogConfig = BacklogConfig()` (optional)
+- `GrimoireConfig` — top-level model; `git: GitConfig | None = None` (optional); `backlog: BacklogConfig = BacklogConfig()` (optional)
 
 ### Config loading
 

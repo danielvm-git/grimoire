@@ -109,12 +109,6 @@ class StalenessConfig(BaseModel):
     problematic_stale_prs_pct: int = 20
 
 
-class HistoryConfig(BaseModel):
-    """Configuration for historical snapshot retention."""
-
-    retention_days: int = 90
-
-
 class BacklogCategoryWeights(BaseModel):
     """Base importance weights for each backlog item category."""
 
@@ -161,7 +155,6 @@ class GrimoireConfig(BaseModel):
     repositories: list[RepoSource]
 
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)
-    history: HistoryConfig = Field(default_factory=HistoryConfig)
     backlog: BacklogConfig = Field(default_factory=BacklogConfig)
     refresh_schedule: str = "*/5 * * * *"
 

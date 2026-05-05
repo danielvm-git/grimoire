@@ -72,6 +72,20 @@ venv:
     @. .venv/bin/activate; exec "$SHELL" -i
 
 # ============================================================================
+# Documentation
+# ============================================================================
+
+# Serve documentation locally (live reload)
+[group("docs")]
+docs:
+    uv run --group docs mkdocs serve --config-file docs/user/mkdocs.yml --dev-addr localhost:8100
+
+# Build documentation site
+[group("docs")]
+docs-build:
+    uv run --group docs mkdocs build --config-file docs/user/mkdocs.yml
+
+# ============================================================================
 # Build & Package
 # ============================================================================
 

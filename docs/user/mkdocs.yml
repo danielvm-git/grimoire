@@ -1,0 +1,71 @@
+site_name: Grimoire
+site_url: https://lucabello.github.io/grimoire/
+site_description: Self-hostable GitHub repository monitoring dashboard
+site_author: Luca Bello
+
+repo_url: https://github.com/lucabello/grimoire
+repo_name: lucabello/grimoire
+
+docs_dir: .
+site_dir: ../../site
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - content.code.copy
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+  logo: ../../logo.png
+
+nav:
+  - Home: index.md
+  - Tutorials:
+      - Getting started: tutorials/getting-started.md
+  - How-to guides:
+      - Write a check: how-to/write-a-check.md
+      - Write an action: how-to/write-an-action.md
+      - Deploy Grimoire: how-to/deploy.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - Checks: reference/checks.md
+      - Actions: reference/actions.md
+      - REST API: reference/api.md
+  - Concepts:
+      - Architecture: concepts/architecture.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true

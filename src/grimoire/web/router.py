@@ -1169,7 +1169,6 @@ async def check_run_trigger(
     from grimoire.checks.engine import is_check_running, run_check_for_all_targets
     from grimoire.checks.router import (
         _checks,
-        _update_snapshot_checks,
     )
     from grimoire.checks.router import (
         _engine as checks_engine,
@@ -1200,7 +1199,6 @@ async def check_run_trigger(
         await run_check_for_all_targets(
             check, checks_repos, checks_workspace, checks_engine, triggered_by="manual"
         )
-        await _update_snapshot_checks()
 
     background_tasks.add_task(_run_in_background)
 
@@ -1290,25 +1288,6 @@ async def action_run_status_partial(
     if was_running and not running:
         resp.headers["HX-Trigger"] = "actionRunCompleted"
     return resp
-
-
-# ---------------------------------------------------------------------------
-# History page
-# ---------------------------------------------------------------------------
-
-
-@router.get("/history", response_class=HTMLResponse)
-async def history_page(request: Request) -> HTMLResponse:
-    """History page — time-series charts for tracked metrics."""
-    from grimoire.github.router import _repos
-
-    repo_names = sorted(_repos.keys()) if _repos else []
-
-    return templates.TemplateResponse(
-        request,
-        "history.html",
-        context={"repo_names": repo_names},
-    )
 
 
 # ---------------------------------------------------------------------------

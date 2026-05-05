@@ -39,6 +39,9 @@ dev = [
     "actionlint-py>=1.7.10.24",
     "uv-secure>=0.15.4",
 ]
+docs = [
+    "mkdocs-material>=9.6",
+]
 
 [project.urls]
 Homepage = "https://github.com/lucabello/grimoire"
