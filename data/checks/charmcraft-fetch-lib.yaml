@@ -1,0 +1,16 @@
+name: "Charm Libraries up-to-date"
+description: "Checks whether running charmcraft fetch-lib would produce any changes"
+schedule: "0 */8 * * *"
+targets:
+  regex: "-operator$"
+severity: warning
+script: |
+  set -e
+  export CRAFT_VERBOSITY=verbose
+  charmcraft fetch-lib
+  changes="$(git status --porcelain)"
+  if [ -n "$changes" ]; then
+    echo "Libraries are outdated:"
+    echo "$changes"
+    exit 1
+  fi

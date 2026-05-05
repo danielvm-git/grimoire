@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('grimoire-theme') || 'dark');</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Grimoire{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>">
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <style>
+        .font-mono-nums { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
+
+        /* Status icons */
+        .status-icon { display: inline-block; transition: transform 0.15s; font-size: 14px; width: 16px; text-align: center; }
+        .status-icon:hover { transform: scale(1.3); }
+        .status-icon-success, .status-icon-pass { color: #22c55e; filter: drop-shadow(0 0 4px rgba(34, 197, 94, 0.4)); }
+        .status-icon-failure, .status-icon-fail { color: #ef4444; filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.4)); }
+        .status-icon-pending { color: #eab308; filter: drop-shadow(0 0 4px rgba(234, 179, 8, 0.3)); }
+        .status-icon-unknown, .status-icon-not-run { color: #6b7280; }
+
+        /* HTMX loading bar */
+        #loading-bar {
+            position: fixed; top: 0; left: 0; height: 3px; z-index: 9999;
+            background: linear-gradient(90deg, #6366f1, #a855f7, #ec4899);
+            width: 0; opacity: 0; transition: width 0.3s ease, opacity 0.2s;
+        }
+        #loading-bar.htmx-request { width: 70%; opacity: 1; }
+        #loading-bar.htmx-settling { width: 100%; opacity: 0; transition: width 0.2s ease, opacity 0.5s 0.1s; }
+
+        /* Refresh button spinner */
+        .btn .htmx-indicator { display: none; }
+        .btn.htmx-request .htmx-indicator { display: inline-block; }
+        .btn.htmx-request .btn-label { display: none; }
+
+        /* Toast */
+        #toast-container { position: fixed; bottom: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast-msg { padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; animation: toast-in 0.3s ease, toast-out 0.3s ease 2.7s forwards; }
+        @keyframes toast-in { from { opacity: 0; transform: translateY(1rem); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toast-out { from { opacity: 1; } to { opacity: 0; } }
+    </style>
+</head>
+<body class="min-h-screen bg-base-200" hx-indicator="#loading-bar">
+    <!-- Loading bar -->
+    <div id="loading-bar"></div>
+
+    <!-- Navbar -->
+    <div class="navbar bg-base-100 shadow-lg border-b border-primary/20">
+        <div class="flex-1">
+            <a href="/" class="btn btn-ghost text-xl gap-2">
+                <span>🔮</span>
+                <span class="font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Grimoire</span>
+            </a>
+        </div>
+        <div class="flex-none gap-2">
+            <ul class="menu menu-horizontal px-1">
+                <li><a href="/" class="{% block nav_dashboard %}{% endblock %}">Dashboard</a></li>
+                <li><a href="/backlog" class="{% block nav_backlog %}{% endblock %}">Backlog</a></li>
+                <li><a href="/checks" class="{% block nav_checks %}{% endblock %}">Checks</a></li>
+                <li><a href="/actions" class="{% block nav_actions %}{% endblock %}">Actions</a></li>
+            </ul>
+            <!-- Theme toggle -->
+            <label class="swap swap-rotate btn btn-ghost btn-circle btn-sm">
+                <input type="checkbox" id="theme-toggle" />
+                <svg class="swap-on fill-current w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5.64,17l-.71.71a1,1,0,0,0,0,1.41,1,1,0,0,0,1.41,0l.71-.71A1,1,0,0,0,5.64,17ZM5,12a1,1,0,0,0-1-1H3a1,1,0,0,0,0,2H4A1,1,0,0,0,5,12Zm7-7a1,1,0,0,0,1-1V3a1,1,0,0,0-2,0V4A1,1,0,0,0,12,5ZM5.64,7.05a1,1,0,0,0,.7.29,1,1,0,0,0,.71-.29,1,1,0,0,0,0-1.41l-.71-.71A1,1,0,0,0,4.93,6.34Zm12,.29a1,1,0,0,0,.7-.29l.71-.71a1,1,0,1,0-1.41-1.41L17,5.64a1,1,0,0,0,0,1.41A1,1,0,0,0,17.66,7.34ZM21,11H20a1,1,0,0,0,0,2h1a1,1,0,0,0,0-2Zm-9,8a1,1,0,0,0-1,1v1a1,1,0,0,0,2,0V20A1,1,0,0,0,12,19ZM18.36,17A1,1,0,0,0,17,17.05a1,1,0,0,0,0,1.41l.71.71a1,1,0,0,0,1.41,0,1,1,0,0,0,0-1.41ZM12,6.5A5.5,5.5,0,1,0,17.5,12,5.51,5.51,0,0,0,12,6.5Zm0,9A3.5,3.5,0,1,1,15.5,12,3.5,3.5,0,0,1,12,15.5Z"/></svg>
+                <svg class="swap-off fill-current w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21.64,13a1,1,0,0,0-1.05-.14,8.05,8.05,0,0,1-3.37.73A8.15,8.15,0,0,1,9.08,5.49a8.59,8.59,0,0,1,.25-2A1,1,0,0,0,8,2.36,10.14,10.14,0,1,0,22,14.05,1,1,0,0,0,21.64,13Zm-9.5,6.69A8.14,8.14,0,0,1,7.08,5.22v.27A10.15,10.15,0,0,0,17.22,15.63a9.79,9.79,0,0,0,2.1-.22A8.11,8.11,0,0,1,12.14,19.73Z"/></svg>
+            </label>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="container mx-auto px-4 py-6 max-w-7xl">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer footer-center p-4 text-base-content/50 text-sm">
+        <p>Grimoire v0.1.0</p>
+    </footer>
+
+    <!-- Toast container -->
+    <div id="toast-container"></div>
+
+    <script>
+        // Theme toggle persistence
+        const toggle = document.getElementById('theme-toggle');
+        const saved = localStorage.getItem('grimoire-theme');
+        if (saved === 'light') {
+            toggle.checked = true;
+        }
+        toggle.addEventListener('change', function() {
+            const theme = this.checked ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('grimoire-theme', theme);
+        });
+
+        // Toast notifications for HTMX events
+        function showToast(message, type) {
+            const container = document.getElementById('toast-container');
+            const cls = type === 'error' ? 'bg-error text-error-content' : 'bg-success text-success-content';
+            const el = document.createElement('div');
+            el.className = 'toast-msg ' + cls;
+            el.textContent = message;
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 3000);
+        }
+
+        document.body.addEventListener('htmx:afterRequest', function(evt) {
+            const xhr = evt.detail.xhr;
+            if (xhr && xhr.status >= 400) {
+                showToast('Request failed', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

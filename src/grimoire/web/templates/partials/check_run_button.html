@@ -1,0 +1,28 @@
+{# Run-button partial for a check — swaps between idle and running states.
+   Only polls when running (every 2s). Idle state is static. #}
+{% if running %}
+<div id="check-run-btn-{{ slug }}"
+     hx-get="/partials/check-run-status/{{ slug }}?was_running=1"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <button class="btn btn-primary btn-sm gap-1" disabled>
+        <span class="loading loading-spinner loading-xs"></span>
+        Running…
+        {% if progress_total > 0 %}
+        <span class="font-mono-nums text-xs opacity-80">{{ progress_completed }}/{{ progress_total }}</span>
+        {% endif %}
+    </button>
+</div>
+{% else %}
+<div id="check-run-btn-{{ slug }}">
+    <button class="btn btn-primary btn-sm gap-1"
+            hx-post="/partials/check-run/{{ slug }}"
+            hx-target="#check-run-btn-{{ slug }}"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(!event.detail.successful) { showToast(event.detail.xhr?.status === 409 ? 'Check is already running' : 'Failed to trigger check', 'error'); }">
+        <i class="fa-solid fa-play text-xs"></i>
+        <span class="btn-label">Run</span>
+        <span class="htmx-indicator loading loading-spinner loading-xs"></span>
+    </button>
+</div>
+{% endif %}

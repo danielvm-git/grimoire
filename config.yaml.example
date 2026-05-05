@@ -1,0 +1,72 @@
+# Grimoire Configuration
+# ======================
+# Copy this file to config.yaml and adjust values.
+# String values support environment variable references: "${ENV_VAR}"
+
+# GitHub authentication
+github:
+  token: "${GITHUB_TOKEN}"   # or a literal: "ghp_your_token_here"
+
+# Git user for commits/PRs made by actions (optional — omit if not using actions)
+# git:
+#   user:
+#     name: "Your Name"
+#     email: "you@example.com"
+#   signing:                  # optional
+#     key_path: "/keys/id_ed25519"
+#     format: "ssh"           # "ssh" or "gpg"
+#   ssh_known_hosts: "/keys/known_hosts"
+
+# Repositories to track
+repositories:
+  # Individual repo with specific branches
+  - repo: "owner/repo-name"
+    branches: ["main", "develop"]
+
+  # Individual repo (default branch only)
+  - repo: "owner/another-repo"
+
+  # All repos from a GitHub team (archived repos are always excluded)
+  # - team: "org-name/team-slug"
+  #   exclude:
+  #     - "org-name/excluded-repo"
+
+# Staleness thresholds
+staleness:
+  pull_requests_days: 30   # PRs with no push/comment for this many days
+  issues_days: 365         # Issues with no comment for this many days
+
+  # Percentage thresholds for highlighting stale counts as problematic (yellow).
+  # When stale/open >= this percentage, the count is highlighted.
+  # Set to 0 to always highlight, or 100 to never highlight.
+  problematic_stale_issues_pct: 20
+  problematic_stale_prs_pct: 20
+
+# Data refresh schedule (cron expression; also default check frequency)
+refresh_schedule: "*/5 * * * *"
+
+# Backlog (prioritised problem list)
+# backlog:
+#   category_weights:          # base importance of each problem type
+#     failing_workflow: 100
+#     failing_check_error: 80
+#     failing_check_warning: 30
+#     stale_pr: 50
+#     stale_issue: 20
+#   workflow_weights:           # per-workflow-name multiplier (glob patterns)
+#     "Release *": 2.0
+#     "Lint": 0.5
+#   repository_weights:        # per-repo weight multiplier (last match wins)
+#     - regex: "*"             # catch-all baseline
+#       weight: 1.0
+#     - regex: "*-operator"    # fnmatch glob on full_name
+#       weight: 3.0
+#     - repos:                 # explicit list
+#         - "org/critical-repo"
+#       weight: 5.0
+
+# Paths
+data_dir: "./data"           # Contains checks/ and actions/ subdirectories
+workspace_dir: "./workspace" # Where repos are cloned
+database_path: "./grimoire.db"
+log_file: "./grimoire.log"

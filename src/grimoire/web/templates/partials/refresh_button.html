@@ -1,0 +1,27 @@
+{# Refresh-button partial — swaps between idle and running states.
+   Only polls when running (every 2s). Idle state is static. #}
+{% if running %}
+<div id="refresh-btn"
+     hx-get="/partials/refresh-status?was_running=1"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <button class="btn btn-primary btn-sm gap-2" disabled>
+        <span class="loading loading-spinner loading-xs"></span>
+        Refreshing…
+        {% if progress_total > 0 %}
+        <span class="font-mono-nums text-xs opacity-80">{{ progress_completed }}/{{ progress_total }}</span>
+        {% endif %}
+    </button>
+</div>
+{% else %}
+<div id="refresh-btn">
+    <button class="btn btn-primary btn-sm gap-2"
+            hx-post="/partials/refresh-trigger"
+            hx-target="#refresh-btn"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(event.detail.successful) { showToast('Refresh started', 'success'); } else { showToast('Refresh failed', 'error'); }">
+        <span class="btn-label">↻ Refresh</span>
+        <span class="htmx-indicator loading loading-spinner loading-xs"></span>
+    </button>
+</div>
+{% endif %}

@@ -1,0 +1,113 @@
+<table class="table table-xs w-full">
+    <thead>
+        <tr class="text-xs uppercase tracking-wider">
+            {% set hx_base = "/partials/dashboard-matrix" %}
+            {% set next_dir = "desc" if (dir == "asc") else "asc" %}
+            <th class="cursor-pointer hover:text-primary text-center py-1 w-8"
+                hx-get="{{ hx_base }}?sort=health&dir={% if sort == 'health' %}{{ next_dir }}{% else %}desc{% endif %}"
+                hx-target="#repo-grid" hx-swap="innerHTML"
+                title="Cumulative repository status based on CI, checks, and staleness">
+                Status {% if sort == 'health' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th class="cursor-pointer hover:text-primary py-1"
+                hx-get="{{ hx_base }}?sort=name&dir={% if sort == 'name' %}{{ next_dir }}{% else %}asc{% endif %}"
+                hx-target="#repo-grid" hx-swap="innerHTML">
+                Repository {% if sort == 'name' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th class="cursor-pointer hover:text-primary text-right py-1"
+                hx-get="{{ hx_base }}?sort=issues&dir={% if sort == 'issues' %}{{ next_dir }}{% else %}desc{% endif %}"
+                hx-target="#repo-grid" hx-swap="innerHTML">
+                Issues {% if sort == 'issues' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th class="cursor-pointer hover:text-primary text-right py-1"
+                hx-get="{{ hx_base }}?sort=prs&dir={% if sort == 'prs' %}{{ next_dir }}{% else %}desc{% endif %}"
+                hx-target="#repo-grid" hx-swap="innerHTML">
+                PRs {% if sort == 'prs' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th class="cursor-pointer hover:text-primary text-right py-1"
+                hx-get="{{ hx_base }}?sort=branches&dir={% if sort == 'branches' %}{{ next_dir }}{% else %}desc{% endif %}"
+                hx-target="#repo-grid" hx-swap="innerHTML">
+                Branches {% if sort == 'branches' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
+            <th class="text-center py-1">Workflows</th>
+            <th class="text-center py-1">Checks</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for repo in repos %}
+        <tr class="hover">
+            {# ── Health Status Icon ── #}
+            <td class="text-center py-0.5 w-8">
+                {% if repo.health_status == 'error' %}
+                <i class="fa-solid fa-xmark status-icon status-icon-failure" title="Error: failing workflows or checks"></i>
+                {% elif repo.health_status == 'warning' %}
+                <i class="fa-solid fa-triangle-exclamation status-icon status-icon-pending" title="Warning: stale items or check warnings"></i>
+                {% else %}
+                <i class="fa-solid fa-check status-icon status-icon-success" title="Healthy"></i>
+                {% endif %}
+            </td>
+
+            {# ── Repository Name ── #}
+            <td class="py-0.5">
+                <a href="/repo/{{ repo.full_name }}" class="link link-hover text-sm"
+                   title="{{ repo.full_name }}">{{ repo.full_name }}</a>
+            </td>
+
+            {# ── Issues ── #}
+            <td class="text-right font-mono-nums text-sm py-0.5">
+                {{ repo.open_issues }}{% if repo.stale_issues %}<span class="text-xs {% if repo.open_issues > 0 and (repo.stale_issues * 100 / repo.open_issues) >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-50{% endif %}">({{ repo.stale_issues }})</span>{% endif %}
+            </td>
+
+            {# ── PRs ── #}
+            <td class="text-right font-mono-nums text-sm py-0.5">
+                {{ repo.open_prs }}{% if repo.stale_prs %}<span class="text-xs {% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-50{% endif %}">({{ repo.stale_prs }})</span>{% endif %}
+            </td>
+
+            {# ── Branches ── #}
+            <td class="text-right font-mono-nums text-sm py-0.5">
+                {{ repo.total_branches }}
+            </td>
+
+            {# ── Workflows ── #}
+            <td class="text-center py-0.5">
+                <div class="flex items-center justify-center gap-0.5">
+                    {% for branch, workflows in repo.workflows_by_branch.items() %}
+                        {% for wf in workflows %}
+                        <div class="tooltip tooltip-top" data-tip="{{ wf.name }} ({{ branch }}): {{ wf.status }}">
+                            <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener">
+                                {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
+                                {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
+                                {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
+                                {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
+                            </a>
+                        </div>
+                        {% endfor %}
+                        {% if not loop.last %}<span class="opacity-30 mx-0.5">|</span>{% endif %}
+                    {% endfor %}
+                </div>
+            </td>
+
+            {# ── Checks ── #}
+            <td class="text-center py-0.5">
+                {% if repo.checks_by_branch %}
+                <div class="flex items-center justify-center gap-0.5">
+                    {% for branch, checks in repo.checks_by_branch.items() %}
+                        {% for chk in checks %}
+                        <div class="tooltip tooltip-top" data-tip="{{ chk.check_name }} ({{ branch }}): {{ chk.status }}">
+                            <a href="/checks?expand={{ chk.check_slug }}{% if chk.id %}&result={{ chk.id }}{% endif %}#check-card-{{ chk.check_slug }}">
+                            {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
+                            {% elif chk.status == "fail" and chk.severity == "warning" %}<i class="fa-solid fa-triangle-exclamation status-icon status-icon-pending" title="Warning (non-critical)"></i>
+                            {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
+                            {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
+                            </a>
+                        </div>
+                        {% endfor %}
+                        {% if not loop.last %}<span class="opacity-30 mx-0.5">|</span>{% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

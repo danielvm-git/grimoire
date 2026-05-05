@@ -1,0 +1,21 @@
+name: "Lockfile up-to-date"
+description: "Checks whether running uv lock would produce any changes to uv.lock files"
+schedule: "0 */8 * * *"
+targets:
+  script: "find . -name 'uv.lock' -print -quit | grep -q ."
+severity: warning
+script: |
+  set -e
+  unset UV_FROZEN
+  for lockfile in $(find . -name 'uv.lock' -type f); do
+    dir="$(dirname "$lockfile")"
+    echo "Checking $lockfile ..."
+    (cd "$dir" && uv lock --upgrade --no-cache)
+  done
+  changes="$(git diff --name-only -- '*/uv.lock' 'uv.lock')"
+  if [ -n "$changes" ]; then
+    echo "Lockfiles are outdated:"
+    echo "$changes"
+    exit 1
+  fi
+  echo "All lockfiles are up-to-date."

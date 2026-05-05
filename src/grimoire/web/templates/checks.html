@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Checks — Grimoire{% endblock %}
+{% block nav_checks %}active{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold mb-6">Checks</h1>
+
+{% if checks %}
+<div class="flex flex-col gap-3">
+    {% for chk in checks %}
+    <div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow {% if not chk.enabled %}opacity-50{% endif %}"
+         id="check-card-{{ chk.slug }}">
+        <div class="px-5 py-4">
+
+            {# ── Header Row: name, metadata, actions ── #}
+            <div class="flex items-start gap-4">
+                {# Left: name + description + metadata #}
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 class="text-base font-semibold">{{ chk.name }}</h3>
+                        <span class="opacity-40 text-sm">· {{ chk.severity }}</span>
+                        {% if not chk.enabled %}
+                        <span class="opacity-40 text-sm">· disabled</span>
+                        {% endif %}
+                    </div>
+                    {% if chk.description %}
+                    <p class="text-sm opacity-60 mt-0.5">{{ chk.description }}</p>
+                    {% endif %}
+                    <div class="flex items-center gap-3 mt-1.5 text-sm">
+                        <span class="font-mono text-xs opacity-50">{{ chk.target_summary }}</span>
+                        {% if chk.pass_count or chk.fail_count or chk.warn_count %}
+                        <span class="opacity-30">│</span>
+                        {% if chk.pass_count %}
+                        <span class="text-success"><i class="fa-solid fa-check"></i> {{ chk.pass_count }}</span>
+                        {% endif %}
+                        {% if chk.warn_count %}
+                        <span class="text-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{ chk.warn_count }}</span>
+                        {% endif %}
+                        {% if chk.fail_count %}
+                        <span class="text-error"><i class="fa-solid fa-xmark"></i> {{ chk.fail_count }}</span>
+                        {% endif %}
+                        {% if chk.last_run %}
+                        <span class="opacity-30">│</span>
+                        <span class="opacity-40">{{ time_ago(chk.last_run) }}</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="opacity-30">│</span>
+                        <span class="opacity-40">no results yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {# Right: schedule, toggle, run button #}
+                <div class="flex items-center gap-3 shrink-0">
+                    <span class="text-xs opacity-40 whitespace-nowrap">
+                        <i class="fa-regular fa-clock"></i> Scheduled: {% if chk.schedule %}{{ chk.schedule }}{% else %}default{% endif %}
+                    </span>
+                    {% if chk.schedule %}
+                    <button class="btn btn-sm {% if chk.enabled %}btn-outline btn-warning{% else %}btn-outline btn-success{% endif %} gap-1"
+                            hx-post="/api/checks/{{ chk.slug }}/toggle"
+                            hx-swap="none"
+                            hx-on::after-request="if(event.detail.successful) { location.reload(); } else { showToast('Toggle failed', 'error'); }">
+                        {% if chk.enabled %}
+                        <i class="fa-solid fa-pause text-xs"></i> Disable
+                        {% else %}
+                        <i class="fa-solid fa-play text-xs"></i> Enable
+                        {% endif %}
+                    </button>
+                    {% endif %}
+                    <div hx-get="/partials/check-run-status/{{ chk.slug }}"
+                         hx-trigger="load"
+                         hx-swap="outerHTML">
+                        <button class="btn btn-primary btn-sm gap-1" disabled>
+                            <span class="loading loading-spinner loading-xs"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {# ── Expandable sections ── #}
+            <div class="flex gap-2 mt-2">
+                {# Script preview toggle #}
+                <button class="btn btn-ghost btn-xs opacity-60"
+                        onclick="this.closest('.bg-base-100').querySelector('.check-script').classList.toggle('hidden')">
+                    Script
+                </button>
+                {# Results toggle #}
+                {% if chk.pass_count or chk.fail_count or chk.warn_count %}
+                <button class="btn btn-ghost btn-xs opacity-60"
+                        hx-get="/partials/check-results/{{ chk.slug }}"
+                        hx-target="#check-results-{{ chk.slug }}"
+                        hx-swap="innerHTML"
+                        hx-on::before-request="var t = document.getElementById('check-results-{{ chk.slug }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
+                    Results
+                </button>
+                {% endif %}
+            </div>
+
+            {# Script content (hidden by default) #}
+            <div class="check-script hidden mt-2">
+                <pre class="rounded-box overflow-x-auto text-xs"><code class="language-bash">{{ chk.script }}</code></pre>
+            </div>
+
+            {# Inline results container #}
+            <div id="check-results-{{ chk.slug }}" class="mt-2"></div>
+
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="hero min-h-[20vh] mb-8">
+    <div class="hero-content text-center">
+        <div class="max-w-md">
+            <div class="text-4xl mb-3">🔍</div>
+            <h2 class="text-xl font-bold mb-2">No checks configured</h2>
+            <p class="opacity-60">Add YAML files to the <code class="kbd kbd-sm">data/checks/</code> directory to define checks.</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# Highlight.js for bash syntax highlighting #}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/bash.min.js"></script>
+<script>hljs.highlightAll();</script>
+<script>
+// Auto-expand check results when navigated from dashboard
+document.addEventListener('DOMContentLoaded', function() {
+    const params = new URLSearchParams(window.location.search);
+    const expandSlug = params.get('expand');
+    const resultId = params.get('result');
+    if (!expandSlug) return;
+
+    const card = document.getElementById('check-card-' + expandSlug);
+    if (!card) return;
+
+    // Scroll to the card
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    card.classList.add('ring', 'ring-primary', 'ring-1');
+    setTimeout(() => card.classList.remove('ring', 'ring-primary', 'ring-1'), 3000);
+
+    // Auto-load results via HTMX
+    const target = document.getElementById('check-results-' + expandSlug);
+    if (target) {
+        htmx.ajax('GET', '/partials/check-results/' + expandSlug, target).then(function() {
+            // Open the first run's details to show results
+            var firstDetails = target.querySelector('details');
+            if (firstDetails) firstDetails.open = true;
+            // After results load, auto-expand the specific result's output
+            if (resultId) {
+                setTimeout(function() {
+                    var outputBtn = target.querySelector('button[hx-get="/partials/check-output/' + resultId + '"]');
+                    if (outputBtn) outputBtn.click();
+                }, 200);
+            }
+        });
+    }
+});
+
+// Refresh page when a check run completes (triggered by HX-Trigger header)
+document.body.addEventListener('checkRunCompleted', function() {
+    showToast('Check completed', 'success');
+    setTimeout(() => location.reload(), 500);
+});
+</script>
+{% endblock %}

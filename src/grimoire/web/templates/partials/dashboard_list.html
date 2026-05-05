@@ -1,0 +1,111 @@
+<div class="flex flex-col gap-3">
+{% for repo in repos %}
+<div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow {% if repo.health_status == 'error' %}border-l-4 border-error{% elif repo.health_status == 'warning' %}border-l-4 border-warning{% endif %}">
+    <div class="px-5 py-4">
+
+        {# ── Header Row: name, issues, PRs, last activity, link ── #}
+        <div class="flex items-center gap-4 flex-wrap">
+            <a href="/repo/{{ repo.full_name }}" class="link link-hover text-base font-semibold min-w-[200px]">
+                <span class="opacity-60">{{ repo.owner }}/</span>{{ repo.name }}
+            </a>
+
+            <div class="flex flex-wrap gap-x-1 gap-y-1 text-sm font-mono-nums flex-1">
+                <span class="opacity-70">
+                    {{ repo.open_issues }} issues
+                    {% if repo.stale_issues %}
+                    <span class="{% if repo.open_issues > 0 and (repo.stale_issues * 100 / repo.open_issues) >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-70{% endif %}">({{ repo.stale_issues }} stale)</span>
+                    {% endif %}
+                </span>
+                <span class="opacity-40 mx-1">·</span>
+                <span class="opacity-70">
+                    {{ repo.open_prs }} PRs
+                    {% if repo.stale_prs %}
+                    <span class="{% if repo.open_prs > 0 and (repo.stale_prs * 100 / repo.open_prs) >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-70{% endif %}">({{ repo.stale_prs }} stale)</span>
+                    {% endif %}
+                </span>
+                <span class="opacity-40 mx-1">·</span>
+                <span class="opacity-70">
+                    <a href="https://github.com/{{ repo.full_name }}/branches" target="_blank" rel="noopener" class="hover:underline">{{ repo.total_branches }} branches</a>
+                </span>
+            </div>
+
+            <div class="flex items-center gap-2 flex-shrink-0">
+                {% if repo.last_commit_at %}
+                <span class="opacity-60 text-sm whitespace-nowrap" title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">Last activity: <span class="font-mono-nums inline-block text-right" style="min-width: 8ch">{{ time_ago(repo.last_commit_at) }}</span></span>
+                {% endif %}
+                {% if repo.warnings %}
+                <div class="tooltip tooltip-left" data-tip="{{ repo.warnings | join('; ') }}">
+                    <span class="text-warning text-sm">⚠</span>
+                </div>
+                {% endif %}
+                <a href="https://github.com/{{ repo.full_name }}" target="_blank" rel="noopener"
+                   class="btn btn-ghost btn-xs opacity-40 hover:opacity-100" title="View on GitHub">↗</a>
+            </div>
+        </div>
+
+        {# ── Branches ── #}
+        <div class="flex flex-wrap gap-1 mt-1.5">
+            {% for branch in repo.branches %}
+            <span class="badge badge-ghost badge-sm gap-1"><i class="fa-solid fa-code-branch" style="font-size:10px"></i>{{ branch }}</span>
+            {% endfor %}
+        </div>
+
+        {# ── Workflows & Checks (two-column) ── #}
+        {% if repo.workflows_by_branch or repo.checks_by_branch %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 mt-3">
+
+            {# ── Workflows Column ── #}
+            <div>
+                {% if repo.workflows_by_branch %}
+                <div class="text-xs font-semibold opacity-50 uppercase tracking-wider mb-1">Workflows</div>
+                {% for branch, workflows in repo.workflows_by_branch.items() %}
+                    {% if repo.branches | length > 1 %}
+                    <div class="text-xs opacity-40 mt-1 mb-0.5">{{ branch }}</div>
+                    {% endif %}
+                    {% for wf in workflows %}
+                    <div class="flex items-center gap-2 py-0.5">
+                        <a href="{{ wf.run_url or wf.url }}" target="_blank" rel="noopener" class="flex items-center gap-2 hover:opacity-80">
+                            {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
+                            {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
+                            {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
+                            {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
+                            <span class="text-sm">{{ wf.name }}</span>
+                        </a>
+                        <span class="text-xs opacity-40">{{ wf.status }}</span>
+                    </div>
+                    {% endfor %}
+                {% endfor %}
+                {% endif %}
+            </div>
+
+            {# ── Checks Column ── #}
+            <div>
+                {% if repo.checks_by_branch %}
+                <div class="text-xs font-semibold opacity-50 uppercase tracking-wider mb-1">Checks</div>
+                {% for branch, checks in repo.checks_by_branch.items() %}
+                    {% if repo.branches | length > 1 %}
+                    <div class="text-xs opacity-40 mt-1 mb-0.5">{{ branch }}</div>
+                    {% endif %}
+                    {% for chk in checks %}
+                    <div class="flex items-center gap-2 py-0.5">
+                        <a href="/checks?expand={{ chk.check_slug }}{% if chk.id %}&result={{ chk.id }}{% endif %}#check-card-{{ chk.check_slug }}" class="flex items-center gap-2 hover:opacity-80">
+                        {% if chk.status == "pass" %}<i class="fa-solid fa-check status-icon status-icon-pass"></i>
+                        {% elif chk.status == "fail" and chk.severity == "warning" %}<i class="fa-solid fa-triangle-exclamation status-icon status-icon-pending"></i>
+                        {% elif chk.status == "fail" %}<i class="fa-solid fa-xmark status-icon status-icon-fail"></i>
+                        {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
+                        <span class="text-sm">{{ chk.check_name }}</span>
+                        </a>
+                        <span class="text-xs opacity-40">{{ chk.status }}</span>
+                    </div>
+                    {% endfor %}
+                {% endfor %}
+                {% endif %}
+            </div>
+
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endfor %}
+</div>

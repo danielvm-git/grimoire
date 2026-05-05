@@ -1,0 +1,96 @@
+{# Backlog items partial — rendered inside #backlog-items container #}
+
+{# ── Reusable item row macro ─────────────────────────────────────── #}
+{% macro item_row(item, show_repo=true) %}
+<div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow px-4 py-3">
+    <div class="flex items-center gap-3">
+        {# Priority indicator: arrow icon + score #}
+        <div class="flex items-center gap-1.5 w-14 justify-end shrink-0 {{ item.tier_color }}" title="Score: {{ '%.0f' | format(item.score) }}">
+            <i class="{{ item.tier_icon }} text-xs"></i>
+            <span class="font-mono-nums text-sm font-semibold">{{ '%.0f' | format(item.score) }}</span>
+        </div>
+
+        {# Category icon #}
+        <div class="tooltip" data-tip="{{ item.category_label }}">
+            <i class="{{ item.category_icon }} text-sm opacity-60 w-5 text-center"></i>
+        </div>
+
+        {% if show_repo %}
+        {# Repo name #}
+        <a href="/repo/{{ item.repo_full_name }}" class="text-sm font-semibold hover:text-primary whitespace-nowrap">
+            {{ item.repo_full_name }}
+        </a>
+        {% endif %}
+
+        {# Description #}
+        <span class="text-sm opacity-80 truncate flex-1" title="{{ item.description }}">
+            {{ item.description }}
+        </span>
+
+        {# Age #}
+        {% if item.age_days > 0 %}
+        <span class="text-xs opacity-50 whitespace-nowrap font-mono-nums">
+            {% set days = item.age_days | int %}
+            {% if days == 0 %}&lt;1d
+            {% elif days < 365 %}{{ days }}d
+            {% else %}{{ days // 365 }}y {{ days % 365 }}d
+            {% endif %}
+        </span>
+        {% endif %}
+
+        {# Actions #}
+        <div class="flex items-center gap-1 shrink-0">
+            {% if item.url %}
+            <a href="{{ item.url }}" target="_blank" rel="noopener" class="btn btn-ghost btn-xs tooltip inline-flex items-center" data-tip="Open on GitHub">
+                <i class="fa-brands fa-github"></i>
+            </a>
+            {% endif %}
+            <button class="btn btn-ghost btn-xs copy-item-btn tooltip inline-flex items-center" data-tip="Copy as Markdown"
+                    data-markdown="{{ item.to_markdown() | e }}">
+                <i class="fa-regular fa-clipboard"></i>
+            </button>
+        </div>
+    </div>
+</div>
+{% endmacro %}
+
+{# ── Grouped view ────────────────────────────────────────────────── #}
+{% if groups is defined and groups %}
+<div class="flex flex-col gap-3">
+{% for group in groups %}
+    <details class="bg-base-100 rounded-lg shadow-sm">
+        <summary class="cursor-pointer px-4 py-3 flex items-center gap-3 hover:bg-base-200 rounded-lg select-none">
+            <div class="flex items-center gap-1.5 w-16 justify-end shrink-0 {{ group.tier_color }}" title="Cumulative score: {{ '%.0f' | format(group.total_score) }}">
+                <i class="{{ group.tier_icon }} text-xs"></i>
+                <span class="font-mono-nums text-sm font-semibold">{{ '%.0f' | format(group.total_score) }}</span>
+            </div>
+            <a href="/repo/{{ group.repo_full_name }}" class="font-semibold hover:text-primary" onclick="event.stopPropagation()">
+                {{ group.repo_full_name }}
+            </a>
+            <span class="text-xs opacity-50">
+                {{ group.items | length }} item{{ 's' if group.items | length != 1 else '' }}
+            </span>
+            <i class="fa-solid fa-chevron-down text-xs opacity-40 ml-auto transition-transform"></i>
+        </summary>
+        <div class="flex flex-col gap-1 px-3 pb-3">
+            {% for item in group.items %}
+                {{ item_row(item, show_repo=false) }}
+            {% endfor %}
+        </div>
+    </details>
+{% endfor %}
+</div>
+
+{# ── Flat view (default) ─────────────────────────────────────────── #}
+{% elif items %}
+<div class="flex flex-col gap-2">
+{% for item in items %}
+    {{ item_row(item) }}
+{% endfor %}
+</div>
+
+{% else %}
+<div class="text-center py-8 opacity-50">
+    <p>No items match the current filters.</p>
+</div>
+{% endif %}
