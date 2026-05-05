@@ -259,10 +259,13 @@ async def fetch_repository_stats(
                 )
                 issue_activity_dates.append(last_activity)
                 if _is_issue_stale(issue, stale_cutoff):
+                    issue_number = issue.get("number")
+                    if not issue_number or issue_number <= 0:
+                        continue
                     stale_issues += 1
                     stale_issue_items.append(
                         IssueDetail(
-                            number=issue.get("number", 0),
+                            number=issue_number,
                             title=issue.get("title", ""),
                             url=issue.get("html_url", ""),
                             created_at=_parse_dt(issue.get("created_at")) or now,
@@ -291,10 +294,13 @@ async def fetch_repository_stats(
                 last_activity = _parse_dt(pr.get("updated_at")) or _parse_dt(pr.get("created_at"))
                 pr_activity_dates.append(last_activity)
                 if _is_pr_stale(pr, stale_cutoff):
+                    pr_number = pr.get("number")
+                    if not pr_number or pr_number <= 0:
+                        continue
                     stale_prs += 1
                     stale_pr_items.append(
                         PullRequestDetail(
-                            number=pr.get("number", 0),
+                            number=pr_number,
                             title=pr.get("title", ""),
                             url=pr.get("html_url", ""),
                             created_at=_parse_dt(pr.get("created_at")) or now,

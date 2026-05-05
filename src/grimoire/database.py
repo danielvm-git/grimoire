@@ -59,6 +59,15 @@ class CheckToggleRecord(SQLModel, table=True):
     enabled: bool = True
 
 
+class ActionToggleRecord(SQLModel, table=True):
+    """Persistent enabled/disabled state for an action."""
+
+    __tablename__ = "action_toggle"  # type: ignore[assignment]
+
+    action_slug: str = Field(primary_key=True)
+    enabled: bool = True
+
+
 # ---------------------------------------------------------------------------
 # Action runs
 # ---------------------------------------------------------------------------

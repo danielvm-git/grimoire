@@ -210,6 +210,7 @@ SQLModel table models for persistent state:
 | `ActionRunRecord` | Stores action run metadata (name, trigger, status, timestamps) |
 | `ActionRunRepoRecord` | Stores per-repo results within a run (FK to ActionRunRecord) |
 | `CheckToggleRecord` | Stores check enabled/disabled state (persists across restarts) |
+| `ActionToggleRecord` | Stores action enabled/disabled state (persists across restarts) |
 | `CachedRepository` | Cached repo metadata (full_name, default_branch, source, fetched_at) |
 | `CachedIssue` | Cached open issues (repo, title, number, url, timestamps, fetched_at) |
 | `CachedPullRequest` | Cached open PRs (repo, title, number, url, author, timestamps, fetched_at) |

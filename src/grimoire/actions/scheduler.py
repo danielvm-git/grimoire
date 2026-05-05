@@ -31,6 +31,9 @@ def register_actions(
     Actions without a schedule are manual-only and are not registered.
     """
     for action in actions:
+        if not action.enabled:
+            continue
+
         if not action.schedule:
             continue
 

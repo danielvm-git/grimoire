@@ -171,6 +171,7 @@ async def web_client_with_checks(tmp_path: object) -> AsyncIterator[AsyncClient]
         description="Always green sentinel",
         targets=TargetSpec(regex=".*"),
         script="exit 0",
+        schedule="0 * * * *",
     )
     operator_check = CheckDefinition(
         name="Charm Libraries",
@@ -178,6 +179,7 @@ async def web_client_with_checks(tmp_path: object) -> AsyncIterator[AsyncClient]
         description="Check charm libs",
         targets=TargetSpec(regex="-operator$"),
         script="exit 0",
+        schedule="30 2 * * *",
     )
     checks_router._checks.extend([watchdog, operator_check])
     checks_router._engine = engine
@@ -266,6 +268,7 @@ async def web_client_with_actions(tmp_path: object) -> AsyncIterator[AsyncClient
         description="Runs pwd in each workspace",
         targets=TargetSpec(regex=".*"),
         script="pwd\n",
+        schedule="0 3 * * *",
     )
     actions_router._actions.append(test_action)
     actions_router._engine = engine

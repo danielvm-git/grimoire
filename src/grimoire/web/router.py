@@ -151,6 +151,7 @@ class ActionViewModel:
     slug: str
     description: str
     schedule: str | None
+    enabled: bool = True
     target_summary: str = ""
     script: str = ""
     pass_count: int = 0
@@ -618,6 +619,7 @@ async def actions_page(request: Request) -> HTMLResponse:
                 slug=a.slug,
                 description=a.description,
                 schedule=a.schedule,
+                enabled=a.enabled,
                 target_summary=target_summary,
                 script=a.script,
                 pass_count=stats.get("pass", 0),

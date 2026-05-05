@@ -11,7 +11,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.actions.engine import ActionConflictError, run_action
-from grimoire.database import ActionRunRecord, ActionRunRepoRecord
+from grimoire.database import ActionRunRecord, ActionRunRepoRecord, ActionToggleRecord
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -268,3 +268,23 @@ async def action_status(slug: str) -> dict[str, object]:
         running = (await session.exec(stmt)).first() is not None
 
     return {"slug": slug, "running": running}
+
+
+@router.post("/{slug}/toggle")
+async def toggle_action(slug: str) -> dict[str, object]:
+    """Toggle an action enabled/disabled and persist the state."""
+    action = _find_action(slug)
+    assert _engine is not None
+
+    action.enabled = not action.enabled
+
+    async with AsyncSession(_engine) as session:
+        existing = await session.get(ActionToggleRecord, slug)
+        if existing:
+            existing.enabled = action.enabled
+            session.add(existing)
+        else:
+            session.add(ActionToggleRecord(action_slug=slug, enabled=action.enabled))
+        await session.commit()
+
+    return {"slug": slug, "enabled": action.enabled}

@@ -8,7 +8,7 @@
 {% if actions %}
 <div class="flex flex-col gap-3">
     {% for action in actions %}
-    <div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow"
+    <div class="bg-base-100 rounded-lg shadow-sm hover:shadow-md transition-shadow {% if not action.enabled %}opacity-50{% endif %}"
          id="action-card-{{ action.slug }}">
         <div class="px-5 py-4">
 
@@ -18,6 +18,9 @@
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
                         <h3 class="text-base font-semibold">{{ action.name }}</h3>
+                        {% if not action.enabled %}
+                        <span class="opacity-40 text-sm">· disabled</span>
+                        {% endif %}
                     </div>
                     {% if action.description %}
                     <p class="text-sm opacity-60 mt-0.5">{{ action.description }}</p>
@@ -41,11 +44,23 @@
                     </div>
                 </div>
 
-                {# Right: schedule + run button #}
+                {# Right: schedule, toggle, run button #}
                 <div class="flex items-center gap-3 shrink-0">
                     <span class="text-xs opacity-40 whitespace-nowrap">
                         <i class="fa-regular fa-clock"></i> Scheduled: {% if action.schedule %}{{ action.schedule }}{% else %}manual{% endif %}
                     </span>
+                    {% if action.schedule %}
+                    <button class="btn btn-sm {% if action.enabled %}btn-outline btn-warning{% else %}btn-outline btn-success{% endif %} gap-1"
+                            hx-post="/api/actions/{{ action.slug }}/toggle"
+                            hx-swap="none"
+                            hx-on::after-request="if(event.detail.successful) { location.reload(); } else { showToast('Toggle failed', 'error'); }">
+                        {% if action.enabled %}
+                        <i class="fa-solid fa-pause text-xs"></i> Disable
+                        {% else %}
+                        <i class="fa-solid fa-play text-xs"></i> Enable
+                        {% endif %}
+                    </button>
+                    {% endif %}
                     <div hx-get="/partials/action-run-status/{{ action.slug }}"
                          hx-trigger="load"
                          hx-swap="outerHTML">
