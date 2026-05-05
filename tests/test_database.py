@@ -120,3 +120,48 @@ async def test_cleanup_stale_runs(engine: AsyncEngine) -> None:
         assert a1 is not None
         assert a1.status == "interrupted"
         assert a1.finished_at is not None
+
+
+async def test_restore_check_toggles(engine: AsyncEngine) -> None:
+    """restore_check_toggles applies persisted enabled state to check definitions."""
+    from grimoire.database import CheckToggleRecord, restore_check_toggles
+
+    session = await get_session(engine)
+    async with session:
+        session.add(CheckToggleRecord(check_slug="check-a", enabled=False))
+        session.add(CheckToggleRecord(check_slug="check-b", enabled=True))
+        await session.commit()
+
+    # Simulate in-memory check definitions (duck-typed)
+    class FakeCheck:
+        def __init__(self, slug: str, enabled: bool = True) -> None:
+            self.slug = slug
+            self.enabled = enabled
+
+    checks = [FakeCheck("check-a"), FakeCheck("check-b"), FakeCheck("check-c")]
+    await restore_check_toggles(engine, checks)
+
+    assert checks[0].enabled is False  # restored from DB
+    assert checks[1].enabled is True  # restored (already True)
+    assert checks[2].enabled is True  # no DB record, stays default
+
+
+async def test_restore_action_toggles(engine: AsyncEngine) -> None:
+    """restore_action_toggles applies persisted enabled state to action definitions."""
+    from grimoire.database import ActionToggleRecord, restore_action_toggles
+
+    session = await get_session(engine)
+    async with session:
+        session.add(ActionToggleRecord(action_slug="act-x", enabled=False))
+        await session.commit()
+
+    class FakeAction:
+        def __init__(self, slug: str, enabled: bool = True) -> None:
+            self.slug = slug
+            self.enabled = enabled
+
+    actions = [FakeAction("act-x"), FakeAction("act-y")]
+    await restore_action_toggles(engine, actions)
+
+    assert actions[0].enabled is False  # restored from DB
+    assert actions[1].enabled is True  # no DB record, stays default

@@ -25,7 +25,12 @@ from grimoire.checks.router import router as checks_router
 from grimoire.checks.router import set_checks_state
 from grimoire.checks.scheduler import register_checks
 from grimoire.config import load_config
-from grimoire.database import create_tables, get_engine
+from grimoire.database import (
+    create_tables,
+    get_engine,
+    restore_action_toggles,
+    restore_check_toggles,
+)
 from grimoire.github.client import GitHubClient
 from grimoire.github.router import (
     _cache,
@@ -176,6 +181,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Checks & actions
     checks = load_checks(config.data_dir)
     actions = load_actions(config.data_dir)
+
+    # Restore persisted toggle state from DB
+    await restore_check_toggles(engine, checks)
+    await restore_action_toggles(engine, actions)
 
     set_checks_state(checks, repos, workspace, engine)
     set_actions_state(actions, repos, workspace, engine)
