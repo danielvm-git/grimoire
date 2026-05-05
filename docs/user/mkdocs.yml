@@ -36,6 +36,7 @@ theme:
   icon:
     repo: fontawesome/brands/github
   logo: assets/logo-nav.png
+  favicon: assets/favicon.ico
 
 nav:
   - Home: index.md
