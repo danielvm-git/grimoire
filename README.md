@@ -1,4 +1,4 @@
-# 🔮 Grimoire
+# Grimoire
 
 <p align="center">
   <img src="logo.png" alt="Grimoire logo" width="280">

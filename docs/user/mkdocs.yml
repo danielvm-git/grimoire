@@ -35,7 +35,6 @@ theme:
     - content.tabs.link
   icon:
     repo: fontawesome/brands/github
-  logo: assets/logo-nav.png
   favicon: assets/favicon.ico
 
 nav:
