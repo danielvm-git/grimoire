@@ -272,7 +272,6 @@ async def run_check_endpoint(
         await run_check_for_all_targets(
             check, _repos, workspace, engine, specific_repo=repo, triggered_by="manual"
         )
-        await _update_snapshot_checks()
 
     background_tasks.add_task(_run_in_background)
 
@@ -286,18 +285,6 @@ async def run_check_endpoint(
         finished_at=None,
         results=[],
     )
-
-
-async def _update_snapshot_checks() -> None:
-    """Update today's snapshot with latest check counts."""
-    from grimoire.github.service import compute_check_counts, update_snapshot_checks
-
-    assert _engine is not None
-    try:
-        check_counts = await compute_check_counts(_engine, _checks)
-        await update_snapshot_checks(_engine, check_counts)
-    except Exception:
-        logger.exception("Failed to update snapshot check metrics after manual run")
 
 
 @router.post("/{slug}/toggle")

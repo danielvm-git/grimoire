@@ -4,11 +4,11 @@ Instructions for AI agents working on this codebase.
 
 ## Orientation
 
-Read `docs/00-overview.md` first — it has the tech stack, project structure, module dependency graph, config format, and REST API summary.
+Read `docs/specs/00-overview.md` first — it has the tech stack, project structure, module dependency graph, config format, and REST API summary.
 
 ## Specs
 
-Every module has a spec in `docs/`, numbered by dependency order. Each spec is the authoritative reference for its module: it includes all models, file paths, API routes, and acceptance criteria.
+Every module has a spec in `docs/specs/`, numbered by dependency order. Each spec is the authoritative reference for its module: it includes all models, file paths, API routes, and acceptance criteria.
 
 - **Read the relevant spec before modifying a module.**
 - When adding a feature that spans modules, update all affected specs.
@@ -54,4 +54,13 @@ We are in active development — there is no need for schema migrations. When ch
 - Only comment where behavior is non-obvious.
 - Use `TYPE_CHECKING` imports to avoid circular dependencies between modules.
 - Module-level mutable state uses setter functions (e.g., `set_checks_state()`) for dependency injection and testability.
+
+## Documentation
+
+User-facing documentation lives in `docs/user/` and is built with [MkDocs Material](https://squidfunnel.github.io/mkdocs-material/).
+
+- **When adding or changing user-visible features, update the relevant page(s) in `docs/user/`.**
+- Configuration changes → update `docs/user/configuration.md`.
+- New check/action capabilities → update `docs/user/checks.md` or `docs/user/actions.md`.
+- Preview locally with `just docs`.
 

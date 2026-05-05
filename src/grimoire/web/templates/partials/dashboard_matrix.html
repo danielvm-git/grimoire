@@ -5,8 +5,9 @@
             {% set next_dir = "desc" if (dir == "asc") else "asc" %}
             <th class="cursor-pointer hover:text-primary text-center py-1 w-8"
                 hx-get="{{ hx_base }}?sort=health&dir={% if sort == 'health' %}{{ next_dir }}{% else %}desc{% endif %}"
-                hx-target="#repo-grid" hx-swap="innerHTML">
-                {% if sort == 'health' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% else %}⬤{% endif %}
+                hx-target="#repo-grid" hx-swap="innerHTML"
+                title="Cumulative repository status based on CI, checks, and staleness">
+                Status {% if sort == 'health' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
             </th>
             <th class="cursor-pointer hover:text-primary py-1"
                 hx-get="{{ hx_base }}?sort=name&dir={% if sort == 'name' %}{{ next_dir }}{% else %}asc{% endif %}"

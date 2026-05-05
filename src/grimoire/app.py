@@ -43,15 +43,11 @@ from grimoire.github.router import (
     router as repos_router,
 )
 from grimoire.github.service import (
-    compute_check_counts,
     load_stats_from_db,
     prune_removed_repos,
     prune_stale_data,
     refresh_all_stats,
-    update_snapshot_checks,
 )
-from grimoire.history.router import router as history_router
-from grimoire.history.router import set_history_state
 from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import DATA_REFRESH_DURATION, update_repo_metrics
@@ -102,9 +98,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Expose refresh schedule to web layer
     set_refresh_schedule(config.refresh_schedule)
-
-    # Expose engine + staleness to history layer
-    set_history_state(engine, config.staleness)
 
     # Prune DB-cached repos that are no longer in the config
     await prune_removed_repos(engine, config)
@@ -209,13 +202,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             except Exception:
                 logger.exception("Default-schedule check '%s' failed", check.slug)
 
-        # Update today's snapshot with check metrics
-        try:
-            check_counts = await compute_check_counts(engine, checks)
-            await update_snapshot_checks(engine, check_counts)
-        except Exception:
-            logger.exception("Failed to update snapshot check metrics")
-
         return refreshed_repos
 
     set_refresh_callback(_do_refresh)
@@ -282,7 +268,6 @@ def create_app() -> FastAPI:
     app.include_router(refresh_router, prefix="/api")
     app.include_router(checks_router, prefix="/api")
     app.include_router(actions_router, prefix="/api")
-    app.include_router(history_router, prefix="/api")
 
     # Observability
     app.include_router(metrics_router)
