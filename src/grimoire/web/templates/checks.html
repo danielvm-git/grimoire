@@ -28,7 +28,7 @@
                     <div class="flex items-center gap-3 mt-1.5 text-sm">
                         <span class="font-mono text-xs opacity-50">{{ chk.target_summary }}</span>
                         {% if chk.pass_count or chk.fail_count or chk.warn_count %}
-                        <span class="opacity-40">·</span>
+                        <span class="opacity-30">│</span>
                         {% if chk.pass_count %}
                         <span class="text-success"><i class="fa-solid fa-check"></i> {{ chk.pass_count }}</span>
                         {% endif %}
@@ -39,10 +39,12 @@
                         <span class="text-error"><i class="fa-solid fa-xmark"></i> {{ chk.fail_count }}</span>
                         {% endif %}
                         {% if chk.last_run %}
-                        <span class="opacity-40">· {{ time_ago(chk.last_run) }}</span>
+                        <span class="opacity-30">│</span>
+                        <span class="opacity-40">{{ time_ago(chk.last_run) }}</span>
                         {% endif %}
                         {% else %}
-                        <span class="opacity-40">· no results yet</span>
+                        <span class="opacity-30">│</span>
+                        <span class="opacity-40">no results yet</span>
                         {% endif %}
                     </div>
                 </div>
