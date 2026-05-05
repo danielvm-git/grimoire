@@ -52,6 +52,7 @@
                     <span class="text-xs opacity-40 whitespace-nowrap">
                         <i class="fa-regular fa-clock"></i> Scheduled: {% if chk.schedule %}{{ chk.schedule }}{% else %}default{% endif %}
                     </span>
+                    {% if chk.schedule %}
                     <button class="btn btn-sm {% if chk.enabled %}btn-outline btn-warning{% else %}btn-outline btn-success{% endif %} gap-1"
                             hx-post="/api/checks/{{ chk.slug }}/toggle"
                             hx-swap="none"
@@ -62,6 +63,7 @@
                         <i class="fa-solid fa-play text-xs"></i> Enable
                         {% endif %}
                     </button>
+                    {% endif %}
                     <div hx-get="/partials/check-run-status/{{ chk.slug }}"
                          hx-trigger="load"
                          hx-swap="outerHTML">

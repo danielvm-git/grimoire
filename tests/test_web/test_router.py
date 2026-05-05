@@ -138,6 +138,13 @@ class TestActionsPage:
         assert "/partials/action-results/test" in resp.text
         assert "Results" in resp.text
 
+    async def test_actions_shows_toggle_for_scheduled(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get("/actions")
+        assert "/api/actions/test/toggle" in resp.text
+        assert "Disable" in resp.text
+
     async def test_actions_navbar_active(self, web_client_with_actions: AsyncClient) -> None:
         resp = await web_client_with_actions.get("/actions")
         assert "Actions" in resp.text

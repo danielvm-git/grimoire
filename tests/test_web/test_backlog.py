@@ -398,6 +398,68 @@ class TestBuildBacklogItems:
         assert items[0].category == BacklogCategory.STALE_ISSUE
         assert items[0].number == 42
 
+    def test_pr_with_number_zero_is_excluded(self) -> None:
+        """Regression: items with number=0 (invalid) must not appear in backlog."""
+        valid_pr = PullRequestDetail(
+            number=42,
+            title="Valid PR",
+            url="https://github.com/acme/api/pull/42",
+            created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            last_activity_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+        )
+        invalid_pr = PullRequestDetail(
+            number=0,
+            title="Ghost PR",
+            url="https://github.com/acme/api/pull/0",
+            created_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            last_activity_at=datetime(2026, 3, 1, tzinfo=timezone.utc),
+        )
+        repo = _make_repo()
+        stats = _make_stats(stale_pr_items=[valid_pr, invalid_pr])
+        items = build_backlog_items(
+            cache={repo.full_name: stats},
+            repos={repo.full_name: repo},
+            config=BacklogConfig(),
+            staleness=StalenessConfig(pull_requests_days=30),
+            check_targets={},
+            results_by_key={},
+            check_defs=[],
+            now=NOW,
+        )
+        assert len(items) == 1
+        assert items[0].number == 42
+
+    def test_issue_with_number_zero_is_excluded(self) -> None:
+        """Regression: issues with number=0 (invalid) must not appear in backlog."""
+        valid_issue = IssueDetail(
+            number=10,
+            title="Valid issue",
+            url="https://github.com/acme/api/issues/10",
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            last_activity_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        invalid_issue = IssueDetail(
+            number=0,
+            title="Ghost issue",
+            url="https://github.com/acme/api/issues/0",
+            created_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            last_activity_at=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        repo = _make_repo()
+        stats = _make_stats(stale_issue_items=[valid_issue, invalid_issue])
+        items = build_backlog_items(
+            cache={repo.full_name: stats},
+            repos={repo.full_name: repo},
+            config=BacklogConfig(),
+            staleness=StalenessConfig(),
+            check_targets={},
+            results_by_key={},
+            check_defs=[],
+            now=NOW,
+        )
+        assert len(items) == 1
+        assert items[0].number == 10
+
     def test_items_sorted_by_score_descending(self) -> None:
         """Multiple item types should be sorted highest-score-first."""
         wf = WorkflowStatus(name="CI", branch="main", status="failure", url="", run_url="")

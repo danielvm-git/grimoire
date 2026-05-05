@@ -210,3 +210,23 @@ class TestActionStatus:
     async def test_status_not_found(self, action_client: AsyncClient) -> None:
         resp = await action_client.get("/api/actions/nonexistent/status")
         assert resp.status_code == 404
+
+
+class TestToggleAction:
+    async def test_toggle(self, action_client: AsyncClient) -> None:
+        # Starts enabled
+        resp = await action_client.post("/api/actions/test-action/toggle")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["slug"] == "test-action"
+        assert body["enabled"] is False
+
+        # Toggle back on
+        resp = await action_client.post("/api/actions/test-action/toggle")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["enabled"] is True
+
+    async def test_toggle_not_found(self, action_client: AsyncClient) -> None:
+        resp = await action_client.post("/api/actions/nonexistent/toggle")
+        assert resp.status_code == 404

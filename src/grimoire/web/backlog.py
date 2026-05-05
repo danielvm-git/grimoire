@@ -267,6 +267,8 @@ def _collect_stale_pr_items(
     items: list[BacklogItem] = []
     threshold = float(staleness.pull_requests_days)
     for pr in stats.stale_pr_items:
+        if pr.number <= 0:
+            continue
         age_days = _days_since(pr.last_activity_at or pr.created_at, now)
         excess = max(0.0, age_days - threshold)
         score = compute_score(
@@ -301,6 +303,8 @@ def _collect_stale_issue_items(
     items: list[BacklogItem] = []
     threshold = float(staleness.issues_days)
     for issue in stats.stale_issue_items:
+        if issue.number <= 0:
+            continue
         age_days = _days_since(issue.last_activity_at or issue.created_at, now)
         excess = max(0.0, age_days - threshold)
         score = compute_score(

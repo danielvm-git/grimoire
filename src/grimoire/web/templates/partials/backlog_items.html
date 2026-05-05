@@ -58,7 +58,7 @@
 {% if groups is defined and groups %}
 <div class="flex flex-col gap-3">
 {% for group in groups %}
-    <details class="bg-base-100 rounded-lg shadow-sm" {{ 'open' if loop.first else '' }}>
+    <details class="bg-base-100 rounded-lg shadow-sm">
         <summary class="cursor-pointer px-4 py-3 flex items-center gap-3 hover:bg-base-200 rounded-lg select-none">
             <div class="flex items-center gap-1.5 w-16 justify-end shrink-0 {{ group.tier_color }}" title="Cumulative score: {{ '%.0f' | format(group.total_score) }}">
                 <i class="{{ group.tier_icon }} text-xs"></i>

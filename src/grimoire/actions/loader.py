@@ -19,6 +19,7 @@ class ActionDefinition(BaseModel):
     targets: TargetSpec | None = None  # None = global (run once, no per-repo iteration)
     script: str
     schedule: str | None = None  # cron expression; None = manual-only
+    enabled: bool = True
 
 
 def load_actions(data_dir: Path) -> list[ActionDefinition]:

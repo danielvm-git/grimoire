@@ -72,11 +72,12 @@ class ActionDefinition(BaseModel):
     targets: TargetSpec | None = None  # None = global (run once, not per-repo)
     script: str
     schedule: str | None = None
+    enabled: bool = True
 ```
 
 **Global actions:** When `targets` is omitted, the action runs its script once (not per-repo). The script executes in the workspace root directory with `GH_TOKEN` and other environment variables available. No `sync_repo()` or `reset_workdir()` is called. Results are stored with `repo_full_name="(global)"`.
 
-**Note:** Actions do not have an `enabled` toggle (unlike checks). They are either manual-only or scheduled. To "disable" a scheduled action, remove or rename the YAML file.
+**Note:** Actions with a `schedule` have an `enabled` toggle (like checks). Toggling disables/enables the cron schedule. The toggle state is persisted in the `action_toggle` table. Manual-only actions (no schedule) do not show a toggle button.
 
 ## 5.2 — Action Loader
 
