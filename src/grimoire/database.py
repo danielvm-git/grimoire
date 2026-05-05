@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import UniqueConstraint
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
@@ -265,3 +266,23 @@ async def cleanup_stale_runs(engine: AsyncEngine) -> None:
             params={"now": now},
         )
         await session.commit()
+
+
+async def restore_check_toggles(engine: AsyncEngine, checks: Sequence[Any]) -> None:
+    """Apply persisted toggle state to in-memory check definitions on startup."""
+    async with AsyncSession(engine) as session:
+        records = (await session.exec(select(CheckToggleRecord))).all()
+        toggle_map = {r.check_slug: r.enabled for r in records}
+    for check in checks:
+        if check.slug in toggle_map:
+            check.enabled = toggle_map[check.slug]
+
+
+async def restore_action_toggles(engine: AsyncEngine, actions: Sequence[Any]) -> None:
+    """Apply persisted toggle state to in-memory action definitions on startup."""
+    async with AsyncSession(engine) as session:
+        records = (await session.exec(select(ActionToggleRecord))).all()
+        toggle_map = {r.action_slug: r.enabled for r in records}
+    for action in actions:
+        if action.slug in toggle_map:
+            action.enabled = toggle_map[action.slug]

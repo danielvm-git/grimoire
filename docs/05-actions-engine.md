@@ -77,7 +77,7 @@ class ActionDefinition(BaseModel):
 
 **Global actions:** When `targets` is omitted, the action runs its script once (not per-repo). The script executes in the workspace root directory with `GH_TOKEN` and other environment variables available. No `sync_repo()` or `reset_workdir()` is called. Results are stored with `repo_full_name="(global)"`.
 
-**Note:** Actions with a `schedule` have an `enabled` toggle (like checks). Toggling disables/enables the cron schedule. The toggle state is persisted in the `action_toggle` table. Manual-only actions (no schedule) do not show a toggle button.
+**Note:** Actions with a `schedule` have an `enabled` toggle (like checks). Toggling disables/enables the cron schedule. The toggle state is persisted in the `action_toggle` table and restored on startup. Manual-only actions (no schedule) do not show a toggle button.
 
 ## 5.2 — Action Loader
 
