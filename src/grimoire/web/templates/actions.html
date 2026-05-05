@@ -28,7 +28,7 @@
                     <div class="flex items-center gap-3 mt-1.5 text-sm">
                         <span class="font-mono text-xs opacity-50">{{ action.target_summary }}</span>
                         {% if action.pass_count or action.fail_count %}
-                        <span class="opacity-40">·</span>
+                        <span class="opacity-30">│</span>
                         {% if action.pass_count %}
                         <span class="text-success"><i class="fa-solid fa-check"></i> {{ action.pass_count }}</span>
                         {% endif %}
@@ -36,10 +36,12 @@
                         <span class="text-error"><i class="fa-solid fa-xmark"></i> {{ action.fail_count }}</span>
                         {% endif %}
                         {% if action.last_run %}
-                        <span class="opacity-40">· {{ time_ago(action.last_run) }}</span>
+                        <span class="opacity-30">│</span>
+                        <span class="opacity-40">{{ time_ago(action.last_run) }}</span>
                         {% endif %}
                         {% else %}
-                        <span class="opacity-40">· no runs yet</span>
+                        <span class="opacity-30">│</span>
+                        <span class="opacity-40">no runs yet</span>
                         {% endif %}
                     </div>
                 </div>
