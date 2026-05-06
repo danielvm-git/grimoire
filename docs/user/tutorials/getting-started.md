@@ -7,16 +7,17 @@ This tutorial walks you through installing Grimoire and monitoring your first re
 You need:
 
 - A **GitHub personal access token** with `repo` scope (read access to the repos you want to monitor)
-- **Docker** (recommended) or Python 3.13+ with [uv](https://docs.astral.sh/uv/)
+- Python 3.13+ with [uv](https://docs.astral.sh/uv/) — or **Docker** if you prefer containers
 
-## Step 1 — Create your configuration
+## Step 1 — Clone and configure
 
 ```bash
-curl -O https://raw.githubusercontent.com/lucabello/grimoire/main/config.yaml.example
+git clone https://github.com/lucabello/grimoire.git
+cd grimoire
 cp config.yaml.example config.yaml
 ```
 
-Open `config.yaml` and set your token and at least one repository:
+Open `config.yaml` and set your token and the repositories you want to monitor:
 
 ```yaml
 github:
@@ -28,23 +29,23 @@ repositories:
 
 ## Step 2 — Start Grimoire
 
-=== "Docker Compose"
+=== "Local (with just)"
+
+    The quickest way to run Grimoire locally — no container required:
 
     ```bash
-    curl -O https://raw.githubusercontent.com/lucabello/grimoire/main/docker-compose.yml
-    export GITHUB_TOKEN="ghp_your_token_here"
-    docker compose up -d
+    just run
     ```
 
-=== "Local (development)"
+    This installs dependencies (via `uv`) and starts the server on port 8000.
+
+=== "Docker Compose"
+
+    For a containerised deployment:
 
     ```bash
-    git clone https://github.com/lucabello/grimoire.git
-    cd grimoire
-    uv sync
-    cp config.yaml.example config.yaml
-    # Edit config.yaml
-    just dev
+    export GITHUB_TOKEN="ghp_your_token_here"
+    docker compose up -d
     ```
 
 ## Step 3 — Open the dashboard
