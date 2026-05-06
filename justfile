@@ -10,6 +10,23 @@ export UV_FROZEN := "true"
     echo "For help with a specific recipe, run: just --usage <recipe>"
 
 # ============================================================================
+# Run
+# ============================================================================
+
+# Run the application in production mode
+[group("run")]
+run:
+    uv run uvicorn grimoire.app:create_app --factory --loop asyncio --port 8000
+
+# Run the Docker container
+[group("run")]
+docker-run:
+    docker run -p 8000:8000 \
+      -v ./config.yaml:/app/config.yaml:ro \
+      -v ./data:/app/data:ro \
+      grimoire
+
+# ============================================================================
 # Development
 # ============================================================================
 
@@ -17,11 +34,6 @@ export UV_FROZEN := "true"
 [group("dev")]
 dev:
     uv run uvicorn grimoire.app:create_app --factory --reload --reload-dir src --reload-dir data --reload-include "*.yaml" --loop asyncio --port 8000
-
-# Run the application in production mode
-[group("dev")]
-run:
-    uv run uvicorn grimoire.app:create_app --factory --loop asyncio --port 8000
 
 # Run all quality checks
 [group("dev")]
@@ -98,14 +110,6 @@ build:
 [group("build")]
 docker-build:
     docker build -t grimoire .
-
-# Run the Docker container
-[group("build")]
-docker-run:
-    docker run -p 8000:8000 \
-      -v ./config.yaml:/app/config.yaml:ro \
-      -v ./data:/app/data:ro \
-      grimoire
 
 # Remove build artifacts and temporary files
 [group("build")]
