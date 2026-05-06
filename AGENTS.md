@@ -33,6 +33,16 @@ just check    # format + lint + test — run this after every change
 
 After any code change, run `just check` and verify zero failures before considering the change complete.
 
+## Commits
+
+All commits must use [Conventional Commits](https://www.conventionalcommits.org/) format:
+
+```
+<type>(<optional scope>): <description>
+```
+
+Common types: `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, `chore`.
+
 ## Testing
 
 Tests mirror the source structure under `tests/`. Key conventions:
