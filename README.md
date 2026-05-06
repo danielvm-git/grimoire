@@ -18,9 +18,11 @@ A self-hostable GitHub repository monitoring dashboard — track CI health, stal
 ## 🚀 Quick Start
 
 ```bash
+git clone https://github.com/lucabello/grimoire.git
+cd grimoire
 cp config.yaml.example config.yaml
-# Edit config.yaml with your GitHub token and repos
-docker compose up -d
+# Edit config.yaml — add your GitHub token and the repos you want to monitor
+just run
 # Open http://localhost:8000
 ```
 
