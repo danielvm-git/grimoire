@@ -50,8 +50,8 @@ nav:
       - Checks: reference/checks.md
       - Actions: reference/actions.md
       - REST API: reference/api.md
-  - Concepts:
-      - Architecture: concepts/architecture.md
+  - Explanation:
+      - Architecture: explanation/architecture.md
 
 markdown_extensions:
   - admonition
