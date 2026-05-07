@@ -111,8 +111,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     try:
         cached_repos, cached_stats = await load_stats_from_db(engine)
         cache_is_fresh = False
+        newest_fetched_at: datetime | None = None
         if cached_repos:
             oldest = min(
+                (s.fetched_at for s in cached_stats if s.fetched_at),
+                default=None,
+            )
+            # The newest fetched_at represents when the last refresh completed
+            newest_fetched_at = max(
                 (s.fetched_at for s in cached_stats if s.fetched_at),
                 default=None,
             )
@@ -133,13 +139,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 )
 
         if cached_repos and cache_is_fresh:
-            update_cache(cached_repos, cached_stats)
+            update_cache(cached_repos, cached_stats, timestamp=newest_fetched_at)
             update_repo_metrics(cached_stats)
             repos = cached_repos
             logger.info("Using cached data — %d repositories loaded", len(repos))
         elif cached_repos:
             # Stale cache — serve it immediately, refresh in background
-            update_cache(cached_repos, cached_stats)
+            update_cache(cached_repos, cached_stats, timestamp=newest_fetched_at)
             update_repo_metrics(cached_stats)
             repos = cached_repos
             need_background_refresh = True
@@ -156,7 +162,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         try:
             cached_repos, cached_stats = await load_stats_from_db(engine)
             if cached_repos:
-                update_cache(cached_repos, cached_stats)
+                newest_fetched_at = max(
+                    (s.fetched_at for s in cached_stats if s.fetched_at),
+                    default=None,
+                )
+                update_cache(cached_repos, cached_stats, timestamp=newest_fetched_at)
                 update_repo_metrics(cached_stats)
                 repos = cached_repos
                 logger.info("Loaded %d repositories from cache (fallback)", len(cached_repos))

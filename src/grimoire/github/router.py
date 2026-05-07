@@ -25,8 +25,18 @@ _repos: dict[str, TrackedRepository] = {}
 _last_refresh: datetime | None = None
 
 
-def update_cache(repos: list[TrackedRepository], stats: list[RepositoryStats]) -> None:
-    """Replace the in-memory cache with fresh data."""
+def update_cache(
+    repos: list[TrackedRepository],
+    stats: list[RepositoryStats],
+    *,
+    timestamp: datetime | None = None,
+) -> None:
+    """Replace the in-memory cache with fresh data.
+
+    Args:
+        timestamp: When the data was actually fetched. Defaults to now (UTC).
+                   Pass a real fetched_at when loading from DB cache.
+    """
     global _last_refresh  # noqa: PLW0603
     _cache.clear()
     _repos.clear()
@@ -34,7 +44,7 @@ def update_cache(repos: list[TrackedRepository], stats: list[RepositoryStats]) -
         _cache[s.full_name] = s
     for r in repos:
         _repos[r.full_name] = r
-    _last_refresh = datetime.now(tz=__import__("datetime").timezone.utc)
+    _last_refresh = timestamp or datetime.now(tz=__import__("datetime").timezone.utc)
 
 
 def _build_summary(repo: TrackedRepository, stats: RepositoryStats) -> RepoSummary:
