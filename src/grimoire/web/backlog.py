@@ -101,6 +101,15 @@ class BacklogItem:
         """DaisyUI text color class for the priority tier."""
         return TIER_DISPLAY.get(self.tier, TIER_DISPLAY["low"])[1]
 
+    @property
+    def item_id(self) -> str:
+        """Stable identifier for client-side dismiss tracking."""
+        if self.number:
+            return f"{self.category.value}:{self.repo_full_name}:#{self.number}"
+        if self.branch:
+            return f"{self.category.value}:{self.repo_full_name}:{self.branch}"
+        return f"{self.category.value}:{self.repo_full_name}:{self.description[:60]}"
+
     def to_markdown(self) -> str:
         """Render this item as a single Markdown checklist line."""
         age = _format_age(self.age_days)

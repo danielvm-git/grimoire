@@ -1351,6 +1351,8 @@ async def _build_backlog_items(
 @router.get("/backlog", response_class=HTMLResponse)
 async def backlog_page(request: Request) -> HTMLResponse:
     """Backlog page — prioritised problem list across all repos."""
+    from grimoire.github.router import _last_refresh
+
     items = await _build_backlog_items()
 
     # Build summary counts per tier
@@ -1377,6 +1379,7 @@ async def backlog_page(request: Request) -> HTMLResponse:
             "repos_with_items": repos_with_items,
             "backlog_config": _backlog_config,
             "time_ago": _time_ago,
+            "last_refresh": _last_refresh,
         },
     )
 

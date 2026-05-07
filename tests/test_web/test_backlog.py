@@ -612,6 +612,63 @@ class TestBacklogItem:
         assert "\\[brackets\\]" in md
         assert "\\(parens\\)" in md
 
+    def test_item_id_uses_number_for_prs(self) -> None:
+        item = BacklogItem(
+            category=BacklogCategory.STALE_PR,
+            repo_full_name="acme/api",
+            description="PR #42: Some title",
+            url="",
+            age_days=10,
+            score=50,
+            number=42,
+        )
+        assert item.item_id == "stale_pr:acme/api:#42"
+
+    def test_item_id_uses_branch_for_workflows(self) -> None:
+        item = BacklogItem(
+            category=BacklogCategory.FAILING_WORKFLOW,
+            repo_full_name="acme/api",
+            description="Workflow 'CI' failing on `main`",
+            url="",
+            age_days=0,
+            score=80,
+            branch="main",
+        )
+        assert item.item_id == "failing_workflow:acme/api:main"
+
+    def test_item_id_falls_back_to_description(self) -> None:
+        item = BacklogItem(
+            category=BacklogCategory.FAILING_CHECK_ERROR,
+            repo_full_name="acme/api",
+            description="Check 'lint' failing",
+            url="",
+            age_days=0,
+            score=60,
+        )
+        assert item.item_id == "failing_check_error:acme/api:Check 'lint' failing"
+
+    def test_item_id_is_stable(self) -> None:
+        """Same inputs produce same item_id across calls."""
+        item1 = BacklogItem(
+            category=BacklogCategory.STALE_ISSUE,
+            repo_full_name="org/repo",
+            description="Issue #10: Old bug",
+            url="",
+            age_days=400,
+            score=30,
+            number=10,
+        )
+        item2 = BacklogItem(
+            category=BacklogCategory.STALE_ISSUE,
+            repo_full_name="org/repo",
+            description="Issue #10: Old bug",
+            url="",
+            age_days=401,  # different age shouldn't affect id
+            score=31,
+            number=10,
+        )
+        assert item1.item_id == item2.item_id
+
 
 # ---------------------------------------------------------------------------
 # Tests for Markdown export

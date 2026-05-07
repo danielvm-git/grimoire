@@ -114,6 +114,14 @@
 </div>
 
 {# ── Item List ─────────────────────────────────────────────────────── #}
+{# ── Dismissed banner ──────────────────────────────────────────────── #}
+<div id="dismissed-banner" class="hidden mb-4">
+    <button id="dismissed-banner-btn" class="btn btn-ghost btn-sm gap-2 opacity-60 hover:opacity-100">
+        <i class="fa-solid fa-eye-slash text-xs"></i>
+        <span id="dismissed-count">0</span> item(s) dismissed — click to show
+    </button>
+</div>
+
 {% if items %}
 <div id="backlog-items">
     {% include "partials/backlog_items.html" %}
@@ -127,6 +135,108 @@
 
 <script>
 (function() {
+    // --- Dismiss state (localStorage, keyed to last_refresh) ---
+    const LAST_REFRESH = '{{ last_refresh.isoformat() if last_refresh else "" }}';
+    const STORAGE_KEY = 'grimoire_dismissed_' + LAST_REFRESH;
+
+    function getDismissedSet() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            return raw ? new Set(JSON.parse(raw)) : new Set();
+        } catch { return new Set(); }
+    }
+
+    function saveDismissedSet(set) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
+    }
+
+    function cleanOldKeys() {
+        // Remove dismiss keys from previous refreshes
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith('grimoire_dismissed_') && key !== STORAGE_KEY) {
+                localStorage.removeItem(key);
+            }
+        }
+    }
+
+    function updateBanner() {
+        const dismissed = getDismissedSet();
+        const banner = document.getElementById('dismissed-banner');
+        const count = document.getElementById('dismissed-count');
+        if (dismissed.size > 0) {
+            count.textContent = dismissed.size;
+            banner.classList.remove('hidden');
+        } else {
+            banner.classList.add('hidden');
+        }
+    }
+
+    function applyDismissState() {
+        const dismissed = getDismissedSet();
+        document.querySelectorAll('.backlog-item').forEach(el => {
+            if (dismissed.has(el.dataset.itemId)) {
+                el.classList.add('hidden');
+            } else {
+                el.classList.remove('hidden');
+            }
+        });
+        updateBanner();
+    }
+
+    function dismissItem(itemId) {
+        const dismissed = getDismissedSet();
+        dismissed.add(itemId);
+        saveDismissedSet(dismissed);
+        const el = document.querySelector(`.backlog-item[data-item-id="${CSS.escape(itemId)}"]`);
+        if (el) {
+            el.style.transition = 'opacity 0.2s, max-height 0.3s';
+            el.style.opacity = '0';
+            el.style.maxHeight = el.scrollHeight + 'px';
+            setTimeout(() => {
+                el.style.maxHeight = '0';
+                el.style.overflow = 'hidden';
+                el.style.padding = '0';
+                el.style.margin = '0';
+            }, 150);
+            setTimeout(() => el.classList.add('hidden'), 350);
+        }
+        updateBanner();
+    }
+
+    function showAllDismissed() {
+        localStorage.removeItem(STORAGE_KEY);
+        document.querySelectorAll('.backlog-item.hidden').forEach(el => {
+            el.classList.remove('hidden');
+            el.style = '';
+        });
+        updateBanner();
+    }
+
+    // Initialize
+    cleanOldKeys();
+    applyDismissState();
+
+    // Dismiss button clicks (delegated)
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.dismiss-btn');
+        if (!btn) return;
+        const item = btn.closest('.backlog-item');
+        if (item && item.dataset.itemId) {
+            dismissItem(item.dataset.itemId);
+        }
+    });
+
+    // Show all dismissed
+    document.getElementById('dismissed-banner-btn').addEventListener('click', showAllDismissed);
+
+    // Re-apply after HTMX partial swaps (filtering)
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target && e.detail.target.id === 'backlog-items') {
+            applyDismissState();
+        }
+    });
+
     // Category filter mapping: checkbox value → actual BacklogCategory values
     const CATEGORY_MAP = {
         'stale_issue': ['stale_issue'],
