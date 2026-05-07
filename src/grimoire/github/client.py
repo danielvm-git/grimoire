@@ -155,10 +155,15 @@ class GitHubClient:
         self, full_name: str, workflow_id: int, branch: str
     ) -> list[dict[str, Any]] | None:
         owner, repo = full_name.split("/", 1)
+        # Skip ETag caching: a run's conclusion/status can change without the
+        # run list identity changing (same run ID, updated fields).  ETag-based
+        # 304 responses would hide status transitions (e.g. in_progress → success).
+        # Since we fetch only 1 result (per_page=1), the bandwidth cost is negligible.
         data = await self._request(
             "GET",
             f"/repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs",
             params={"branch": branch, "per_page": 1},
+            use_etag=False,
         )
         if data is None:
             return None

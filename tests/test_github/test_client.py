@@ -286,6 +286,54 @@ async def test_get_workflow_runs(client: GitHubClient) -> None:
     assert runs[0]["conclusion"] == "success"
 
 
+@respx.mock
+async def test_get_workflow_runs_no_etag_caching(client: GitHubClient) -> None:
+    """Workflow runs must not use ETag caching so status transitions are always visible."""
+    route = respx.get("https://api.github.com/repos/owner/repo/actions/workflows/1/runs")
+
+    # First call returns in_progress run with an ETag header
+    route.side_effect = [
+        httpx.Response(
+            200,
+            json={
+                "total_count": 1,
+                "workflow_runs": [{"id": 200, "conclusion": None, "html_url": "https://..."}],
+            },
+            headers={
+                "X-RateLimit-Remaining": "4999",
+                "X-RateLimit-Limit": "5000",
+                "ETag": '"etag-abc"',
+            },
+        ),
+        # Second call returns the same run now completed — must NOT be 304
+        httpx.Response(
+            200,
+            json={
+                "total_count": 1,
+                "workflow_runs": [{"id": 200, "conclusion": "success", "html_url": "https://..."}],
+            },
+            headers={
+                "X-RateLimit-Remaining": "4998",
+                "X-RateLimit-Limit": "5000",
+            },
+        ),
+    ]
+
+    # First fetch
+    runs = await client.get_workflow_runs("owner/repo", 1, "main")
+    assert runs is not None
+    assert runs[0]["conclusion"] is None
+
+    # Second fetch must return fresh data (not None from ETag 304)
+    runs = await client.get_workflow_runs("owner/repo", 1, "main")
+    assert runs is not None
+    assert runs[0]["conclusion"] == "success"
+
+    # Verify no If-None-Match header was sent on either request
+    for call in route.calls:
+        assert "If-None-Match" not in call.request.headers
+
+
 # ---------------------------------------------------------------------------
 # Branch methods
 # ---------------------------------------------------------------------------
