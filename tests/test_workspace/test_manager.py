@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 
 from grimoire.config import (
@@ -31,6 +32,15 @@ def _minimal_config(
         repositories=[StaticRepoSource(repo="owner/repo")],
         workspace_dir=workspace_dir,
     )
+
+
+# Environment that allows operations in bare repos (git ≥2.38 safe.bareRepository).
+_SAFE_BARE_ENV = {
+    **os.environ,
+    "GIT_CONFIG_COUNT": "1",
+    "GIT_CONFIG_KEY_0": "safe.bareRepository",
+    "GIT_CONFIG_VALUE_0": "all",
+}
 
 
 async def _create_local_origin(base: Path, branch: str = "main") -> Path:
@@ -68,6 +78,7 @@ async def _create_local_origin(base: Path, branch: str = "main") -> Path:
         "--bare",
         str(src),
         str(bare),
+        env=_SAFE_BARE_ENV,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -209,6 +220,7 @@ class TestSetup:
             "config",
             "user.name",
             cwd=bare_dir,
+            env=_SAFE_BARE_ENV,
             stdout=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
@@ -252,6 +264,7 @@ class TestSyncAll:
             str(src),
             "main:main",
             cwd=bare_origin,
+            env=_SAFE_BARE_ENV,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -365,6 +378,7 @@ class TestResetWorkdir:
             str(src),
             "develop:develop",
             cwd=bare_origin,
+            env=_SAFE_BARE_ENV,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

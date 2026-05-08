@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 
 from grimoire.config import GrimoireConfig
@@ -148,9 +149,17 @@ class WorkspaceManager:
         """Run a git command, capture output, and raise on failure."""
         cmd = ("git", *args)
         logger.debug("git %s  (cwd=%s)", " ".join(args), cwd)
+        # Allow operations inside bare repos (git ≥2.38 safe.bareRepository).
+        env = {
+            **os.environ,
+            "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "safe.bareRepository",
+            "GIT_CONFIG_VALUE_0": "all",
+        }
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             cwd=cwd,
+            env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
