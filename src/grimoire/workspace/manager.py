@@ -64,12 +64,27 @@ class WorkspaceManager:
                 await self._ensure_worktree(repo.full_name, branch, bare_dir)
 
     async def sync_repo(self, repo: TrackedRepository) -> None:
-        """Fetch latest for all branches of a single repo."""
+        """Fetch latest from remote and reset all worktrees for a single repo."""
         bare_dir = self._bare_dir(repo.full_name)
         if not bare_dir.exists():
             logger.warning("bare repo missing for %s — skipping sync", repo.full_name)
             return
         await self._run_git("fetch", "origin", cwd=bare_dir)
+
+        # Reset each existing worktree to the latest remote state.
+        branches = repo.branches or [repo.default_branch]
+        for branch in branches:
+            workdir = self.get_workdir(repo.full_name, branch)
+            if not workdir.exists():
+                continue
+            try:
+                await self._run_git("checkout", branch, cwd=workdir)
+                await self._run_git("reset", "--hard", f"origin/{branch}", cwd=workdir)
+                await self._run_git("clean", "-fdx", cwd=workdir)
+            except WorkspaceError:
+                logger.warning(
+                    "Failed to reset worktree %s/%s after fetch", repo.full_name, branch
+                )
 
     async def sync_all(self, repos: list[TrackedRepository]) -> None:
         """Fetch latest from remote for all repos with bounded concurrency."""

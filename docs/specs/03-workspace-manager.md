@@ -28,10 +28,10 @@ class WorkspaceManager:
         """Clone/update all repos. Configure git identity in each (if git config present)."""
 
     async def sync_all(self, repos: list[TrackedRepository]) -> None:
-        """Fetch latest from remote for all repos with bounded concurrency."""
+        """Fetch latest from remote for all repos with bounded concurrency and reset worktrees."""
 
     async def sync_repo(self, repo: TrackedRepository) -> None:
-        """Pull latest for all branches of a single repo."""
+        """Fetch latest from remote and reset all existing worktrees to origin/{branch}."""
 
     async def reset_workdir(self, full_name: str, branch: str) -> Path:
         """

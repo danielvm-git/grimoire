@@ -270,11 +270,11 @@ class TestSyncAll:
         )
         await proc.communicate()
 
-        # sync_all should fetch the new commit
+        # sync_all should fetch the new commit and reset the worktree
         await mgr.sync_all([repo])
 
-        # reset_workdir should now see the new file
-        workdir = await mgr.reset_workdir("acme/widgets", "main")
+        # The worktree should already have the new file (no reset_workdir needed)
+        workdir = mgr.get_workdir("acme/widgets", "main")
         assert (workdir / "new_file.txt").exists()
 
     async def test_skips_failed_repos(self, tmp_path: Path) -> None:
