@@ -70,6 +70,19 @@ class WorkspaceManager:
             return
         await self._run_git("fetch", "origin", cwd=bare_dir)
 
+    async def sync_all(self, repos: list[TrackedRepository]) -> None:
+        """Fetch latest from remote for all repos with bounded concurrency."""
+        sem = asyncio.Semaphore(10)
+
+        async def _sync(repo: TrackedRepository) -> None:
+            async with sem:
+                try:
+                    await self.sync_repo(repo)
+                except WorkspaceError:
+                    logger.exception("Failed to sync %s", repo.full_name)
+
+        await asyncio.gather(*[_sync(r) for r in repos])
+
     async def reset_workdir(self, full_name: str, branch: str) -> Path:
         """Ensure the worktree for *full_name*/*branch* is clean and up-to-date.
 

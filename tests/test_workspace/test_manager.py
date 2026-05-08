@@ -215,6 +215,64 @@ class TestSetup:
         assert stdout.decode().strip() == "Bot"
 
 
+class TestSyncAll:
+    async def test_syncs_all_repos(self, tmp_path: Path) -> None:
+        origin = await _create_local_origin(tmp_path, branch="main")
+
+        cfg = _minimal_config(tmp_path / "ws")
+        mgr = WorkspaceManager(cfg)
+        mgr._clone_url = lambda full_name: str(origin)  # type: ignore[method-assign]  # noqa: SLF001
+
+        repo = TrackedRepository(full_name="acme/widgets", default_branch="main")
+        await mgr.setup([repo])
+
+        # Push a new commit to the origin
+        src = tmp_path / "_origin_src"
+
+        async def _git(*args: str) -> None:
+            proc = await asyncio.create_subprocess_exec(
+                "git",
+                *args,
+                cwd=src,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+            assert proc.returncode == 0, stderr.decode()
+
+        (src / "new_file.txt").write_text("new content")
+        await _git("add", ".")
+        await _git("commit", "-m", "second commit")
+
+        # Update the bare mirror
+        bare_origin = tmp_path / "_origin.git"
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            "fetch",
+            str(src),
+            "main:main",
+            cwd=bare_origin,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc.communicate()
+
+        # sync_all should fetch the new commit
+        await mgr.sync_all([repo])
+
+        # reset_workdir should now see the new file
+        workdir = await mgr.reset_workdir("acme/widgets", "main")
+        assert (workdir / "new_file.txt").exists()
+
+    async def test_skips_failed_repos(self, tmp_path: Path) -> None:
+        """sync_all should not raise even if a repo fails to sync."""
+        cfg = _minimal_config(tmp_path / "ws")
+        mgr = WorkspaceManager(cfg)
+        repo = TrackedRepository(full_name="acme/missing", default_branch="main")
+        # Should not raise — missing repos are skipped with a warning
+        await mgr.sync_all([repo])
+
+
 class TestSyncRepo:
     async def test_fetch_updates(self, tmp_path: Path) -> None:
         origin = await _create_local_origin(tmp_path, branch="main")

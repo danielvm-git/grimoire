@@ -199,6 +199,10 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         update_cache(refreshed_repos, refreshed_stats)
         update_repo_metrics(refreshed_stats)
         await prune_stale_data(engine, refreshed_repos, config.workspace_dir)
+
+        # Sync local clones with their remotes so worktrees have fresh data
+        await workspace.sync_all(refreshed_repos)
+
         set_checks_state(checks, refreshed_repos, workspace, engine)
         set_actions_state(actions, refreshed_repos, workspace, engine)
 

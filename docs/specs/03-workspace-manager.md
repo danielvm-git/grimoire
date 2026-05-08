@@ -27,6 +27,9 @@ class WorkspaceManager:
     async def setup(self, repos: list[TrackedRepository]) -> None:
         """Clone/update all repos. Configure git identity in each (if git config present)."""
 
+    async def sync_all(self, repos: list[TrackedRepository]) -> None:
+        """Fetch latest from remote for all repos with bounded concurrency."""
+
     async def sync_repo(self, repo: TrackedRepository) -> None:
         """Pull latest for all branches of a single repo."""
 
