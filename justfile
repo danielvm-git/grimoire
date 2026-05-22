@@ -162,7 +162,7 @@ bump level:
 # Publish to PyPI (requires authentication)
 [group("release")]
 [arg("test", long="test", help="Publish to TestPyPI")]
-publish test="false": build
+publish test="false": clean build
     #!/usr/bin/env bash
     if [ "{{test}}" = "true" ]; then
         uv publish --index testpypi
