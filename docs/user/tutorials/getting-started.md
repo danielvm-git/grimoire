@@ -29,6 +29,21 @@ repositories:
 
 ## Step 2 — Start Grimoire
 
+=== "uv / pipx"
+
+    Install as a tool:
+
+    ```bash
+    # Using uv
+    uv tool install grimoire-dashboard
+
+    # Or using pipx
+    pipx install grimoire-dashboard
+
+    # Or run directly without installing
+    uvx --from grimoire-dashboard grimoire
+    ```
+
 === "Local (with just)"
 
     The quickest way to run Grimoire locally — no container required:

@@ -1,5 +1,5 @@
 [project]
-name = "grimoire"
+name = "grimoire-dashboard"
 version = "0.1.0"
 description = "Self-hostable GitHub repository monitoring dashboard"
 authors = [
@@ -24,6 +24,9 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.51b0",
     "python-multipart>=0.0.18",
 ]
+
+[project.scripts]
+grimoire = "grimoire.__main__:main"
 
 [dependency-groups]
 dev = [
@@ -55,6 +58,9 @@ Changelog = "https://github.com/lucabello/grimoire/releases"
 [build-system]
 requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/grimoire"]
 
 [[tool.uv.index]]
 name = "testpypi"

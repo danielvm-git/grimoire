@@ -161,8 +161,8 @@ bump level:
 
 # Publish to PyPI (requires authentication)
 [group("release")]
-[arg("test", long="test", value="false", help="Publish to TestPyPI")]
-publish test: build
+[arg("test", long="test", help="Publish to TestPyPI")]
+publish test="false": build
     #!/usr/bin/env bash
     if [ "{{test}}" = "true" ]; then
         uv publish --index testpypi
@@ -170,9 +170,20 @@ publish test: build
         uv publish
     fi
 
-# Create a GitHub release (which will trigger a PyPi release)
+# Publish Docker image to DockerHub (requires authentication)
 [group("release")]
-release:
+publish-docker:
+    #!/usr/bin/env bash
+    version="$(yq -oy .project.version pyproject.toml)"
+    echo "Building and publishing grimoire:${version} to DockerHub..."
+    docker build -t lucabello/grimoire:"${version}" -t lucabello/grimoire:latest .
+    docker push lucabello/grimoire:"${version}"
+    docker push lucabello/grimoire:latest
+    echo "✓ Published lucabello/grimoire:${version} and lucabello/grimoire:latest"
+
+# Create a GitHub release and publish to PyPI and DockerHub
+[group("release")]
+release: (publish "false") publish-docker
     #!/usr/bin/env bash
     latest_release="$(gh release list --limit=1 --order=desc --json=tagName | jq -r '.[].tagName')"
     echo "Latest release on GitHub is ${latest_release}"
