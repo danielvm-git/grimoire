@@ -81,6 +81,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     _env_path = os.environ.get("GRIMOIRE_CONFIG")
     config_file_path = Path(_env_path) if _env_path else Path("config.yaml")
 
+    # Ensure data directories exist
+    config.database_path.parent.mkdir(parents=True, exist_ok=True)
+    config.data_dir.mkdir(parents=True, exist_ok=True)
+    config.workspace_dir.mkdir(parents=True, exist_ok=True)
+    config.log_file.parent.mkdir(parents=True, exist_ok=True)
+
     # Database
     engine = await get_engine(str(config.database_path))
     await create_tables(engine)
