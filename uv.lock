@@ -265,6 +265,20 @@ wheels = [
 ]
 
 [[package]]
+name = "dataconfy"
+version = "0.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "platformdirs" },
+    { name = "pyyaml" },
+    { name = "vulture" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/37/6d/4cce2571f97462b8dec1393af461e51d58a092d16e7045a1fa0bbcb12a18/dataconfy-0.0.3.tar.gz", hash = "sha256:162412eb2feece36541ea72be7a191d18c9b7b914f5af9515ae400c47072c947", size = 14814, upload-time = "2026-03-03T10:45:35.079Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/97/34/a1be11ee251ecc61f8e0349178d1dde0e7234426a25d1b9c2452e19c1a5d/dataconfy-0.0.3-py3-none-any.whl", hash = "sha256:ff3747b25c3359f27c2e999fa3684b2665a56b4e0df87e336bfc85748d83dfc8", size = 17313, upload-time = "2026-03-03T10:45:34.182Z" },
+]
+
+[[package]]
 name = "dnspython"
 version = "2.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -368,6 +382,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
     { name = "apscheduler" },
+    { name = "dataconfy" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "jinja2" },
@@ -404,6 +419,7 @@ docs = [
 requires-dist = [
     { name = "aiosqlite", specifier = ">=0.21" },
     { name = "apscheduler", specifier = ">=3.11,<4" },
+    { name = "dataconfy", specifier = ">=0.0.3" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "jinja2", specifier = ">=3.1" },

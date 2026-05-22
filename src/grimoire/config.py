@@ -8,10 +8,21 @@ from pathlib import Path
 from typing import Annotated, Literal, Union
 
 import yaml
+from dataconfy import ConfigManager, DataManager
 from pydantic import BaseModel, Field, model_validator
 from typing_extensions import Self
 
 _ENV_VAR_PATTERN = re.compile(r"^\$\{([^}]+)\}$")
+
+
+def _get_config_manager() -> ConfigManager:
+    """Return a ConfigManager for Grimoire (created lazily to respect env vars)."""
+    return ConfigManager(app_name="grimoire")
+
+
+def _get_data_manager() -> DataManager:
+    """Return a DataManager for Grimoire (created lazily to respect env vars)."""
+    return DataManager(app_name="grimoire")
 
 
 def resolve_env_vars(raw: object) -> object:
@@ -146,6 +157,22 @@ class BacklogConfig(BaseModel):
     repository_weights: list[RepositoryWeightRule] = Field(default_factory=list)
 
 
+def _default_data_dir() -> Path:
+    return _get_data_manager().data_dir / "data"
+
+
+def _default_workspace_dir() -> Path:
+    return _get_data_manager().data_dir / "workspace"
+
+
+def _default_database_path() -> Path:
+    return _get_data_manager().data_dir / "grimoire.db"
+
+
+def _default_log_file() -> Path:
+    return _get_data_manager().data_dir / "grimoire.log"
+
+
 class GrimoireConfig(BaseModel):
     """Top-level application configuration."""
 
@@ -158,10 +185,10 @@ class GrimoireConfig(BaseModel):
     backlog: BacklogConfig = Field(default_factory=BacklogConfig)
     refresh_schedule: str = "*/5 * * * *"
 
-    data_dir: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "data")
-    workspace_dir: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "workspace")
-    database_path: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "grimoire.db")
-    log_file: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "grimoire.log")
+    data_dir: Path = Field(default_factory=_default_data_dir)
+    workspace_dir: Path = Field(default_factory=_default_workspace_dir)
+    database_path: Path = Field(default_factory=_default_database_path)
+    log_file: Path = Field(default_factory=_default_log_file)
 
     @model_validator(mode="after")
     def at_least_one_repo_source(self) -> Self:
@@ -180,19 +207,13 @@ def _parse_repo_source(raw: dict) -> RepoSource:  # type: ignore[type-arg]
 
 
 def _get_xdg_config_path() -> Path:
-    """Return the XDG config path for Grimoire."""
-    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
-    if xdg_config_home:
-        return Path(xdg_config_home) / "grimoire" / "config.yaml"
-    return Path.home() / ".config" / "grimoire" / "config.yaml"
+    """Return the XDG config path for Grimoire (via dataconfy)."""
+    return _get_config_manager().config_dir / "config.yaml"
 
 
 def _get_xdg_data_dir() -> Path:
-    """Return the XDG data directory for Grimoire."""
-    xdg_data_home = os.environ.get("XDG_DATA_HOME")
-    if xdg_data_home:
-        return Path(xdg_data_home) / "grimoire"
-    return Path.home() / ".local" / "share" / "grimoire"
+    """Return the XDG data directory for Grimoire (via dataconfy)."""
+    return _get_data_manager().data_dir
 
 
 def load_config(path: Path | None = None) -> GrimoireConfig:
