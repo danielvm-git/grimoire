@@ -158,10 +158,10 @@ class GrimoireConfig(BaseModel):
     backlog: BacklogConfig = Field(default_factory=BacklogConfig)
     refresh_schedule: str = "*/5 * * * *"
 
-    data_dir: Path = Path("./data")
-    workspace_dir: Path = Path("./workspace")
-    database_path: Path = Path("./grimoire.db")
-    log_file: Path = Path("./grimoire.log")
+    data_dir: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "data")
+    workspace_dir: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "workspace")
+    database_path: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "grimoire.db")
+    log_file: Path = Field(default_factory=lambda: _get_xdg_data_dir() / "grimoire.log")
 
     @model_validator(mode="after")
     def at_least_one_repo_source(self) -> Self:
@@ -179,6 +179,22 @@ def _parse_repo_source(raw: dict) -> RepoSource:  # type: ignore[type-arg]
     raise ValueError(f"Repository source must have either 'repo' or 'team' key, got: {raw}")
 
 
+def _get_xdg_config_path() -> Path:
+    """Return the XDG config path for Grimoire."""
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME")
+    if xdg_config_home:
+        return Path(xdg_config_home) / "grimoire" / "config.yaml"
+    return Path.home() / ".config" / "grimoire" / "config.yaml"
+
+
+def _get_xdg_data_dir() -> Path:
+    """Return the XDG data directory for Grimoire."""
+    xdg_data_home = os.environ.get("XDG_DATA_HOME")
+    if xdg_data_home:
+        return Path(xdg_data_home) / "grimoire"
+    return Path.home() / ".local" / "share" / "grimoire"
+
+
 def load_config(path: Path | None = None) -> GrimoireConfig:
     """Load and validate the Grimoire configuration file.
 
@@ -186,10 +202,16 @@ def load_config(path: Path | None = None) -> GrimoireConfig:
     1. Explicit ``path`` argument.
     2. ``GRIMOIRE_CONFIG`` environment variable.
     3. ``./config.yaml`` in the current working directory.
+    4. ``~/.config/grimoire/config.yaml`` (XDG config path).
     """
     if path is None:
         env_path = os.environ.get("GRIMOIRE_CONFIG")
-        path = Path(env_path) if env_path else Path("config.yaml")
+        if env_path:
+            path = Path(env_path)
+        elif Path("config.yaml").exists():
+            path = Path("config.yaml")
+        else:
+            path = _get_xdg_config_path()
 
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")

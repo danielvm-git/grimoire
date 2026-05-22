@@ -102,6 +102,7 @@ staleness:
 
 refresh_schedule: "*/5 * * * *"  # default: "*/5 * * * *" — cron expression for data refresh
 
+# Paths — defaults use XDG data dir (~/.local/share/grimoire/)
 data_dir: "./data"           # checks/ and actions/ subdirectories
 workspace_dir: "./workspace" # cloned repos live here
 database_path: "./grimoire.db"
@@ -136,7 +137,7 @@ def resolve_env_vars(raw: dict) -> dict:
 
 def load_config(path: Path | None = None) -> GrimoireConfig:
     """
-    1. Locate config file: explicit path → GRIMOIRE_CONFIG env var → ./config.yaml
+    1. Locate config file: explicit path → GRIMOIRE_CONFIG env var → ./config.yaml → ~/.config/grimoire/config.yaml
     2. Read and parse YAML.
     3. Resolve env var references in string values.
     4. Validate with Pydantic → GrimoireConfig.

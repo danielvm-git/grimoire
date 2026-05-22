@@ -11,6 +11,8 @@ from grimoire.config import (
     GrimoireConfig,
     StaticRepoSource,
     TeamRepoSource,
+    _get_xdg_config_path,
+    _get_xdg_data_dir,
     load_config,
     resolve_env_vars,
 )
@@ -175,7 +177,7 @@ class TestLoadConfig:
         assert config.git.signing is not None
         assert config.git.signing.format == "ssh"
 
-    def test_defaults_applied(self, tmp_path: Path) -> None:
+    def test_defaults_applied(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
             textwrap.dedent("""\
@@ -185,13 +187,19 @@ class TestLoadConfig:
               - repo: "owner/repo"
             """)
         )
+        # Set HOME to tmp_path for predictable XDG paths
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+
         config = load_config(config_file)
         assert config.staleness.pull_requests_days == 30
         assert config.staleness.issues_days == 365
         assert config.staleness.problematic_stale_issues_pct == 20
         assert config.staleness.problematic_stale_prs_pct == 20
         assert config.refresh_schedule == "*/5 * * * *"
-        assert config.data_dir == Path("./data")
+        # XDG data dir defaults
+        expected_data_dir = tmp_path / ".local" / "share" / "grimoire" / "data"
+        assert config.data_dir == expected_data_dir
 
     def test_staleness_thresholds_parsed(self, tmp_path: Path) -> None:
         config_file = tmp_path / "config.yaml"
@@ -308,3 +316,160 @@ class TestWorkflowMatchesFilter:
         assert _workflow_matches_filter("Tests nightly", ["Tests *"], ["Tests nightly"]) is False
         # "Publish" doesn't match include → excluded
         assert _workflow_matches_filter("Publish", ["Tests *"], ["Publish"]) is False
+
+
+class TestConfigPathResolution:
+    """Tests for config file path resolution order."""
+
+    def test_xdg_config_path_used_when_no_local_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """XDG config path is used when ./config.yaml doesn't exist."""
+        # Set up XDG config
+        xdg_config = tmp_path / "xdg_config"
+        grimoire_config = xdg_config / "grimoire" / "config.yaml"
+        grimoire_config.parent.mkdir(parents=True)
+        grimoire_config.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "xdg_token"
+            repositories:
+              - repo: "owner/repo"
+            """)
+        )
+
+        # Change to a directory without config.yaml
+        empty_dir = tmp_path / "empty"
+        empty_dir.mkdir()
+        monkeypatch.chdir(empty_dir)
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config))
+        monkeypatch.delenv("GRIMOIRE_CONFIG", raising=False)
+
+        config = load_config()
+        assert config.github.token == "xdg_token"
+
+    def test_local_config_takes_precedence_over_xdg(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """./config.yaml takes precedence over XDG config path."""
+        # Set up XDG config
+        xdg_config = tmp_path / "xdg_config"
+        xdg_grimoire = xdg_config / "grimoire" / "config.yaml"
+        xdg_grimoire.parent.mkdir(parents=True)
+        xdg_grimoire.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "xdg_token"
+            repositories:
+              - repo: "owner/xdg-repo"
+            """)
+        )
+
+        # Set up local config
+        local_dir = tmp_path / "local"
+        local_dir.mkdir()
+        local_config = local_dir / "config.yaml"
+        local_config.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "local_token"
+            repositories:
+              - repo: "owner/local-repo"
+            """)
+        )
+
+        monkeypatch.chdir(local_dir)
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_config))
+        monkeypatch.delenv("GRIMOIRE_CONFIG", raising=False)
+
+        config = load_config()
+        assert config.github.token == "local_token"
+
+    def test_env_var_takes_precedence_over_local(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GRIMOIRE_CONFIG env var takes precedence over ./config.yaml."""
+        # Set up env var config
+        env_config = tmp_path / "env_config.yaml"
+        env_config.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "env_token"
+            repositories:
+              - repo: "owner/env-repo"
+            """)
+        )
+
+        # Set up local config
+        local_dir = tmp_path / "local"
+        local_dir.mkdir()
+        local_config = local_dir / "config.yaml"
+        local_config.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "local_token"
+            repositories:
+              - repo: "owner/local-repo"
+            """)
+        )
+
+        monkeypatch.chdir(local_dir)
+        monkeypatch.setenv("GRIMOIRE_CONFIG", str(env_config))
+
+        config = load_config()
+        assert config.github.token == "env_token"
+
+    def test_xdg_default_path_without_env_var(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Falls back to ~/.config/grimoire/config.yaml when XDG_CONFIG_HOME not set."""
+
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        expected = tmp_path / ".config" / "grimoire" / "config.yaml"
+        assert _get_xdg_config_path() == expected
+
+    def test_xdg_data_dir_default_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Falls back to ~/.local/share/grimoire when XDG_DATA_HOME not set."""
+        monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        expected = tmp_path / ".local" / "share" / "grimoire"
+        assert _get_xdg_data_dir() == expected
+
+    def test_xdg_data_dir_with_env_var(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Uses $XDG_DATA_HOME/grimoire when XDG_DATA_HOME is set."""
+        xdg_data = tmp_path / "custom_data"
+        monkeypatch.setenv("XDG_DATA_HOME", str(xdg_data))
+
+        expected = xdg_data / "grimoire"
+        assert _get_xdg_data_dir() == expected
+
+    def test_path_defaults_use_xdg_data_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Config path defaults use XDG data directory."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "test"
+            repositories:
+              - repo: "owner/repo"
+            """)
+        )
+
+        xdg_data = tmp_path / "xdg_data"
+        monkeypatch.setenv("XDG_DATA_HOME", str(xdg_data))
+
+        config = load_config(config_file)
+        grimoire_data = xdg_data / "grimoire"
+        assert config.data_dir == grimoire_data / "data"
+        assert config.workspace_dir == grimoire_data / "workspace"
+        assert config.database_path == grimoire_data / "grimoire.db"
+        assert config.log_file == grimoire_data / "grimoire.log"

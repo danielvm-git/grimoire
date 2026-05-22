@@ -11,6 +11,7 @@ Grimoire looks for its configuration in this order:
 1. Explicit path passed at startup
 2. `GRIMOIRE_CONFIG` environment variable
 3. `./config.yaml` in the working directory
+4. `~/.config/grimoire/config.yaml` (XDG config path)
 
 ---
 
@@ -197,14 +198,17 @@ refresh_schedule: "*/5 * * * *"
 
 ## Paths {: #paths }
 
-**Optional.** Override default file locations.
+**Optional.** Override default file locations. Defaults use XDG paths (`~/.local/share/grimoire/`).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `data_dir` | path | `"./data"` | Directory containing `checks/` and `actions/` YAML files |
-| `workspace_dir` | path | `"./workspace"` | Where repositories are cloned |
-| `database_path` | path | `"./grimoire.db"` | SQLite database file |
-| `log_file` | path | `"./grimoire.log"` | Application log file |
+| `data_dir` | path | `~/.local/share/grimoire/data` | Directory containing `checks/` and `actions/` YAML files |
+| `workspace_dir` | path | `~/.local/share/grimoire/workspace` | Where repositories are cloned |
+| `database_path` | path | `~/.local/share/grimoire/grimoire.db` | SQLite database file |
+| `log_file` | path | `~/.local/share/grimoire/grimoire.log` | Application log file |
+
+!!! tip "XDG compliance"
+    If `$XDG_DATA_HOME` is set, Grimoire uses `$XDG_DATA_HOME/grimoire/` instead of `~/.local/share/grimoire/`.
 
 ```yaml
 data_dir: "./data"
