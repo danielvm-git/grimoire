@@ -394,7 +394,7 @@ Each item gets a priority score: `score = category_weight × repo_weight × work
 - **Grouped by type** (`group_by=type`): Items grouped by category type under collapsible `<details>` sections. Groups appear in this order:
   - **Stale Issues** — all `STALE_ISSUE` items
   - **Stale PRs** — all `STALE_PR` items
-  - **Workflow: \<name\>** — one group per unique workflow name (from `FAILING_WORKFLOW` items), sorted alphabetically by name
+  - **Workflows** — all `FAILING_WORKFLOW` items
   - **Checks** — all `FAILING_CHECK_ERROR` and `FAILING_CHECK_WARNING` items
   - **Others** — any items that don't fit the above (future-proofing)
 
@@ -402,7 +402,7 @@ Each item gets a priority score: `score = category_weight × repo_weight × work
 
 **`group_by_repo(items) -> list[RepoGroup]`** — groups items by `repo_full_name`, computes `total_score` as sum of item scores, sorts groups by `total_score` descending. Items within each group retain their original score-descending order.
 
-**`group_by_type(items) -> list[TypeGroup]`** — groups items by category type (stale issues, stale PRs, per-workflow, checks, others). Each `TypeGroup` has: `key` (e.g. `"stale_issues"`, `"workflow:CI"`), `label`, `icon`, `items`, `total_score`. Groups appear in a fixed order (not by score). Items within each group retain their original score-descending order.
+**`group_by_type(items) -> list[TypeGroup]`** — groups items by category type (stale issues, stale PRs, workflows, checks, others). Each `TypeGroup` has: `key` (e.g. `"stale_issues"`, `"workflows"`), `label`, `icon`, `items`, `total_score`. Groups appear in a fixed order (not by score). Items within each group retain their original score-descending order.
 
 ### Markdown Export
 

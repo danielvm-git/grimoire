@@ -26,7 +26,6 @@ from grimoire.web.backlog import (
     BacklogItem,
     _compute_age_factor,
     _days_since,
-    _extract_workflow_name,
     _format_age,
     build_backlog_items,
     compute_score,
@@ -923,22 +922,6 @@ class TestBacklogGroupedRoutes:
 # ---------------------------------------------------------------------------
 
 
-class TestExtractWorkflowName:
-    """Tests for the _extract_workflow_name() helper."""
-
-    def test_standard_format(self) -> None:
-        desc = "Workflow 'CI' failing on `main`"
-        assert _extract_workflow_name(desc) == "CI"
-
-    def test_workflow_with_spaces(self) -> None:
-        desc = "Workflow 'Build and Test' failing on `develop`"
-        assert _extract_workflow_name(desc) == "Build and Test"
-
-    def test_no_match_returns_unknown(self) -> None:
-        desc = "Some other description"
-        assert _extract_workflow_name(desc) == "Unknown"
-
-
 class TestGroupByType:
     """Tests for the group_by_type() function."""
 
@@ -982,7 +965,7 @@ class TestGroupByType:
         assert groups[0].key == "stale_prs"
         assert groups[0].label == "Stale PRs"
 
-    def test_workflows_grouped_by_name(self) -> None:
+    def test_workflows_grouped_together(self) -> None:
         items = [
             self._make_item(
                 BacklogCategory.FAILING_WORKFLOW,
@@ -1001,14 +984,11 @@ class TestGroupByType:
             ),
         ]
         groups = group_by_type(items)
-        assert len(groups) == 2
-        # Sorted alphabetically by workflow name
-        assert groups[0].key == "workflow:CI"
-        assert groups[0].label == "Workflow: CI"
-        assert len(groups[0].items) == 2
-        assert groups[0].total_score == pytest.approx(200.0)
-        assert groups[1].key == "workflow:Deploy"
-        assert len(groups[1].items) == 1
+        assert len(groups) == 1
+        assert groups[0].key == "workflows"
+        assert groups[0].label == "Workflows"
+        assert len(groups[0].items) == 3
+        assert groups[0].total_score == pytest.approx(280.0)
 
     def test_checks_grouped(self) -> None:
         items = [
@@ -1035,7 +1015,7 @@ class TestGroupByType:
         ]
         groups = group_by_type(items)
         keys = [g.key for g in groups]
-        assert keys == ["stale_issues", "stale_prs", "workflow:CI", "checks"]
+        assert keys == ["stale_issues", "stale_prs", "workflows", "checks"]
 
     def test_tier_derived_from_total_score(self) -> None:
         items = [
@@ -1075,7 +1055,7 @@ class TestGroupByType:
         assert len(groups[0].items) == 2
         assert groups[1].key == "stale_prs"
         assert len(groups[1].items) == 1
-        assert groups[2].key == "workflow:Build"
+        assert groups[2].key == "workflows"
         assert len(groups[2].items) == 1
         assert groups[3].key == "checks"
         assert len(groups[3].items) == 1
@@ -1103,5 +1083,5 @@ class TestBacklogGroupedByTypeRoutes:
     async def test_backlog_type_view_shows_workflow_group(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/backlog?group_by=type")
         assert resp.status_code == 200
-        # acme/frontend has a failing "Build" workflow
-        assert "Workflow: Build" in resp.text
+        # acme/frontend has a failing "Build" workflow, grouped under "Workflows"
+        assert "Workflows" in resp.text
