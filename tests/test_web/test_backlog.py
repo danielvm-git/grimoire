@@ -26,11 +26,13 @@ from grimoire.web.backlog import (
     BacklogItem,
     _compute_age_factor,
     _days_since,
+    _extract_workflow_name,
     _format_age,
     build_backlog_items,
     compute_score,
     export_markdown,
     group_by_repo,
+    group_by_type,
     resolve_repo_weight,
 )
 
@@ -914,3 +916,192 @@ class TestBacklogGroupedRoutes:
         assert resp.status_code == 200
         # Flat view should NOT have <details> grouping
         assert "<details" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for group_by_type
+# ---------------------------------------------------------------------------
+
+
+class TestExtractWorkflowName:
+    """Tests for the _extract_workflow_name() helper."""
+
+    def test_standard_format(self) -> None:
+        desc = "Workflow 'CI' failing on `main`"
+        assert _extract_workflow_name(desc) == "CI"
+
+    def test_workflow_with_spaces(self) -> None:
+        desc = "Workflow 'Build and Test' failing on `develop`"
+        assert _extract_workflow_name(desc) == "Build and Test"
+
+    def test_no_match_returns_unknown(self) -> None:
+        desc = "Some other description"
+        assert _extract_workflow_name(desc) == "Unknown"
+
+
+class TestGroupByType:
+    """Tests for the group_by_type() function."""
+
+    def _make_item(
+        self,
+        category: BacklogCategory,
+        repo: str = "org/repo",
+        score: float = 50.0,
+        description: str = "test item",
+    ) -> BacklogItem:
+        return BacklogItem(
+            category=category,
+            repo_full_name=repo,
+            description=description,
+            url="",
+            age_days=0.0,
+            score=score,
+        )
+
+    def test_empty_list(self) -> None:
+        assert group_by_type([]) == []
+
+    def test_stale_issues_grouped(self) -> None:
+        items = [
+            self._make_item(BacklogCategory.STALE_ISSUE, score=30.0),
+            self._make_item(BacklogCategory.STALE_ISSUE, score=20.0),
+        ]
+        groups = group_by_type(items)
+        assert len(groups) == 1
+        assert groups[0].key == "stale_issues"
+        assert groups[0].label == "Stale Issues"
+        assert len(groups[0].items) == 2
+        assert groups[0].total_score == pytest.approx(50.0)
+
+    def test_stale_prs_grouped(self) -> None:
+        items = [
+            self._make_item(BacklogCategory.STALE_PR, score=40.0),
+        ]
+        groups = group_by_type(items)
+        assert len(groups) == 1
+        assert groups[0].key == "stale_prs"
+        assert groups[0].label == "Stale PRs"
+
+    def test_workflows_grouped_by_name(self) -> None:
+        items = [
+            self._make_item(
+                BacklogCategory.FAILING_WORKFLOW,
+                description="Workflow 'CI' failing on `main`",
+                score=100.0,
+            ),
+            self._make_item(
+                BacklogCategory.FAILING_WORKFLOW,
+                description="Workflow 'CI' failing on `develop`",
+                score=100.0,
+            ),
+            self._make_item(
+                BacklogCategory.FAILING_WORKFLOW,
+                description="Workflow 'Deploy' failing on `main`",
+                score=80.0,
+            ),
+        ]
+        groups = group_by_type(items)
+        assert len(groups) == 2
+        # Sorted alphabetically by workflow name
+        assert groups[0].key == "workflow:CI"
+        assert groups[0].label == "Workflow: CI"
+        assert len(groups[0].items) == 2
+        assert groups[0].total_score == pytest.approx(200.0)
+        assert groups[1].key == "workflow:Deploy"
+        assert len(groups[1].items) == 1
+
+    def test_checks_grouped(self) -> None:
+        items = [
+            self._make_item(BacklogCategory.FAILING_CHECK_ERROR, score=80.0),
+            self._make_item(BacklogCategory.FAILING_CHECK_WARNING, score=40.0),
+        ]
+        groups = group_by_type(items)
+        assert len(groups) == 1
+        assert groups[0].key == "checks"
+        assert groups[0].label == "Checks"
+        assert len(groups[0].items) == 2
+        assert groups[0].total_score == pytest.approx(120.0)
+
+    def test_ordering_stale_issues_prs_workflows_checks(self) -> None:
+        """Groups appear in defined order: stale issues, stale PRs, workflows, checks."""
+        items = [
+            self._make_item(BacklogCategory.FAILING_CHECK_ERROR),
+            self._make_item(
+                BacklogCategory.FAILING_WORKFLOW,
+                description="Workflow 'CI' failing on `main`",
+            ),
+            self._make_item(BacklogCategory.STALE_PR),
+            self._make_item(BacklogCategory.STALE_ISSUE),
+        ]
+        groups = group_by_type(items)
+        keys = [g.key for g in groups]
+        assert keys == ["stale_issues", "stale_prs", "workflow:CI", "checks"]
+
+    def test_tier_derived_from_total_score(self) -> None:
+        items = [
+            self._make_item(BacklogCategory.STALE_ISSUE, score=80.0),
+            self._make_item(BacklogCategory.STALE_ISSUE, score=10.0),
+        ]
+        groups = group_by_type(items)
+        assert groups[0].tier == "critical"
+        assert groups[0].tier_class == "error"
+
+    def test_items_order_preserved_within_group(self) -> None:
+        items = [
+            self._make_item(BacklogCategory.STALE_PR, score=100.0),
+            self._make_item(BacklogCategory.STALE_PR, score=50.0),
+            self._make_item(BacklogCategory.STALE_PR, score=10.0),
+        ]
+        groups = group_by_type(items)
+        scores = [i.score for i in groups[0].items]
+        assert scores == [100.0, 50.0, 10.0]
+
+    def test_mixed_types_all_grouped_correctly(self) -> None:
+        items = [
+            self._make_item(BacklogCategory.STALE_ISSUE, repo="a/1", score=30.0),
+            self._make_item(BacklogCategory.STALE_ISSUE, repo="b/2", score=20.0),
+            self._make_item(BacklogCategory.STALE_PR, repo="a/1", score=50.0),
+            self._make_item(
+                BacklogCategory.FAILING_WORKFLOW,
+                repo="a/1",
+                description="Workflow 'Build' failing on `main`",
+                score=100.0,
+            ),
+            self._make_item(BacklogCategory.FAILING_CHECK_ERROR, repo="b/2", score=80.0),
+        ]
+        groups = group_by_type(items)
+        assert len(groups) == 4
+        assert groups[0].key == "stale_issues"
+        assert len(groups[0].items) == 2
+        assert groups[1].key == "stale_prs"
+        assert len(groups[1].items) == 1
+        assert groups[2].key == "workflow:Build"
+        assert len(groups[2].items) == 1
+        assert groups[3].key == "checks"
+        assert len(groups[3].items) == 1
+
+
+# ---------------------------------------------------------------------------
+# Route tests for grouped-by-type backlog view
+# ---------------------------------------------------------------------------
+
+
+class TestBacklogGroupedByTypeRoutes:
+    """Tests for the backlog grouped-by-type route."""
+
+    async def test_backlog_page_grouped_by_type(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/backlog?group_by=type")
+        assert resp.status_code == 200
+        # Should contain a <details> element for grouped view
+        assert "<details" in resp.text
+
+    async def test_backlog_partial_grouped_by_type(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/partials/backlog-items?group_by=type")
+        assert resp.status_code == 200
+        assert "<details" in resp.text
+
+    async def test_backlog_type_view_shows_workflow_group(self, web_client: AsyncClient) -> None:
+        resp = await web_client.get("/backlog?group_by=type")
+        assert resp.status_code == 200
+        # acme/frontend has a failing "Build" workflow
+        assert "Workflow: Build" in resp.text

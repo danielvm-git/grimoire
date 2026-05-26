@@ -25,11 +25,14 @@
                 <input id="backlog-search" type="text" class="grow w-40" placeholder="Search…" />
             </label>
             <div class="join">
-                <button id="view-flat-btn" class="btn btn-sm join-item {{ '' if group_by == 'repo' else 'btn-active' }} tooltip" data-tip="Flat list">
+                <button id="view-flat-btn" class="btn btn-sm join-item {{ 'btn-active' if group_by == '' else '' }} tooltip" data-tip="Flat list">
                     <i class="fa-solid fa-list"></i>
                 </button>
                 <button id="view-grouped-btn" class="btn btn-sm join-item {{ 'btn-active' if group_by == 'repo' else '' }} tooltip" data-tip="Group by repo">
                     <i class="fa-solid fa-layer-group"></i>
+                </button>
+                <button id="view-type-btn" class="btn btn-sm join-item {{ 'btn-active' if group_by == 'type' else '' }} tooltip" data-tip="Group by type">
+                    <i class="fa-solid fa-tags"></i>
                 </button>
             </div>
             <div class="dropdown dropdown-end">
@@ -341,12 +344,14 @@
         );
     });
 
-    // --- View toggle (flat / grouped) ---
+    // --- View toggle (flat / grouped by repo / grouped by type) ---
     function updateToggleButtons() {
         const flatBtn = document.getElementById('view-flat-btn');
         const groupedBtn = document.getElementById('view-grouped-btn');
-        flatBtn.classList.toggle('btn-active', currentGroupBy !== 'repo');
+        const typeBtn = document.getElementById('view-type-btn');
+        flatBtn.classList.toggle('btn-active', currentGroupBy === '');
         groupedBtn.classList.toggle('btn-active', currentGroupBy === 'repo');
+        typeBtn.classList.toggle('btn-active', currentGroupBy === 'type');
     }
     document.getElementById('view-flat-btn').addEventListener('click', function() {
         currentGroupBy = '';
@@ -355,6 +360,11 @@
     });
     document.getElementById('view-grouped-btn').addEventListener('click', function() {
         currentGroupBy = 'repo';
+        updateToggleButtons();
+        applyFilters();
+    });
+    document.getElementById('view-type-btn').addEventListener('click', function() {
+        currentGroupBy = 'type';
         updateToggleButtons();
         applyFilters();
     });

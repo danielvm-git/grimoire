@@ -24,6 +24,7 @@ from grimoire.web.backlog import (
     build_backlog_items,
     export_markdown,
     group_by_repo,
+    group_by_type,
 )
 
 router = APIRouter(tags=["web"])
@@ -1365,7 +1366,12 @@ async def backlog_page(request: Request) -> HTMLResponse:
 
     # Check if grouped view was requested (via query param)
     group_by = request.query_params.get("group_by", "")
-    groups = group_by_repo(items) if group_by == "repo" else None
+    groups = None
+    type_groups = None
+    if group_by == "repo":
+        groups = group_by_repo(items)
+    elif group_by == "type":
+        type_groups = group_by_type(items)
 
     return templates.TemplateResponse(
         request,
@@ -1373,6 +1379,7 @@ async def backlog_page(request: Request) -> HTMLResponse:
         context={
             "items": items,
             "groups": groups,
+            "type_groups": type_groups,
             "group_by": group_by,
             "tier_counts": tier_counts,
             "total_items": len(items),
@@ -1429,7 +1436,12 @@ async def backlog_items_partial(
         search=search,
     )
 
-    groups = group_by_repo(items) if group_by == "repo" else None
+    groups = None
+    type_groups = None
+    if group_by == "repo":
+        groups = group_by_repo(items)
+    elif group_by == "type":
+        type_groups = group_by_type(items)
 
     return templates.TemplateResponse(
         request,
@@ -1437,6 +1449,7 @@ async def backlog_items_partial(
         context={
             "items": items,
             "groups": groups,
+            "type_groups": type_groups,
             "time_ago": _time_ago,
         },
     )

@@ -356,6 +356,8 @@ The backlog page flattens every problem across all repos into a single prioritiz
 
 **`RepoGroup`** — dataclass for the grouped-by-repository view: `repo_full_name`, `items: list[BacklogItem]`, `total_score: float` (sum of item scores). Properties: `tier` and `tier_class` derived from `total_score` using `PRIORITY_TIERS`.
 
+**`TypeGroup`** — dataclass for the grouped-by-type view: `key` (e.g. `"stale_issues"`, `"workflow:CI"`), `label`, `icon`, `items: list[BacklogItem]`, `total_score: float`. Properties: `tier` and `tier_class` derived from `total_score` using `PRIORITY_TIERS`.
+
 ### Priority Scoring
 
 Each item gets a priority score: `score = category_weight × repo_weight × workflow_multiplier × age_factor`.
@@ -388,9 +390,19 @@ Each item gets a priority score: `score = category_weight × repo_weight × work
 **Item list** (HTMX partial: `GET /partials/backlog-items`):
 
 - **Flat view** (default): Each row shows: priority badge (color-coded), category icon, repo name (link to detail page), description, age, GitHub link, copy-as-markdown button.
-- **Grouped view** (`group_by=repo`): Items grouped under collapsible `<details>` sections per repository. Each group header shows: cumulative score badge (Σ), repo name (link to detail page), item count. Items within each group are listed without the repo name column. Groups sorted by cumulative score descending; first group is open by default.
+- **Grouped by repo** (`group_by=repo`): Items grouped under collapsible `<details>` sections per repository. Each group header shows: cumulative score badge (Σ), repo name (link to detail page), item count. Items within each group are listed without the repo name column. Groups sorted by cumulative score descending.
+- **Grouped by type** (`group_by=type`): Items grouped by category type under collapsible `<details>` sections. Groups appear in this order:
+  - **Stale Issues** — all `STALE_ISSUE` items
+  - **Stale PRs** — all `STALE_PR` items
+  - **Workflow: \<name\>** — one group per unique workflow name (from `FAILING_WORKFLOW` items), sorted alphabetically by name
+  - **Checks** — all `FAILING_CHECK_ERROR` and `FAILING_CHECK_WARNING` items
+  - **Others** — any items that don't fit the above (future-proofing)
+
+  Each group header shows: cumulative score badge, type icon + label, item count. Items within each group show the repo name since grouping is by type, not repo.
 
 **`group_by_repo(items) -> list[RepoGroup]`** — groups items by `repo_full_name`, computes `total_score` as sum of item scores, sorts groups by `total_score` descending. Items within each group retain their original score-descending order.
+
+**`group_by_type(items) -> list[TypeGroup]`** — groups items by category type (stale issues, stale PRs, per-workflow, checks, others). Each `TypeGroup` has: `key` (e.g. `"stale_issues"`, `"workflow:CI"`), `label`, `icon`, `items`, `total_score`. Groups appear in a fixed order (not by score). Items within each group retain their original score-descending order.
 
 ### Markdown Export
 
@@ -413,8 +425,8 @@ Individual items can be copied via the per-row clipboard button.
 
 | Endpoint | Method | Returns |
 |----------|--------|---------|
-| `GET /backlog` | GET | Full page. Accepts `?group_by=repo` for grouped view. |
-| `GET /partials/backlog-items` | GET | HTMX partial (item list). Accepts query params: `category`, `repo`, `group_by`, `search`, weight overrides. |
+| `GET /backlog` | GET | Full page. Accepts `?group_by=repo` or `?group_by=type` for grouped views. |
+| `GET /partials/backlog-items` | GET | HTMX partial (item list). Accepts query params: `category`, `repo`, `group_by` (`repo` or `type`), `search`, weight overrides. |
 | `GET /api/backlog/export` | GET | Full backlog as Markdown text |
 | `POST /api/backlog/save-weights` | POST | Persists category weight changes to `config.yaml` and reloads in-memory config |
 

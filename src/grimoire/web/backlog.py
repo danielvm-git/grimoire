@@ -513,3 +513,166 @@ def group_by_repo(items: list[BacklogItem]) -> list[RepoGroup]:
     ]
     groups.sort(key=lambda g: g.total_score, reverse=True)
     return groups
+
+
+# ---------------------------------------------------------------------------
+# Group-by-type view
+# ---------------------------------------------------------------------------
+
+# Display order and metadata for type groups
+TYPE_GROUP_ORDER = [
+    ("stale_issues", "Stale Issues", "fa-solid fa-circle-exclamation"),
+    ("stale_prs", "Stale PRs", "fa-solid fa-code-pull-request"),
+    # Workflow groups are dynamic — inserted here by name
+    ("checks", "Checks", "fa-solid fa-clipboard-check"),
+    ("others", "Others", "fa-solid fa-ellipsis"),
+]
+
+
+@dataclass
+class TypeGroup:
+    """A type-based grouping of backlog items."""
+
+    key: str  # e.g. "stale_issues", "workflow:CI", "checks", "others"
+    label: str  # e.g. "Stale Issues", "Workflow: CI", "Checks"
+    icon: str  # FontAwesome class
+    items: list[BacklogItem]
+    total_score: float = 0.0
+
+    @property
+    def tier(self) -> str:
+        for threshold, tier_name, _ in PRIORITY_TIERS:
+            if self.total_score >= threshold:
+                return tier_name
+        return "low"
+
+    @property
+    def tier_class(self) -> str:
+        """DaisyUI badge class for the cumulative priority tier."""
+        for threshold, _, cls in PRIORITY_TIERS:
+            if self.total_score >= threshold:
+                return cls
+        return "ghost"
+
+    @property
+    def tier_icon(self) -> str:
+        """FontAwesome arrow icon for the cumulative priority tier."""
+        return TIER_DISPLAY.get(self.tier, TIER_DISPLAY["low"])[0]
+
+    @property
+    def tier_color(self) -> str:
+        """DaisyUI text color class for the cumulative priority tier."""
+        return TIER_DISPLAY.get(self.tier, TIER_DISPLAY["low"])[1]
+
+
+def _extract_workflow_name(description: str) -> str:
+    """Extract workflow name from a failing workflow description.
+
+    Expected format: "Workflow 'Name' failing on `branch`"
+    """
+    match = re.match(r"Workflow '([^']+)'", description)
+    return match.group(1) if match else "Unknown"
+
+
+def group_by_type(items: list[BacklogItem]) -> list[TypeGroup]:
+    """Group backlog items by type with cumulative scores.
+
+    Groups:
+    - stale_issues: all STALE_ISSUE items
+    - stale_prs: all STALE_PR items
+    - workflow:<name>: one group per unique workflow name (from FAILING_WORKFLOW)
+    - checks: all FAILING_CHECK_ERROR and FAILING_CHECK_WARNING items
+    - others: any items that don't fit the above categories
+
+    Returns groups in a defined order (stale issues, stale PRs, workflows
+    alphabetically, checks, others), with each group sorted by total_score
+    descending within its tier. Items within each group retain their
+    original (score-descending) order.
+    """
+    # Buckets for fixed categories
+    stale_issues: list[BacklogItem] = []
+    stale_prs: list[BacklogItem] = []
+    checks: list[BacklogItem] = []
+    others: list[BacklogItem] = []
+    workflows: dict[str, list[BacklogItem]] = {}
+
+    for item in items:
+        if item.category == BacklogCategory.STALE_ISSUE:
+            stale_issues.append(item)
+        elif item.category == BacklogCategory.STALE_PR:
+            stale_prs.append(item)
+        elif item.category == BacklogCategory.FAILING_WORKFLOW:
+            wf_name = _extract_workflow_name(item.description)
+            workflows.setdefault(wf_name, []).append(item)
+        elif item.category in (
+            BacklogCategory.FAILING_CHECK_ERROR,
+            BacklogCategory.FAILING_CHECK_WARNING,
+        ):
+            checks.append(item)
+        else:
+            others.append(item)
+
+    groups: list[TypeGroup] = []
+
+    # Stale Issues
+    if stale_issues:
+        groups.append(
+            TypeGroup(
+                key="stale_issues",
+                label="Stale Issues",
+                icon="fa-solid fa-circle-exclamation",
+                items=stale_issues,
+                total_score=sum(i.score for i in stale_issues),
+            )
+        )
+
+    # Stale PRs
+    if stale_prs:
+        groups.append(
+            TypeGroup(
+                key="stale_prs",
+                label="Stale PRs",
+                icon="fa-solid fa-code-pull-request",
+                items=stale_prs,
+                total_score=sum(i.score for i in stale_prs),
+            )
+        )
+
+    # Workflows — one group per workflow name, sorted alphabetically
+    for wf_name in sorted(workflows.keys()):
+        wf_items = workflows[wf_name]
+        groups.append(
+            TypeGroup(
+                key=f"workflow:{wf_name}",
+                label=f"Workflow: {wf_name}",
+                icon="fa-solid fa-gear",
+                items=wf_items,
+                total_score=sum(i.score for i in wf_items),
+            )
+        )
+
+    # Checks
+    if checks:
+        groups.append(
+            TypeGroup(
+                key="checks",
+                label="Checks",
+                icon="fa-solid fa-clipboard-check",
+                items=checks,
+                total_score=sum(i.score for i in checks),
+            )
+        )
+
+    # Others (catch-all for future categories)
+    if others:
+        groups.append(
+            TypeGroup(
+                key="others",
+                label="Others",
+                icon="fa-solid fa-ellipsis",
+                items=others,
+                total_score=sum(i.score for i in others),
+            )
+        )
+
+    return groups
