@@ -408,3 +408,69 @@ async def test_get_git_commit(client: GitHubClient) -> None:
     data = await client.get_git_commit("owner/repo", "abc123")
     assert data is not None
     assert data["committer"]["date"] == "2026-04-10T12:00:00Z"
+
+
+# ---------------------------------------------------------------------------
+# API request metrics
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_endpoint_repos() -> None:
+    """Dynamic owner/repo segments are normalized."""
+    assert (
+        GitHubClient._normalize_endpoint("/repos/my-org/my-repo/issues")
+        == "/repos/{owner}/{repo}/issues"
+    )
+
+
+def test_normalize_endpoint_workflow_runs() -> None:
+    """Workflow and run IDs are normalized."""
+    path = "/repos/org/repo/actions/workflows/12345/runs"
+    assert (
+        GitHubClient._normalize_endpoint(path)
+        == "/repos/{owner}/{repo}/actions/workflows/{workflow_id}/runs"
+    )
+
+
+def test_normalize_endpoint_git_commit() -> None:
+    """Git commit SHA is normalized."""
+    path = "/repos/org/repo/git/commits/abc123def456"
+    assert GitHubClient._normalize_endpoint(path) == "/repos/{owner}/{repo}/git/commits/{sha}"
+
+
+def test_normalize_endpoint_branch() -> None:
+    """Branch names are normalized."""
+    path = "/repos/org/repo/branches/feature/my-branch"
+    assert GitHubClient._normalize_endpoint(path) == "/repos/{owner}/{repo}/branches/{branch}"
+
+
+def test_normalize_endpoint_team_repos() -> None:
+    """Team slugs are normalized."""
+    path = "/orgs/my-org/teams/backend-team/repos"
+    assert GitHubClient._normalize_endpoint(path) == "/orgs/my-org/teams/{team_slug}/repos"
+
+
+def test_normalize_endpoint_full_url() -> None:
+    """Full GitHub URLs (from pagination) are normalized."""
+    url = "https://api.github.com/repos/org/repo/issues?page=2"
+    assert GitHubClient._normalize_endpoint(url) == "/repos/{owner}/{repo}/issues"
+
+
+@respx.mock
+async def test_api_requests_metric_incremented(client: GitHubClient) -> None:
+    """API_REQUESTS counter is incremented on each request."""
+    from grimoire.observability.metrics import API_REQUESTS
+
+    respx.get("https://api.github.com/repos/owner/repo").mock(
+        return_value=httpx.Response(
+            200,
+            json={"full_name": "owner/repo"},
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+
+    before = API_REQUESTS.labels(endpoint="/repos/{owner}/{repo}", status="200")._value.get()
+    await client.get_repo("owner/repo")
+    after = API_REQUESTS.labels(endpoint="/repos/{owner}/{repo}", status="200")._value.get()
+
+    assert after == before + 1

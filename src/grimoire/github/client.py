@@ -13,7 +13,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import CachedETag
-from grimoire.observability.metrics import update_rate_limit_metrics
+from grimoire.observability.metrics import API_REQUESTS, update_rate_limit_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -268,6 +268,7 @@ class GitHubClient:
 
                 self._update_rate_limit(response)
                 self._last_next_link = self._parse_next_link(response)
+                self._record_api_request(path, response.status_code)
 
                 if response.status_code == 304:
                     return None
@@ -355,6 +356,36 @@ class GitHubClient:
             self._rate_limit_reset = float(reset)
         if self._rate_limit_remaining is not None and self._rate_limit_reset is not None:
             update_rate_limit_metrics(self._rate_limit_remaining, int(self._rate_limit_reset))
+
+    # -- API request metrics -------------------------------------------------
+
+    @staticmethod
+    def _normalize_endpoint(path: str) -> str:
+        """Normalize API path to a low-cardinality endpoint label.
+
+        Replaces dynamic segments (owner, repo, workflow_id, sha, branch) with
+        placeholders to avoid metric cardinality explosion.
+        """
+        import re
+
+        if path.startswith("https://"):
+            path = "/" + path.split("api.github.com/", 1)[-1]
+
+        path = path.split("?")[0]
+
+        path = re.sub(r"^/repos/[^/]+/[^/]+", "/repos/{owner}/{repo}", path)
+        path = re.sub(r"/workflows/\d+", "/workflows/{workflow_id}", path)
+        path = re.sub(r"/runs/\d+", "/runs/{run_id}", path)
+        path = re.sub(r"/git/commits/[a-f0-9]+", "/git/commits/{sha}", path)
+        path = re.sub(r"/branches/.+$", "/branches/{branch}", path)
+        path = re.sub(r"/teams/[^/]+", "/teams/{team_slug}", path)
+
+        return path
+
+    def _record_api_request(self, path: str, status_code: int) -> None:
+        """Record an API request in Prometheus metrics."""
+        endpoint = self._normalize_endpoint(path)
+        API_REQUESTS.labels(endpoint=endpoint, status=str(status_code)).inc()
 
     # -- pagination ----------------------------------------------------------
 
