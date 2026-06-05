@@ -6,6 +6,7 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from importlib.metadata import version
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -57,6 +58,8 @@ from grimoire.web.router import set_backlog_config, set_refresh_schedule, set_st
 from grimoire.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
+
+VERSION = version("grimoire-dashboard")
 
 
 @asynccontextmanager
@@ -279,7 +282,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Grimoire",
         description="Self-hostable GitHub repository monitoring dashboard",
-        version="0.1.0",
+        version=VERSION,
         lifespan=lifespan,
     )
 
@@ -313,6 +316,6 @@ def create_app() -> FastAPI:
         if _cache:
             details["tracked_repos"] = len(_cache)
 
-        return JSONResponse({"status": status, "version": "0.1.0", **details})
+        return JSONResponse({"status": status, "version": VERSION, **details})
 
     return app

@@ -223,17 +223,23 @@ async def fetch_repository_stats(
     open_issues = previous.open_issues if previous else 0
     stale_issues = previous.stale_issues if previous else 0
     stale_issue_items: list[IssueDetail] = list(previous.stale_issue_items) if previous else []
+    oldest_issue_created_at: datetime | None = (
+        previous.oldest_issue_created_at if previous else None
+    )
+    issue_created_dates: list[datetime] = list(previous.issue_created_dates) if previous else []
     try:
         issues = await client.get_open_issues(repo.full_name)
         if issues is not None:
             open_issues = len(issues)
             stale_issues = 0
             stale_issue_items = []
+            issue_created_dates = []
             stale_cutoff = now - timedelta(days=staleness.issues_days)
             for issue in issues:
-                last_activity = _parse_dt(issue.get("updated_at")) or _parse_dt(
-                    issue.get("created_at")
-                )
+                created_at = _parse_dt(issue.get("created_at"))
+                if created_at is not None:
+                    issue_created_dates.append(created_at)
+                last_activity = _parse_dt(issue.get("updated_at")) or created_at
                 if _is_issue_stale(issue, stale_cutoff):
                     issue_number = issue.get("number")
                     if not issue_number or issue_number <= 0:
@@ -244,11 +250,12 @@ async def fetch_repository_stats(
                             number=issue_number,
                             title=issue.get("title", ""),
                             url=issue.get("html_url", ""),
-                            created_at=_parse_dt(issue.get("created_at")) or now,
+                            created_at=created_at or now,
                             last_activity_at=last_activity,
                             author=issue.get("user", {}).get("login", ""),
                         )
                     )
+            oldest_issue_created_at = min(issue_created_dates) if issue_created_dates else None
     except Exception as exc:
         warnings.append(f"Could not fetch issues for {repo.full_name}: {_brief_error(exc)}")
 
@@ -256,15 +263,21 @@ async def fetch_repository_stats(
     open_prs = previous.open_pull_requests if previous else 0
     stale_prs = previous.stale_pull_requests if previous else 0
     stale_pr_items: list[PullRequestDetail] = list(previous.stale_pr_items) if previous else []
+    oldest_pr_created_at: datetime | None = previous.oldest_pr_created_at if previous else None
+    pr_created_dates: list[datetime] = list(previous.pr_created_dates) if previous else []
     try:
         prs = await client.get_open_pull_requests(repo.full_name)
         if prs is not None:
             open_prs = len(prs)
             stale_prs = 0
             stale_pr_items = []
+            pr_created_dates = []
             stale_cutoff = now - timedelta(days=staleness.pull_requests_days)
             for pr in prs:
-                last_activity = _parse_dt(pr.get("updated_at")) or _parse_dt(pr.get("created_at"))
+                created_at = _parse_dt(pr.get("created_at"))
+                if created_at is not None:
+                    pr_created_dates.append(created_at)
+                last_activity = _parse_dt(pr.get("updated_at")) or created_at
                 if _is_pr_stale(pr, stale_cutoff):
                     pr_number = pr.get("number")
                     if not pr_number or pr_number <= 0:
@@ -275,11 +288,12 @@ async def fetch_repository_stats(
                             number=pr_number,
                             title=pr.get("title", ""),
                             url=pr.get("html_url", ""),
-                            created_at=_parse_dt(pr.get("created_at")) or now,
+                            created_at=created_at or now,
                             last_activity_at=last_activity,
                             author=pr.get("user", {}).get("login", ""),
                         )
                     )
+            oldest_pr_created_at = min(pr_created_dates) if pr_created_dates else None
     except Exception as exc:
         warnings.append(f"Could not fetch PRs for {repo.full_name}: {_brief_error(exc)}")
 
@@ -382,6 +396,10 @@ async def fetch_repository_stats(
         fetched_at=now,
         last_commit_at=last_commit_at,
         total_branches=total_branches,
+        oldest_issue_created_at=oldest_issue_created_at,
+        oldest_pr_created_at=oldest_pr_created_at,
+        issue_created_dates=issue_created_dates,
+        pr_created_dates=pr_created_dates,
     )
 
 

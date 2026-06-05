@@ -5,6 +5,8 @@ All metrics are documented in METRICS.md at the repository root.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Response
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
@@ -44,6 +46,35 @@ DATA_FETCHED_TIMESTAMP = Gauge(
     "grimoire_data_fetched_timestamp_seconds",
     "Unix timestamp of the last data fetch",
     ["repo"],
+)
+OLDEST_ISSUE_AGE = Gauge(
+    "grimoire_oldest_issue_age_seconds",
+    "Age of the oldest open issue in seconds",
+    ["repo"],
+)
+OLDEST_PR_AGE = Gauge(
+    "grimoire_oldest_pr_age_seconds",
+    "Age of the oldest open pull request in seconds",
+    ["repo"],
+)
+
+# ---------------------------------------------------------------------------
+# Age distribution histograms
+# ---------------------------------------------------------------------------
+
+ISSUE_AGE_DISTRIBUTION = Histogram(
+    "grimoire_issue_age_seconds",
+    "Age distribution of open issues",
+    ["repo"],
+    buckets=[86400, 604800, 2592000, 7776000, 15552000, 31536000, float("inf")],
+    #        1d     7d      30d      90d      180d      365d      inf
+)
+PR_AGE_DISTRIBUTION = Histogram(
+    "grimoire_pr_age_seconds",
+    "Age distribution of open pull requests",
+    ["repo"],
+    buckets=[3600, 86400, 604800, 1209600, 2592000, 7776000, float("inf")],
+    #        1h    1d     7d      14d      30d      90d      inf
 )
 
 # ---------------------------------------------------------------------------
@@ -90,6 +121,7 @@ async def metrics() -> Response:
 
 def update_repo_metrics(stats_list: list[RepositoryStats]) -> None:
     """Update all per-repo gauge metrics after a data refresh."""
+    now = datetime.now(UTC)
     REPOS_TOTAL.set(len(stats_list))
     for stats in stats_list:
         repo = stats.full_name
@@ -107,6 +139,22 @@ def update_repo_metrics(stats_list: list[RepositoryStats]) -> None:
             LAST_COMMIT_TIMESTAMP.labels(repo=repo).set(stats.last_commit_at.timestamp())
         if stats.fetched_at is not None:
             DATA_FETCHED_TIMESTAMP.labels(repo=repo).set(stats.fetched_at.timestamp())
+
+        if stats.oldest_issue_created_at is not None:
+            age = (now - stats.oldest_issue_created_at).total_seconds()
+            OLDEST_ISSUE_AGE.labels(repo=repo).set(age)
+
+        if stats.oldest_pr_created_at is not None:
+            age = (now - stats.oldest_pr_created_at).total_seconds()
+            OLDEST_PR_AGE.labels(repo=repo).set(age)
+
+        for created_at in stats.issue_created_dates:
+            age = (now - created_at).total_seconds()
+            ISSUE_AGE_DISTRIBUTION.labels(repo=repo).observe(age)
+
+        for created_at in stats.pr_created_dates:
+            age = (now - created_at).total_seconds()
+            PR_AGE_DISTRIBUTION.labels(repo=repo).observe(age)
 
 
 def update_check_metrics(

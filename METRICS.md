@@ -17,6 +17,20 @@ All Prometheus metrics exposed at `GET /metrics`. Scraped using standard Prometh
 | `grimoire_check_status` | Gauge | `repo`, `check`, `branch` | Check status: 1 = pass, 0 = fail |
 | `grimoire_last_commit_timestamp_seconds` | Gauge | `repo` | Unix timestamp of the most recent commit |
 | `grimoire_data_fetched_timestamp_seconds` | Gauge | `repo` | Unix timestamp of the last data fetch |
+| `grimoire_oldest_issue_age_seconds` | Gauge | `repo` | Age of the oldest open issue in seconds |
+| `grimoire_oldest_pr_age_seconds` | Gauge | `repo` | Age of the oldest open pull request in seconds |
+
+## Issue/PR Age Distribution
+
+| Metric | Type | Labels | Description |
+|--------|------|--------|-------------|
+| `grimoire_issue_age_seconds` | Histogram | `repo` | Age distribution of open issues (buckets: 1d, 7d, 30d, 90d, 180d, 365d) |
+| `grimoire_pr_age_seconds` | Histogram | `repo` | Age distribution of open PRs (buckets: 1h, 1d, 7d, 14d, 30d, 90d) |
+
+**Derived queries:**
+- Average issue age: `grimoire_issue_age_seconds_sum{repo="X"} / grimoire_issue_age_seconds_count{repo="X"}`
+- Median issue age: `histogram_quantile(0.5, grimoire_issue_age_seconds_bucket{repo="X"})`
+- Issues older than 30 days: query `grimoire_issue_age_seconds_bucket{le="2592000"}` and subtract from total
 
 ## Performance
 

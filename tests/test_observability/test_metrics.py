@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from httpx import AsyncClient
 from prometheus_client import REGISTRY
@@ -11,6 +11,8 @@ from grimoire.models import RepositoryStats, WorkflowStatus
 from grimoire.observability.metrics import (
     DATA_FETCHED_TIMESTAMP,
     LAST_COMMIT_TIMESTAMP,
+    OLDEST_ISSUE_AGE,
+    OLDEST_PR_AGE,
     OPEN_ISSUES,
     OPEN_PRS,
     REPOS_TOTAL,
@@ -123,3 +125,46 @@ async def test_update_check_metrics() -> None:
     )
     assert sample is not None
     assert sample >= 1
+
+
+async def test_update_repo_metrics_sets_age_gauges_and_histograms() -> None:
+    """update_repo_metrics correctly sets oldest age gauges and observes histograms."""
+    now = datetime.now(timezone.utc)
+    oldest_issue = now - timedelta(days=100)
+    recent_issue = now - timedelta(days=5)
+    oldest_pr = now - timedelta(days=30)
+    recent_pr = now - timedelta(hours=12)
+
+    stats_list = [
+        RepositoryStats(
+            full_name="org/gamma",
+            default_branch="main",
+            open_issues=2,
+            open_pull_requests=2,
+            oldest_issue_created_at=oldest_issue,
+            oldest_pr_created_at=oldest_pr,
+            issue_created_dates=[oldest_issue, recent_issue],
+            pr_created_dates=[oldest_pr, recent_pr],
+        ),
+    ]
+
+    update_repo_metrics(stats_list)
+
+    oldest_issue_age = OLDEST_ISSUE_AGE.labels(repo="org/gamma")._value.get()  # type: ignore[union-attr]
+    oldest_pr_age = OLDEST_PR_AGE.labels(repo="org/gamma")._value.get()  # type: ignore[union-attr]
+
+    assert oldest_issue_age > 0
+    assert oldest_issue_age >= timedelta(days=99).total_seconds()
+    assert oldest_pr_age > 0
+    assert oldest_pr_age >= timedelta(days=29).total_seconds()
+
+    issue_hist_count = REGISTRY.get_sample_value(
+        "grimoire_issue_age_seconds_count", {"repo": "org/gamma"}
+    )
+    pr_hist_count = REGISTRY.get_sample_value(
+        "grimoire_pr_age_seconds_count", {"repo": "org/gamma"}
+    )
+    assert issue_hist_count is not None
+    assert issue_hist_count >= 2
+    assert pr_hist_count is not None
+    assert pr_hist_count >= 2

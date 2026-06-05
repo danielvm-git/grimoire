@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from importlib.metadata import version
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,7 @@ from grimoire.web.backlog import (
 router = APIRouter(tags=["web"])
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+templates.env.globals["VERSION"] = version("grimoire-dashboard")
 
 # Module-level staleness config — set from app lifespan
 _staleness_config: StalenessConfig = StalenessConfig()

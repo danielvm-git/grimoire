@@ -70,6 +70,10 @@ class RepositoryStats(BaseModel):
     fetched_at: datetime | None = None
     last_commit_at: datetime | None = None
     total_branches: int = 0
+    oldest_issue_created_at: datetime | None = None
+    oldest_pr_created_at: datetime | None = None
+    issue_created_dates: list[datetime] = []
+    pr_created_dates: list[datetime] = []
 
 
 class CheckResult(BaseModel):
