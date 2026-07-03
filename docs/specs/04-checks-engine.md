@@ -17,13 +17,17 @@ targets:
   # Exactly one of: list, regex, script
   regex: "lucabello/.*"
   # list: ["lucabello/repo1", "lucabello/repo2"]
-  # script: "test -f pyproject.toml"
+  # script: 'test -f pyproject.toml'                       # per-branch include filter
+  # script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'            # default branch only
+  # script: 'case "$BRANCH" in release/*) ;; *) exit 1;; esac'  # release/* only
 script: |
   uv lock --check
 schedule: "0 */8 * * *"   # optional cron; omit to use default refresh interval
 enabled: true              # optional; default true
 severity: error            # optional; "error" (red, default) or "warning" (yellow)
 ```
+
+**Branch scoping.** `list` and `regex` include every observed branch of a matched repo. `script` is evaluated *per (repo, branch)*, so it doubles as the branch filter: return exit code 0 for branches the check should run against, non-zero for the rest. Branches not configured on the repository in `config.yaml` are never considered.
 
 Scripts run via `/bin/sh` by default. Add a shebang to use a different interpreter:
 ```yaml
@@ -89,25 +93,43 @@ def load_checks(data_dir: Path) -> list[CheckDefinition]:
 This is a shared utility used by both the checks engine and the actions engine.
 
 ```python
+ResolvedTarget = tuple[TrackedRepository, list[str]]  # repo + matched branches
+
 async def resolve_targets(
     targets: TargetSpec,
     repos: list[TrackedRepository],
     workspace: WorkspaceManager,
-) -> list[TrackedRepository]:
+) -> list[ResolvedTarget]:
     """
-    Resolve which repos a check/action applies to.
+    Resolve which (repo, branch) pairs a check/action applies to.
 
-    - list: filter repos whose full_name is in targets.list
-    - regex: filter repos whose full_name matches the regex pattern
-    - script: run the script in each repo's default branch workdir;
-              include repo if exit code is 0
+    - list:   repo matches by full name; all its observed branches are included.
+    - regex:  repo matches by full-name pattern; all its observed branches are included.
+    - script: the script is executed once per observed branch (in that branch's
+              workdir with BRANCH/DEFAULT_BRANCH env vars set); a branch is
+              included when the script exits 0. Repos with no matching branch
+              are dropped entirely.
+    """
+
+
+def target_env(
+    workspace: WorkspaceManager,
+    repo: TrackedRepository,
+    branch: str,
+) -> dict[str, str]:
+    """
+    Build the subprocess environment for a target/check/action script.
+
+    Includes workspace env vars (GH_TOKEN, git identity, ...) plus per-invocation
+    context: REPO_OWNER, REPO_NAME, REPO_FULL_NAME, BRANCH, DEFAULT_BRANCH.
     """
 ```
 
 **Notes:**
-- For `script` targeting, the script runs in the repo's default branch workdir (not all branches).
-- Script targeting uses the same environment as check/action execution (GH_TOKEN, etc.).
-- Results can be cached for the duration of a single check/action run (target set doesn't change mid-run).
+- `list` and `regex` operate on repo full names, so they include *all* observed branches of a matched repo. Use `script` to filter down to specific branches.
+- Script targeting has a 30-second timeout per (repo, branch) evaluation.
+- `script` receives the same env vars as the check/action itself (`BRANCH`, `DEFAULT_BRANCH`, etc.), so authors can express "default branch only" with `[ "$BRANCH" = "$DEFAULT_BRANCH" ]`, "release branches only" with `case "$BRANCH" in release/*) ;; *) exit 1 ;; esac`, etc.
+- Target evaluation is not cached across script invocations; each `(repo, branch)` runs its own subprocess.
 
 ## 4.4 — Check Execution Engine
 
@@ -138,8 +160,8 @@ async def run_check_for_all_targets(
 ) -> list[CheckResult]:
     """
     1. Create a CheckRunRecord (triggered_by = "manual" | "cron" | "refresh").
-    2. Resolve targets.
-    3. For each target repo × each observed branch, run the check (linked to run).
+    2. Resolve targets → list of (repo, matched_branches).
+    3. For each (repo, branch) pair, run the check (linked to run).
     4. Execute concurrently (bounded by semaphore).
     5. Mark CheckRunRecord as completed.
     6. Return all results.
@@ -150,7 +172,7 @@ async def run_check_for_all_targets(
 - Scripts that begin with a shebang (`#!`) line are written to a temporary file, made executable, and run directly via `create_subprocess_exec` so the OS honors the interpreter (e.g. `#!/usr/bin/env bash`, `#!/usr/bin/env python3`). The temp file is cleaned up after execution.
 - Scripts without a shebang are passed to `/bin/sh` via `create_subprocess_shell` (scripts may use pipes, conditionals, etc.).
 - Set `cwd` to the workdir path.
-- Merge `workspace.get_env()` into the subprocess environment.
+- Build the environment with `target_env(workspace, repo, branch)` (workspace env vars + `REPO_OWNER`/`REPO_NAME`/`REPO_FULL_NAME`/`BRANCH`/`DEFAULT_BRANCH`).
 - Capture stdout and stderr together (combined stream).
 - Apply a timeout (configurable, default 5 minutes per check per repo).
 - On timeout, kill the process and record as failure with "Timed out" in output.

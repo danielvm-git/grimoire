@@ -33,6 +33,8 @@ The `targets` field specifies which repositories a check runs against. Exactly *
 
 ### `list` — explicit repos
 
+Matches whole repos; all observed branches are checked:
+
 ```yaml
 targets:
   list:
@@ -42,7 +44,7 @@ targets:
 
 ### `regex` — pattern match
 
-Matched against the full repo name (`owner/name`):
+Matched against the full repo name (`owner/name`); all observed branches are checked:
 
 ```yaml
 targets:
@@ -51,17 +53,31 @@ targets:
 
 Use `".*"` to match all tracked repos.
 
-### `script` — dynamic filtering
+### `script` — dynamic (per-branch) filtering
 
-Runs the script in each repo's default branch directory. The repo is included if the script exits `0`:
+Runs the script once for **each observed branch** of every candidate repo, in that branch's workdir. The `(repo, branch)` pair is included if the script exits `0`. This is how you scope a check to specific branches:
 
 ```yaml
 targets:
+  # File-existence gate — runs on every branch that has pyproject.toml
   script: |
     test -f pyproject.toml
 ```
 
-Script targeting has a 30-second timeout per repo.
+```yaml
+targets:
+  # Default branch only
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+```
+
+```yaml
+targets:
+  # Release branches only
+  script: |
+    case "$BRANCH" in release/*) exit 0 ;; *) exit 1 ;; esac
+```
+
+Script targeting has a 30-second timeout per branch. The target script sees the same environment variables as the check script itself (see below).
 
 ## Exit codes
 
@@ -79,7 +95,7 @@ The `severity` field controls whether a failure is reported as an **error** (red
 | Working directory | Cloned repo at the target branch |
 | Timeout | 300 seconds (5 minutes) |
 | Output cap | 64 KB (stdout + stderr) |
-| Shell | `/bin/bash` |
+| Shell | `/bin/sh` (override with a shebang, e.g. `#!/usr/bin/env bash`) |
 
 ### Environment variables
 
@@ -89,6 +105,8 @@ The `severity` field controls whether a failure is reported as an **error** (red
 | `REPO_NAME` | Repository name |
 | `REPO_FULL_NAME` | `owner/name` |
 | `BRANCH` | Branch being checked |
+| `DEFAULT_BRANCH` | Default branch of the repository |
+| `GH_TOKEN` / `GITHUB_TOKEN` | GitHub API token |
 
 ## API endpoints
 

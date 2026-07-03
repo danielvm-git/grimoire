@@ -35,7 +35,7 @@ script: |
 
 ## Targeting
 
-Targeting works the same as for [checks](write-a-check.md#targeting) — use `list`, `regex`, or `script`.
+Targeting works the same as for [checks](write-a-check.md#targeting) — use `list`, `regex`, or `script`. Just like checks, `script` targeting is evaluated per (repo, branch) and doubles as a branch filter (e.g. `'[ "$BRANCH" = "$DEFAULT_BRANCH" ]'` to open PRs only against the default branch).
 
 If you omit `targets` entirely, the action is **global** — it runs once without iterating over repos. Useful for cross-repo tasks or infrastructure automation.
 
@@ -60,7 +60,8 @@ Action scripts execute inside the cloned repository directory. Available environ
 | `REPO_NAME` | Repository name |
 | `REPO_FULL_NAME` | `owner/name` |
 | `BRANCH` | Current branch |
-| `GH_TOKEN` | GitHub token (for `gh` CLI) |
+| `DEFAULT_BRANCH` | Default branch of the repository |
+| `GH_TOKEN` / `GITHUB_TOKEN` | GitHub token (for `gh` CLI) |
 
 The `gh` CLI is available inside the Docker container.
 

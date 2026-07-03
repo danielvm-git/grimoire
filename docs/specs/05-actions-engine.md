@@ -113,8 +113,9 @@ async def run_action(
        a. Run script once in workspace root directory.
        b. Record single ActionRunRepoRecord with repo_full_name="(global)".
     4. If per-repo action:
-       a. Resolve targets (or filter to specific_repo if provided).
-       b. For each target repo × each observed branch (sequentially):
+       a. Resolve targets (or filter to specific_repo if provided) → list of
+          (repo, matched_branches).
+       b. For each (repo, branch) pair (sequentially):
           - Call workspace.sync_repo() to fetch latest from remote.
           - Call workspace.reset_workdir() to ensure clean state.
           - Run action.script as subprocess in workdir.
@@ -134,11 +135,13 @@ async def run_action(
 **Progress tracking:** Like checks, actions maintain an in-memory `ActionProgress(completed, total)` dataclass in `_running_actions: dict[str, ActionProgress]`. The total is computed as the number of repo×branch tasks before execution begins. Each completed task increments `completed`. The entry is removed in a `finally` block. Helper functions: `is_action_running(slug)`, `get_action_progress(slug)`. The web UI polls this to display a `completed/total` counter on the action run button.
 
 **Subprocess execution details:**
-- Same as checks: scripts with a shebang (`#!`) are written to a temp file and run directly (honoring the interpreter); scripts without a shebang are passed to `/bin/sh`. Set `cwd`, merge `workspace.get_env()`.
+- Same as checks: scripts with a shebang (`#!`) are written to a temp file and run directly (honoring the interpreter); scripts without a shebang are passed to `/bin/sh`. Set `cwd`, and build the env with `target_env(workspace, repo, branch)` (workspace env vars + `REPO_OWNER`/`REPO_NAME`/`REPO_FULL_NAME`/`BRANCH`/`DEFAULT_BRANCH`).
 - Capture stdout and stderr together (combined stream).
 - Apply a timeout (configurable, default 10 minutes per action per repo — longer than checks, since actions may involve network operations like `git push`).
 - On timeout, kill the process, record as failure.
 - **Output size cap:** Same as checks — 64KB max per repo, truncate with note if exceeded.
+
+**Branch scoping.** Actions follow the same targeting rules as checks (see spec 04 §4.3): `list`/`regex` include every observed branch of a matched repo, while `script` targeting is evaluated per (repo, branch) and can restrict execution to a subset (e.g. `[ "$BRANCH" = "$DEFAULT_BRANCH" ]` for default-branch-only actions like PR-opening bots).
 
 **Pre-execution sequence** (per repo+branch):
 1. `workspace.sync_repo()` — fetch latest from remote (actions need fresh code).

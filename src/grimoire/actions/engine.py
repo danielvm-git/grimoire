@@ -15,7 +15,7 @@ from grimoire.database import ActionRunRecord, ActionRunRepoRecord
 from grimoire.models import ActionRepoResult, ActionRun
 from grimoire.observability.metrics import update_action_metrics
 from grimoire.script import create_script_process
-from grimoire.targeting import resolve_targets
+from grimoire.targeting import resolve_targets, target_env
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -126,15 +126,14 @@ async def run_action(
                 await session.commit()
         else:
             # Per-repo action
-            targets = await resolve_targets(action.targets, repos, workspace)
+            resolved = await resolve_targets(action.targets, repos, workspace)
             if specific_repo is not None:
-                targets = [r for r in targets if r.full_name == specific_repo]
+                resolved = [(r, b) for r, b in resolved if r.full_name == specific_repo]
 
             # Count total repo×branch tasks
-            progress.total = sum(len(r.branches or [r.default_branch]) for r in targets)
+            progress.total = sum(len(branches) for _, branches in resolved)
 
-            for repo in targets:
-                branches = repo.branches or [repo.default_branch]
+            for repo, branches in resolved:
                 for branch in branches:
                     passed, output = await _execute_action(action, repo, branch, workspace)
                     result = ActionRepoResult(
@@ -238,7 +237,7 @@ async def _execute_action(
     # Pre-execution: sync then reset
     await workspace.sync_repo(repo)
     workdir = await workspace.reset_workdir(repo.full_name, branch)
-    env = {**os.environ, **workspace.get_env()}
+    env = target_env(workspace, repo, branch)
 
     passed = False
     output = ""

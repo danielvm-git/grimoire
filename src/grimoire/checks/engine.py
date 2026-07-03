@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import shutil
 import tempfile
 import time
@@ -17,7 +16,7 @@ from grimoire.database import CheckResultRecord, CheckRunRecord
 from grimoire.models import CheckResult
 from grimoire.observability.metrics import update_check_metrics
 from grimoire.script import create_script_process
-from grimoire.targeting import resolve_targets
+from grimoire.targeting import resolve_targets, target_env
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -72,7 +71,7 @@ async def run_check(
         output = f"Workspace setup failed: {exc}"
         return await _persist_result(check, repo, branch, passed, output, engine, run_id)
 
-    env = {**os.environ, **workspace.get_env()}
+    env = target_env(workspace, repo, branch)
 
     # Give each check subprocess its own temp/runtime directory to avoid
     # conflicts when tools (e.g. charmcraft) use shared state files.
@@ -199,15 +198,14 @@ async def run_check_for_all_targets(
     progress = CheckProgress()
     _running_checks[check.slug] = progress
     try:
-        targets = await resolve_targets(check.targets, repos, workspace)
+        resolved = await resolve_targets(check.targets, repos, workspace)
 
         if specific_repo is not None:
-            targets = [r for r in targets if r.full_name == specific_repo]
+            resolved = [(r, b) for r, b in resolved if r.full_name == specific_repo]
 
         # Count total tasks before starting
         task_list: list[tuple[TrackedRepository, str]] = []
-        for repo in targets:
-            branches = repo.branches or [repo.default_branch]
+        for repo, branches in resolved:
             for branch in branches:
                 task_list.append((repo, branch))
 

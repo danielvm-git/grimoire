@@ -285,6 +285,33 @@ class TestRunAction:
         assert result.results[1].branch == "develop"
         assert ws.reset_calls == [("acme/repo", "main"), ("acme/repo", "develop")]
 
+    async def test_script_targeting_restricts_to_default_branch(self, tmp_path: Path) -> None:
+        """Script targeting evaluated per branch scopes the action correctly."""
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        action = ActionDefinition(
+            name="Default only",
+            slug="default-only",
+            description="",
+            targets=TargetSpec(script='[ "$BRANCH" = "$DEFAULT_BRANCH" ]'),
+            script="echo ok",
+        )
+        repo = _repo("acme/repo", branches=["main", "develop", "release/1.0"])
+
+        result = await run_action(
+            action,
+            [repo],
+            ws,
+            engine,
+            triggered_by="manual",  # type: ignore[arg-type]
+        )
+
+        branches = [r.branch for r in result.results]
+        assert branches == ["main"]
+        assert ws.reset_calls == [("acme/repo", "main")]
+
 
 def _global_action(script: str = "echo global") -> ActionDefinition:
     return ActionDefinition(

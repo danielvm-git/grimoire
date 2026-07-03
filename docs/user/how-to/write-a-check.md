@@ -54,6 +54,7 @@ Scripts execute inside the cloned repository directory for the target branch. Av
 | `REPO_NAME` | Repository name |
 | `REPO_FULL_NAME` | `owner/name` |
 | `BRANCH` | Branch being checked |
+| `DEFAULT_BRANCH` | Default branch of the repository |
 
 Scripts have a **5-minute timeout** and output is capped at 64 KB.
 
@@ -84,15 +85,33 @@ targets:
   regex: "myorg/.*-service"
 ```
 
-### Dynamic (script)
+### Dynamic (script) — also branch-level
 
-Run a script in each repo — include the repo if it exits `0`:
+`list` and `regex` include every observed branch of a matched repo. Use `script` targeting when you need to scope down: the script is evaluated once per (repo, branch), and the `(repo, branch)` is included only if it exits `0`.
 
 ```yaml
+# Only branches that have a Python project
 targets:
   script: |
     test -f pyproject.toml
 ```
+
+Common patterns:
+
+```yaml
+# Default branch only
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+```
+
+```yaml
+# release/* branches only
+targets:
+  script: |
+    case "$BRANCH" in release/*) exit 0 ;; *) exit 1 ;; esac
+```
+
+The target script receives the same environment as the check script (`REPO_OWNER`, `BRANCH`, `DEFAULT_BRANCH`, `GH_TOKEN`, ...).
 
 ## Set severity
 

@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from grimoire.models import TrackedRepository
-from grimoire.targeting import TargetSpec, resolve_targets
+from grimoire.targeting import TargetSpec, resolve_targets, target_env
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -32,7 +32,9 @@ class MockWorkspace:
 def _repos() -> list[TrackedRepository]:
     return [
         TrackedRepository(full_name="acme/alpha", default_branch="main"),
-        TrackedRepository(full_name="acme/beta", default_branch="main"),
+        TrackedRepository(
+            full_name="acme/beta", default_branch="main", branches=["main", "develop"]
+        ),
         TrackedRepository(full_name="other/gamma", default_branch="develop"),
     ]
 
@@ -74,12 +76,15 @@ class TestTargetSpecValidation:
 
 
 class TestResolveTargetsList:
-    async def test_list_match(self, tmp_path: Path) -> None:
+    async def test_list_match_expands_to_all_observed_branches(self, tmp_path: Path) -> None:
         ws = MockWorkspace(tmp_path)
-        spec = TargetSpec(list=["acme/alpha", "other/gamma"])
+        spec = TargetSpec(list=["acme/alpha", "acme/beta"])
         result = await resolve_targets(spec, _repos(), ws)  # type: ignore[arg-type]
-        names = [r.full_name for r in result]
-        assert names == ["acme/alpha", "other/gamma"]
+        by_name = {r.full_name: branches for r, branches in result}
+        assert by_name == {
+            "acme/alpha": ["main"],
+            "acme/beta": ["main", "develop"],
+        }
 
     async def test_list_no_match(self, tmp_path: Path) -> None:
         ws = MockWorkspace(tmp_path)
@@ -89,12 +94,15 @@ class TestResolveTargetsList:
 
 
 class TestResolveTargetsRegex:
-    async def test_regex_match(self, tmp_path: Path) -> None:
+    async def test_regex_match_expands_to_all_observed_branches(self, tmp_path: Path) -> None:
         ws = MockWorkspace(tmp_path)
         spec = TargetSpec(regex="acme/.*")
         result = await resolve_targets(spec, _repos(), ws)  # type: ignore[arg-type]
-        names = [r.full_name for r in result]
-        assert names == ["acme/alpha", "acme/beta"]
+        by_name = {r.full_name: branches for r, branches in result}
+        assert by_name == {
+            "acme/alpha": ["main"],
+            "acme/beta": ["main", "develop"],
+        }
 
     async def test_regex_no_match(self, tmp_path: Path) -> None:
         ws = MockWorkspace(tmp_path)
@@ -104,17 +112,54 @@ class TestResolveTargetsRegex:
 
 
 class TestResolveTargetsScript:
-    async def test_script_include(self, tmp_path: Path) -> None:
+    async def test_script_include_all_branches(self, tmp_path: Path) -> None:
         ws = MockWorkspace(tmp_path)
         spec = TargetSpec(script="exit 0")
-        repos = [TrackedRepository(full_name="acme/alpha", default_branch="main")]
+        repos = [TrackedRepository(full_name="acme/beta", branches=["main", "develop"])]
         result = await resolve_targets(spec, repos, ws)  # type: ignore[arg-type]
         assert len(result) == 1
-        assert result[0].full_name == "acme/alpha"
+        repo, branches = result[0]
+        assert repo.full_name == "acme/beta"
+        assert branches == ["main", "develop"]
 
-    async def test_script_exclude(self, tmp_path: Path) -> None:
+    async def test_script_exclude_all_branches_drops_repo(self, tmp_path: Path) -> None:
         ws = MockWorkspace(tmp_path)
         spec = TargetSpec(script="exit 1")
         repos = [TrackedRepository(full_name="acme/alpha", default_branch="main")]
         result = await resolve_targets(spec, repos, ws)  # type: ignore[arg-type]
         assert result == []
+
+    async def test_script_can_filter_by_branch(self, tmp_path: Path) -> None:
+        """Script targeting evaluates per branch — enables 'default branch only' patterns."""
+        ws = MockWorkspace(tmp_path)
+        spec = TargetSpec(script='[ "$BRANCH" = "$DEFAULT_BRANCH" ]')
+        repos = [
+            TrackedRepository(
+                full_name="acme/beta", default_branch="main", branches=["main", "develop"]
+            ),
+        ]
+        result = await resolve_targets(spec, repos, ws)  # type: ignore[arg-type]
+        assert len(result) == 1
+        _, branches = result[0]
+        assert branches == ["main"]
+
+
+# ---------------------------------------------------------------------------
+# target_env
+# ---------------------------------------------------------------------------
+
+
+class TestTargetEnv:
+    def test_populates_repo_and_branch_vars(self, tmp_path: Path) -> None:
+        ws = MockWorkspace(tmp_path)
+        repo = TrackedRepository(
+            full_name="acme/alpha", default_branch="main", branches=["main", "develop"]
+        )
+        env = target_env(ws, repo, "develop")  # type: ignore[arg-type]
+        assert env["REPO_OWNER"] == "acme"
+        assert env["REPO_NAME"] == "alpha"
+        assert env["REPO_FULL_NAME"] == "acme/alpha"
+        assert env["BRANCH"] == "develop"
+        assert env["DEFAULT_BRANCH"] == "main"
+        # Workspace env passthrough
+        assert env["GH_TOKEN"] == "test"

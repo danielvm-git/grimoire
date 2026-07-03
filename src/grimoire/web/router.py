@@ -18,7 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import StalenessConfig
 from grimoire.database import ActionRunRecord
-from grimoire.models import WorkflowStatus
+from grimoire.models import TrackedRepository, WorkflowStatus
 from grimoire.targeting import TargetSpec
 from grimoire.web.backlog import (
     BacklogItem,
@@ -281,16 +281,31 @@ def _compute_totals(repos: list[RepoViewModel]) -> DashboardTotals:
     return totals
 
 
-def _resolve_targets_sync(targets: TargetSpec, repo_names: list[str]) -> set[str]:
-    """Resolve list/regex targeting without async workspace access.
+def _resolve_targets_sync(
+    targets: TargetSpec,
+    repos: dict[str, TrackedRepository],
+) -> set[tuple[str, str]]:
+    """Resolve list/regex targeting to a set of ``(repo, branch)`` pairs.
 
-    Script-based targeting is skipped; those checks appear once they've run.
+    Script-based targeting is skipped (it depends on workdir state); those
+    checks only surface for a branch once a result has been recorded for it.
     """
     if targets.list is not None:
-        return set(targets.list) & set(repo_names)
+        allowed = set(targets.list)
+        return {
+            (r.full_name, branch)
+            for r in repos.values()
+            if r.full_name in allowed
+            for branch in (r.branches or [r.default_branch])
+        }
     if targets.regex is not None:
         pattern = re.compile(targets.regex)
-        return {name for name in repo_names if pattern.search(name)}
+        return {
+            (r.full_name, branch)
+            for r in repos.values()
+            if pattern.search(r.full_name)
+            for branch in (r.branches or [r.default_branch])
+        }
     return set()
 
 
@@ -310,22 +325,22 @@ _LATEST_RESULTS_SQL = text(
 
 
 async def _load_check_context(
-    repo_names: list[str],
-) -> tuple[dict[str, set[str]], dict[tuple[str, str, str], dict[str, Any]]]:
+    repos: dict[str, TrackedRepository],
+) -> tuple[dict[str, set[tuple[str, str]]], dict[tuple[str, str, str], dict[str, Any]]]:
     """Load check targeting and latest DB results.
 
     Returns (check_targets, results_by_key) where:
-    - check_targets: check_slug → set of applicable repo full_names
+    - check_targets: check_slug → set of (repo_full_name, branch) pairs the check applies to
     - results_by_key: (check_slug, repo_full_name, branch) → result dict
     """
     from grimoire.checks.router import _checks
     from grimoire.checks.router import _engine as _checks_engine
 
-    check_targets: dict[str, set[str]] = {}
+    check_targets: dict[str, set[tuple[str, str]]] = {}
     for check_def in _checks:
         if not check_def.enabled:
             continue
-        check_targets[check_def.slug] = _resolve_targets_sync(check_def.targets, repo_names)
+        check_targets[check_def.slug] = _resolve_targets_sync(check_def.targets, repos)
 
     results_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
     if _checks_engine is not None and _checks:
@@ -348,7 +363,7 @@ async def _load_check_context(
 def _build_checks_for_repo(
     full_name: str,
     branches: list[str],
-    check_targets: dict[str, set[str]],
+    check_targets: dict[str, set[tuple[str, str]]],
     results_by_key: dict[tuple[str, str, str], dict[str, Any]],
 ) -> tuple[dict[str, list[dict[str, Any]]], int, int]:
     """Build checks_by_branch and count failures/warnings for a single repo.
@@ -365,8 +380,9 @@ def _build_checks_for_repo(
     for check_def in _checks:
         if not check_def.enabled:
             continue
-        applies = full_name in check_targets.get(check_def.slug, set())
+        targets = check_targets.get(check_def.slug, set())
         for branch in branches:
+            applies = (full_name, branch) in targets
             key = (check_def.slug, full_name, branch)
             result = results_by_key.get(key)
             if result:
@@ -404,8 +420,7 @@ async def _build_repo_viewmodels() -> list[RepoViewModel]:
     """Build view models from the in-memory GitHub cache + checks state."""
     from grimoire.github.router import _cache, _repos
 
-    repo_names = list(_cache.keys())
-    check_targets, results_by_key = await _load_check_context(repo_names)
+    check_targets, results_by_key = await _load_check_context(_repos)
 
     viewmodels: list[RepoViewModel] = []
     for full_name, stats in _cache.items():
@@ -540,7 +555,7 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
     workflow_failures = sum(1 for w in stats.workflows if w.status == "failure")
     workflow_pending = sum(1 for w in stats.workflows if w.status == "pending")
 
-    check_targets, results_by_key = await _load_check_context([full_name])
+    check_targets, results_by_key = await _load_check_context({full_name: repo})
     checks_by_branch, check_failures, check_warnings = _build_checks_for_repo(
         full_name, branches, check_targets, results_by_key
     )
@@ -1308,8 +1323,7 @@ async def _build_backlog_items(
     """Collect and optionally filter backlog items."""
     from grimoire.github.router import _cache, _repos
 
-    repo_names = list(_cache.keys())
-    check_targets, results_by_key = await _load_check_context(repo_names)
+    check_targets, results_by_key = await _load_check_context(_repos)
 
     from grimoire.checks.router import _checks
 

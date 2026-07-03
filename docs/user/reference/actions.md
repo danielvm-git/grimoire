@@ -25,9 +25,18 @@ data/actions/
 
 ## Target spec {: #target-spec }
 
-Works identically to [checks targeting](checks.md#target-spec). Exactly one of `list`, `regex`, or `script` must be set.
+Works identically to [checks targeting](checks.md#target-spec). Exactly one of `list`, `regex`, or `script` must be set — or the field can be omitted entirely for a global action.
 
-**If `targets` is omitted entirely**, the action is **global** — it runs once without iterating over repositories.
+- `list` / `regex` match by repo full name and run the action against **every observed branch** of a matched repo.
+- `script` is evaluated **per (repo, branch)** in that branch's workdir; the branch is included only when the script exits `0`. The target script sees the same env vars as the action script (`BRANCH`, `DEFAULT_BRANCH`, ...), so it doubles as a branch filter:
+
+    ```yaml
+    # Default branch only (e.g. actions that open PRs)
+    targets:
+      script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+    ```
+
+**If `targets` is omitted entirely**, the action is **global** — it runs once in the workspace root without iterating over repositories or branches. Global actions do not receive `REPO_*` / `BRANCH` / `DEFAULT_BRANCH` env vars.
 
 ## Exit codes
 
@@ -43,7 +52,7 @@ Works identically to [checks targeting](checks.md#target-spec). Exactly one of `
 | Working directory | Cloned repo at target branch (or workspace root for global actions) |
 | Timeout | 600 seconds (10 minutes) |
 | Output cap | 64 KB (stdout + stderr) |
-| Shell | `/bin/bash` |
+| Shell | `/bin/sh` (override with a shebang, e.g. `#!/usr/bin/env bash`) |
 
 ### Environment variables
 
@@ -53,7 +62,8 @@ Works identically to [checks targeting](checks.md#target-spec). Exactly one of `
 | `REPO_NAME` | Repository name |
 | `REPO_FULL_NAME` | `owner/name` |
 | `BRANCH` | Current branch |
-| `GH_TOKEN` | GitHub token (for `gh` CLI) |
+| `DEFAULT_BRANCH` | Default branch of the repository |
+| `GH_TOKEN` / `GITHUB_TOKEN` | GitHub token (for `gh` CLI) |
 
 The `gh` CLI is pre-installed in the Docker image.
 

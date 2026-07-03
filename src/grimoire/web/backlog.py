@@ -340,7 +340,7 @@ def _collect_stale_issue_items(
 def _collect_check_items(
     repo: TrackedRepository,
     branches: list[str],
-    check_targets: dict[str, set[str]],
+    check_targets: dict[str, set[tuple[str, str]]],
     results_by_key: dict[tuple[str, str, str], dict[str, Any]],
     check_defs: list[Any],
     config: BacklogConfig,
@@ -355,12 +355,13 @@ def _collect_check_items(
     for check_def in check_defs:
         if not check_def.enabled:
             continue
-        applies = repo.full_name in check_targets.get(check_def.slug, set())
-        if not applies:
-            continue
         for branch in branches:
             key = (check_def.slug, repo.full_name, branch)
             result = results_by_key.get(key)
+            # A branch generates a backlog item only if the latest recorded
+            # result is a failure. If the check never ran for this branch
+            # (missing key), it isn't in the backlog — even if targeting
+            # says it should apply. The dashboard surfaces "not-run" state.
             if result is None or result["passed"]:
                 continue
             # Failing check — flat score (no age escalation)
@@ -390,7 +391,7 @@ def build_backlog_items(
     repos: dict[str, TrackedRepository],
     config: BacklogConfig,
     staleness: StalenessConfig,
-    check_targets: dict[str, set[str]],
+    check_targets: dict[str, set[tuple[str, str]]],
     results_by_key: dict[tuple[str, str, str], dict[str, Any]],
     check_defs: list[Any],
     now: datetime | None = None,

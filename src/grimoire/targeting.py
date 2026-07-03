@@ -38,50 +38,101 @@ class TargetSpec(BaseModel):
         return self
 
 
+ResolvedTarget = tuple["TrackedRepository", _List[str]]
+"""A repo and the branches (of its observed set) the target script matched."""
+
+
+def _observed_branches(repo: TrackedRepository) -> _List[str]:
+    """Branches Grimoire tracks for *repo* (explicit list, or default only)."""
+    return repo.branches or [repo.default_branch]
+
+
+def target_env(
+    workspace: WorkspaceManager,
+    repo: TrackedRepository,
+    branch: str,
+) -> dict[str, str]:
+    """Build the environment for a target/check/action script invocation.
+
+    Includes the shared workspace env vars (``GH_TOKEN`` etc.) plus per-invocation
+    context (``REPO_OWNER``, ``REPO_NAME``, ``REPO_FULL_NAME``, ``BRANCH``,
+    ``DEFAULT_BRANCH``) so scripts can branch on which branch they're running for.
+    """
+    owner, name = repo.full_name.split("/", 1)
+    env = {**os.environ, **workspace.get_env()}
+    env.update(
+        {
+            "REPO_OWNER": owner,
+            "REPO_NAME": name,
+            "REPO_FULL_NAME": repo.full_name,
+            "BRANCH": branch,
+            "DEFAULT_BRANCH": repo.default_branch,
+        }
+    )
+    return env
+
+
 async def resolve_targets(
     targets: TargetSpec,
     repos: _List[TrackedRepository],
     workspace: WorkspaceManager,
-) -> _List[TrackedRepository]:
-    """Resolve which repos a check/action applies to.
+) -> _List[ResolvedTarget]:
+    """Resolve which ``(repo, branches)`` pairs a check or action applies to.
 
-    - list: filter repos whose full_name is in targets.list
-    - regex: filter repos whose full_name matches the regex pattern
-    - script: run the script in each repo's default branch workdir;
-              include repo if exit code is 0.
+    - ``list``  → repo matches by full name; all its observed branches are included.
+    - ``regex`` → repo matches by full-name pattern; all its observed branches are included.
+    - ``script`` → the script is executed once per observed branch (in that branch's
+      workdir with ``BRANCH``/``DEFAULT_BRANCH`` env vars set); a branch is included
+      when the script exits ``0``. Repos with no matching branch are dropped.
+
+    Repos with no matching branch are excluded entirely from the result.
     """
     if targets.list is not None:
         allowed = set(targets.list)
-        return [r for r in repos if r.full_name in allowed]
+        return [(r, _observed_branches(r)) for r in repos if r.full_name in allowed]
 
     if targets.regex is not None:
         pattern = re.compile(targets.regex)
-        return [r for r in repos if pattern.search(r.full_name)]
+        return [(r, _observed_branches(r)) for r in repos if pattern.search(r.full_name)]
 
-    # script targeting
+    # script targeting: evaluated per branch
     assert targets.script is not None
-    matched: _List[TrackedRepository] = []
-    env = {**os.environ, **workspace.get_env()}
+    resolved: _List[ResolvedTarget] = []
     for repo in repos:
-        cwd = workspace.get_workdir(repo.full_name, repo.default_branch)
-        proc: asyncio.subprocess.Process | None = None
-        tmp_script = None
-        try:
-            proc, tmp_script = await create_script_process(
-                targets.script,
-                cwd=cwd,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-                env=env,
-            )
-            rc = await asyncio.wait_for(proc.wait(), timeout=_TARGETING_TIMEOUT)
-            if rc == 0:
-                matched.append(repo)
-        except (asyncio.TimeoutError, OSError):
-            # timeout or exec failure → exclude
-            if proc is not None and proc.returncode is None:
-                proc.kill()
-        finally:
-            if tmp_script is not None:
-                tmp_script.unlink(missing_ok=True)
-    return matched
+        matched_branches: _List[str] = []
+        for branch in _observed_branches(repo):
+            if await _script_matches(targets.script, workspace, repo, branch):
+                matched_branches.append(branch)
+        if matched_branches:
+            resolved.append((repo, matched_branches))
+    return resolved
+
+
+async def _script_matches(
+    script: str,
+    workspace: WorkspaceManager,
+    repo: TrackedRepository,
+    branch: str,
+) -> bool:
+    """Return True when *script* exits 0 for ``(repo, branch)``."""
+    cwd = workspace.get_workdir(repo.full_name, branch)
+    env = target_env(workspace, repo, branch)
+    proc: asyncio.subprocess.Process | None = None
+    tmp_script = None
+    try:
+        proc, tmp_script = await create_script_process(
+            script,
+            cwd=cwd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            env=env,
+        )
+        rc = await asyncio.wait_for(proc.wait(), timeout=_TARGETING_TIMEOUT)
+        return rc == 0
+    except (asyncio.TimeoutError, OSError):
+        if proc is not None and proc.returncode is None:
+            proc.kill()
+        return False
+    finally:
+        if tmp_script is not None:
+            tmp_script.unlink(missing_ok=True)

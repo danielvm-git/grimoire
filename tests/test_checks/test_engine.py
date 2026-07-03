@@ -188,3 +188,72 @@ class TestRunningStateTracking:
         # After completion, should no longer be running
         assert "tracker-test" not in _running_checks
         await engine.dispose()
+
+
+class TestRunCheckForAllTargets:
+    """End-to-end targeting behavior including per-branch script filtering."""
+
+    async def test_list_targeting_runs_on_all_observed_branches(self, tmp_path: Path) -> None:
+        from sqlmodel import select
+
+        from grimoire.checks.engine import run_check_for_all_targets
+
+        engine = await get_engine(str(tmp_path / "list.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        check = CheckDefinition(
+            name="List Check",
+            slug="list-check",
+            description="",
+            targets=TargetSpec(list=["acme/repo"]),
+            script="echo ok",
+        )
+        repo = TrackedRepository(
+            full_name="acme/repo",
+            default_branch="main",
+            branches=["main", "develop"],
+        )
+
+        await run_check_for_all_targets(check, [repo], ws, engine)  # type: ignore[arg-type]
+
+        async with AsyncSession(engine) as session:
+            rows = (
+                await session.exec(
+                    select(CheckResultRecord).where(CheckResultRecord.check_slug == "list-check")
+                )
+            ).all()
+        assert sorted(r.branch for r in rows) == ["develop", "main"]
+
+    async def test_script_targeting_restricts_to_matching_branches(self, tmp_path: Path) -> None:
+        """A target script that only accepts the default branch scopes the check to it."""
+        from sqlmodel import select
+
+        from grimoire.checks.engine import run_check_for_all_targets
+
+        engine = await get_engine(str(tmp_path / "script.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        check = CheckDefinition(
+            name="Default Branch Only",
+            slug="default-only",
+            description="",
+            targets=TargetSpec(script='[ "$BRANCH" = "$DEFAULT_BRANCH" ]'),
+            script="echo ok",
+        )
+        repo = TrackedRepository(
+            full_name="acme/repo",
+            default_branch="main",
+            branches=["main", "develop", "release/1.0"],
+        )
+
+        await run_check_for_all_targets(check, [repo], ws, engine)  # type: ignore[arg-type]
+
+        async with AsyncSession(engine) as session:
+            rows = (
+                await session.exec(
+                    select(CheckResultRecord).where(CheckResultRecord.check_slug == "default-only")
+                )
+            ).all()
+        assert [r.branch for r in rows] == ["main"]
