@@ -6,7 +6,6 @@ Validates that real API responses conform to their declared Pydantic response mo
 from __future__ import annotations
 
 from pathlib import Path
-from typing import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient

@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from grimoire.app import create_app
-from grimoire.models import RepositoryStats, TrackedRepository
 
 
 @pytest.fixture
