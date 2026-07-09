@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import textwrap
 from pathlib import Path
 
@@ -16,6 +17,20 @@ from grimoire.config import (
     load_config,
     resolve_env_vars,
 )
+
+
+def _xdg_expected_config_dir(home: Path) -> Path:
+    """Return the expected XDG config directory for the current platform."""
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "grimoire"
+    return home / ".config" / "grimoire"
+
+
+def _xdg_expected_data_dir(home: Path) -> Path:
+    """Return the expected XDG data directory for the current platform."""
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "grimoire"
+    return home / ".local" / "share" / "grimoire"
 
 
 class TestResolveEnvVars:
@@ -198,7 +213,7 @@ class TestLoadConfig:
         assert config.staleness.problematic_stale_prs_pct == 20
         assert config.refresh_schedule == "*/5 * * * *"
         # XDG data dir defaults
-        expected_data_dir = tmp_path / ".local" / "share" / "grimoire" / "data"
+        expected_data_dir = _xdg_expected_data_dir(tmp_path) / "data"
         assert config.data_dir == expected_data_dir
 
     def test_staleness_thresholds_parsed(self, tmp_path: Path) -> None:
@@ -427,7 +442,7 @@ class TestConfigPathResolution:
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
 
-        expected = tmp_path / ".config" / "grimoire" / "config.yaml"
+        expected = _xdg_expected_config_dir(tmp_path) / "config.yaml"
         assert _get_xdg_config_path() == expected
 
     def test_xdg_data_dir_default_path(
@@ -437,7 +452,7 @@ class TestConfigPathResolution:
         monkeypatch.delenv("XDG_DATA_HOME", raising=False)
         monkeypatch.setenv("HOME", str(tmp_path))
 
-        expected = tmp_path / ".local" / "share" / "grimoire"
+        expected = _xdg_expected_data_dir(tmp_path)
         assert _get_xdg_data_dir() == expected
 
     def test_xdg_data_dir_with_env_var(
