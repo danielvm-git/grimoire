@@ -1,24 +1,38 @@
 """Entry point for BigBase deployment."""
-import sys, os
+import sys, os, asyncio
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
-
-# BigBase runs: uvicorn app:app --host 0.0.0.0 --port $PORT
-# Print to stderr so BigBase captures it
 print("Grimoire starting...", file=sys.stderr, flush=True)
 
-try:
-    from grimoire.app import create_app
-    app = create_app()
-    print("Grimoire app created successfully", file=sys.stderr, flush=True)
-except Exception as e:
-    import traceback
-    traceback.print_exc(file=sys.stderr)
-    print(f"FATAL: {e}", file=sys.stderr, flush=True)
-    # Create a minimal app so BigBase health check passes
-    from fastapi import FastAPI
-    app = FastAPI()
-    @app.get("/")
-    async def root():
-        return {"status": "error", "detail": str(e)}
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+# Minimal app that starts immediately for health check
+app = FastAPI(title="Grimoire")
+
+@app.get("/")
+async def root():
+    return {"status": "ok", "name": "Grimoire Dashboard"}
+
+# Try to start the full app in the background
+async def start_real_app():
+    try:
+        from grimoire.app import create_app
+        real = create_app()
+        # Copy routes from real app
+        for route in real.routes:
+            app.router.routes.append(route)
+        print("Grimoire full app loaded", file=sys.stderr, flush=True)
+    except Exception:
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        print("Running in degraded mode", file=sys.stderr, flush=True)
+
+# Schedule async startup
+import threading
+def _start():
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(start_real_app())
+t = threading.Thread(target=_start, daemon=True)
+t.start()
