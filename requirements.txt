@@ -134,3 +134,4 @@ websockets==16.1
     # via uvicorn
 wrapt==2.2.2
     # via opentelemetry-instrumentation
+-e .
