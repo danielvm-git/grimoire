@@ -5,6 +5,7 @@
 </p>
 
 <p align="center">
+  <a href="https://grimoire.bigbase.click">Live Demo</a> |
   <a href="https://lucabello.github.io/grimoire/">Documentation</a> |
   <a href="https://lucabello.github.io/grimoire/tutorials/getting-started/">Getting Started</a> |
   <a href="https://lucabello.github.io/grimoire/reference/configuration/">Configuration</a> |
