@@ -114,3 +114,22 @@ jobs:
         run: npx semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    needs: [semantic-release]
+    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    concurrency:
+      group: deploy-python-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to BigBase
+        uses: danielvm-git/.github/actions/bigbase-deploy@main
+        with:
+          site_id: ${{ secrets.BIGBASE_SITE_ID }}
+          app_type: python
+          site_url: ${{ secrets.BIGBASE_SITE_URL }}
+          deploy_token: ${{ secrets.BIGBASE_DEPLOY_TOKEN }}
