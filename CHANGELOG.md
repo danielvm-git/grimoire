@@ -1,3 +1,10 @@
+## [0.3.1](https://github.com/danielvm-git/grimoire/compare/v0.3.0...v0.3.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* **deploy:** add uvicorn startup to app.py for BigBase deployment ([48fa7b5](https://github.com/danielvm-git/grimoire/commit/48fa7b54b5ad0f91b5bdf0e53ec3ec2ce1fbd68c))
+
 # [0.3.0](https://github.com/danielvm-git/grimoire/compare/v0.2.1...v0.3.0) (2026-07-12)
 
 
