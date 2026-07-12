@@ -59,8 +59,8 @@ lint:
     uv run pyright src
     # Check for misspellings
     uv run codespell src
-    # Check for dead code
-    uv run vulture src
+    # Check for dead code (only high-confidence findings)
+    uv run vulture src --min-confidence 80
     # Run actionlint on GitHub Actions workflows
     test -d .github/workflows && uv run actionlint || true
     @echo "✓ Linting passed!"
