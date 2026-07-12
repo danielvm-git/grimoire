@@ -1,0 +1,141 @@
+# version: 2.0.0
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/ci-cd-pages-mkdocs.yml"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/ci-cd-pages-mkdocs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check
+
+      - name: Pyright
+        run: uv run pyright src
+
+      - name: Codespell
+        run: uv run codespell src
+
+      - name: Pytest
+        run: uv run pytest -q
+
+      - name: Build
+        run: uv run python -m build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  codeql:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    needs: [ci, codeql]
+    steps:
+      - name: All quality gates passed
+        run: echo "CI and CodeQL passed — ready for release"
+
+  semantic-release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    needs: [verify]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install semantic-release
+        run: >-
+          npm install -g semantic-release
+          @semantic-release/changelog
+          @semantic-release/git
+
+      - name: Run semantic-release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    needs: [semantic-release]
+    if: >-
+      success()
+      && github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+    concurrency:
+      group: deploy-python-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to BigBase
+        uses: danielvm-git/.github/actions/bigbase-deploy@main
+        with:
+          site_id: ${{ secrets.BIGBASE_SITE_ID }}
+          app_type: python
+          site_url: ${{ secrets.BIGBASE_SITE_URL }}
+          deploy_token: ${{ secrets.BIGBASE_DEPLOY_TOKEN }}

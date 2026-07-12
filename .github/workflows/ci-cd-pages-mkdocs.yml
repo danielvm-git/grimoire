@@ -1,11 +1,12 @@
-name: Deploy Documentation
+# version: 1.0.0
+name: Deploy (GitHub Pages)
 
 on:
   push:
     branches: [main]
     paths:
       - "docs/user/**"
-      - ".github/workflows/docs.yaml"
+      - ".github/workflows/ci-cd-pages-mkdocs.yml"
   workflow_dispatch:
 
 permissions:
@@ -14,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: true
 
 jobs:
@@ -28,23 +29,25 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install mkdocs-material
+      - name: Install MkDocs Material
         run: pip install mkdocs-material
 
       - name: Build docs
         run: mkdocs build --config-file docs/user/mkdocs.yml
 
-      - uses: actions/upload-pages-artifact@v3
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
-    needs: build
     runs-on: ubuntu-22.04
     timeout-minutes: 5
+    needs: [build]
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
