@@ -1,3 +1,10 @@
+## [0.3.4](https://github.com/danielvm-git/grimoire/compare/v0.3.3...v0.3.4) (2026-07-12)
+
+
+### Bug Fixes
+
+* **deploy:** bind to dual-stack IPv4+IPv6 for BigBase health checks ([8b4f6ff](https://github.com/danielvm-git/grimoire/commit/8b4f6ff212958e2f5d8197e7dc0b737cc85b2d59))
+
 ## [0.3.3](https://github.com/danielvm-git/grimoire/compare/v0.3.2...v0.3.3) (2026-07-12)
 
 
