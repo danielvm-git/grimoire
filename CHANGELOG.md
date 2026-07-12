@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/danielvm-git/grimoire/compare/v0.2.0...v0.2.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* **ci:** configure pytest testpaths, vulture min-confidence, and add greenlet dep ([bb47371](https://github.com/danielvm-git/grimoire/commit/bb473712a7c74feb2ef5dc1ded482c1257c8f373))
+
 # [0.2.0](https://github.com/danielvm-git/grimoire/compare/v0.1.8...v0.2.0) (2026-07-12)
 
 
