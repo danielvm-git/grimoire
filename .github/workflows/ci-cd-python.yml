@@ -80,3 +80,37 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
+
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 2
+    needs: [ci, codeql]
+    steps:
+      - name: All quality gates passed
+        run: echo "CI and CodeQL passed — ready for release"
+
+  semantic-release:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    needs: [verify]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install semantic-release
+        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git
+
+      - name: Run semantic-release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
