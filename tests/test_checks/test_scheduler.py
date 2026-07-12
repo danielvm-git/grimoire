@@ -10,7 +10,9 @@ from grimoire.models import TrackedRepository
 from grimoire.targeting import TargetSpec
 
 
-def _check(slug: str, schedule: str | None = None, enabled: bool = True) -> CheckDefinition:
+def _check(
+    slug: str, schedule: str | None = None, enabled: bool = True
+) -> CheckDefinition:
     return CheckDefinition(
         name=f"Check {slug}",
         slug=slug,

@@ -89,18 +89,29 @@ async def test_update_repo_metrics_sets_gauges() -> None:
 
     # Workflow gauges
     assert (
-        WORKFLOW_STATUS.labels(repo="org/alpha", workflow="CI", branch="main")._value.get() == 1  # type: ignore[union-attr]
+        WORKFLOW_STATUS.labels(
+            repo="org/alpha", workflow="CI", branch="main"
+        )._value.get()
+        == 1  # type: ignore[union-attr]
     )
     assert (
-        WORKFLOW_STATUS.labels(repo="org/alpha", workflow="Deploy", branch="main")._value.get()
+        WORKFLOW_STATUS.labels(
+            repo="org/alpha", workflow="Deploy", branch="main"
+        )._value.get()
         == 0  # type: ignore[union-attr]
     )
     assert WORKFLOW_FAILURES.labels(repo="org/alpha")._value.get() == 1  # type: ignore[union-attr]
     assert WORKFLOW_FAILURES.labels(repo="org/beta")._value.get() == 0  # type: ignore[union-attr]
 
     # Timestamp gauges
-    assert LAST_COMMIT_TIMESTAMP.labels(repo="org/alpha")._value.get() == last_commit.timestamp()  # type: ignore[union-attr]
-    assert DATA_FETCHED_TIMESTAMP.labels(repo="org/alpha")._value.get() == fetched.timestamp()  # type: ignore[union-attr]
+    assert (
+        LAST_COMMIT_TIMESTAMP.labels(repo="org/alpha")._value.get()
+        == last_commit.timestamp()
+    )  # type: ignore[union-attr]
+    assert (
+        DATA_FETCHED_TIMESTAMP.labels(repo="org/alpha")._value.get()
+        == fetched.timestamp()
+    )  # type: ignore[union-attr]
 
 
 async def test_update_check_metrics() -> None:
@@ -116,7 +127,9 @@ async def test_update_check_metrics() -> None:
     # Verify the check status gauge was set
     from grimoire.observability.metrics import CHECK_STATUS
 
-    val = CHECK_STATUS.labels(repo="org/alpha", check="lint", branch="main")._value.get()  # type: ignore[union-attr]
+    val = CHECK_STATUS.labels(
+        repo="org/alpha", check="lint", branch="main"
+    )._value.get()  # type: ignore[union-attr]
     assert val == 1
 
     # Verify histogram recorded a sample

@@ -15,7 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import delete, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.config import GrimoireConfig, StalenessConfig, StaticRepoSource, TeamRepoSource
+from grimoire.config import (
+    GrimoireConfig,
+    StalenessConfig,
+    StaticRepoSource,
+    TeamRepoSource,
+)
 from grimoire.database import (
     CachedIssue,
     CachedPullRequest,
@@ -82,7 +87,9 @@ def get_refresh_progress() -> RefreshProgress | None:
     return _refresh_progress
 
 
-def _workflow_matches_filter(wf_name: str, include: list[str], exclude: list[str]) -> bool:
+def _workflow_matches_filter(
+    wf_name: str, include: list[str], exclude: list[str]
+) -> bool:
     """Return True if the workflow should be tracked after applying filters.
 
     * If *include* is non-empty, the name must match at least one include pattern.
@@ -151,7 +158,9 @@ async def _resolve_static(
                 workflow_exclude=source.workflows.exclude,
             )
     except Exception:
-        logger.warning("Failed to resolve static repo %s, skipping", source.repo, exc_info=True)
+        logger.warning(
+            "Failed to resolve static repo %s, skipping", source.repo, exc_info=True
+        )
 
 
 async def _resolve_team(
@@ -169,7 +178,9 @@ async def _resolve_team(
     try:
         repos = await client.get_team_repos(org, team_slug)
     except Exception:
-        logger.warning("Failed to fetch repos for team %s, skipping", source.team, exc_info=True)
+        logger.warning(
+            "Failed to fetch repos for team %s, skipping", source.team, exc_info=True
+        )
         return
 
     exclude_set = set(source.exclude)
@@ -222,11 +233,15 @@ async def fetch_repository_stats(
     # -- Issues --------------------------------------------------------------
     open_issues = previous.open_issues if previous else 0
     stale_issues = previous.stale_issues if previous else 0
-    stale_issue_items: list[IssueDetail] = list(previous.stale_issue_items) if previous else []
+    stale_issue_items: list[IssueDetail] = (
+        list(previous.stale_issue_items) if previous else []
+    )
     oldest_issue_created_at: datetime | None = (
         previous.oldest_issue_created_at if previous else None
     )
-    issue_created_dates: list[datetime] = list(previous.issue_created_dates) if previous else []
+    issue_created_dates: list[datetime] = (
+        list(previous.issue_created_dates) if previous else []
+    )
     try:
         issues = await client.get_open_issues(repo.full_name)
         if issues is not None:
@@ -255,16 +270,26 @@ async def fetch_repository_stats(
                             author=issue.get("user", {}).get("login", ""),
                         )
                     )
-            oldest_issue_created_at = min(issue_created_dates) if issue_created_dates else None
+            oldest_issue_created_at = (
+                min(issue_created_dates) if issue_created_dates else None
+            )
     except Exception as exc:
-        warnings.append(f"Could not fetch issues for {repo.full_name}: {_brief_error(exc)}")
+        warnings.append(
+            f"Could not fetch issues for {repo.full_name}: {_brief_error(exc)}"
+        )
 
     # -- Pull Requests -------------------------------------------------------
     open_prs = previous.open_pull_requests if previous else 0
     stale_prs = previous.stale_pull_requests if previous else 0
-    stale_pr_items: list[PullRequestDetail] = list(previous.stale_pr_items) if previous else []
-    oldest_pr_created_at: datetime | None = previous.oldest_pr_created_at if previous else None
-    pr_created_dates: list[datetime] = list(previous.pr_created_dates) if previous else []
+    stale_pr_items: list[PullRequestDetail] = (
+        list(previous.stale_pr_items) if previous else []
+    )
+    oldest_pr_created_at: datetime | None = (
+        previous.oldest_pr_created_at if previous else None
+    )
+    pr_created_dates: list[datetime] = (
+        list(previous.pr_created_dates) if previous else []
+    )
     try:
         prs = await client.get_open_pull_requests(repo.full_name)
         if prs is not None:
@@ -295,10 +320,14 @@ async def fetch_repository_stats(
                     )
             oldest_pr_created_at = min(pr_created_dates) if pr_created_dates else None
     except Exception as exc:
-        warnings.append(f"Could not fetch PRs for {repo.full_name}: {_brief_error(exc)}")
+        warnings.append(
+            f"Could not fetch PRs for {repo.full_name}: {_brief_error(exc)}"
+        )
 
     # -- Workflows -----------------------------------------------------------
-    workflow_statuses: list[WorkflowStatus] = list(previous.workflows) if previous else []
+    workflow_statuses: list[WorkflowStatus] = (
+        list(previous.workflows) if previous else []
+    )
     # Build lookup of previous statuses so we can fall back on 304 cache hits
     prev_wf_map: dict[tuple[str, str], WorkflowStatus] = {}
     if previous:
@@ -319,7 +348,9 @@ async def fetch_repository_stats(
                     ):
                         continue
                     try:
-                        runs = await client.get_workflow_runs(repo.full_name, wf_id, branch)
+                        runs = await client.get_workflow_runs(
+                            repo.full_name, wf_id, branch
+                        )
                         if runs is not None and runs:
                             run = runs[0]
                             conclusion = run.get("conclusion") or "pending"
@@ -345,7 +376,9 @@ async def fetch_repository_stats(
                             f"Could not fetch runs for workflow '{wf_name}' on {branch}: {_brief_error(exc)}"
                         )
     except Exception as exc:
-        warnings.append(f"Could not fetch workflows for {repo.full_name}: {_brief_error(exc)}")
+        warnings.append(
+            f"Could not fetch workflows for {repo.full_name}: {_brief_error(exc)}"
+        )
 
     # -- Branches & last commit ----------------------------------------------
     last_commit_at: datetime | None = previous.last_commit_at if previous else None
@@ -369,7 +402,9 @@ async def fetch_repository_stats(
         except NotFoundError:
             pass  # Non-existing branches from config are silently ignored
         except Exception as exc:
-            warnings.append(f"Could not fetch branch '{branch}' info: {_brief_error(exc)}")
+            warnings.append(
+                f"Could not fetch branch '{branch}' info: {_brief_error(exc)}"
+            )
 
     if branch_commit_dates:
         last_commit_at = max(branch_commit_dates)
@@ -380,7 +415,9 @@ async def fetch_repository_stats(
         if all_branches is not None:
             total_branches = len(all_branches)
     except Exception as exc:
-        warnings.append(f"Could not fetch branches for {repo.full_name}: {_brief_error(exc)}")
+        warnings.append(
+            f"Could not fetch branches for {repo.full_name}: {_brief_error(exc)}"
+        )
 
     return RepositoryStats(
         full_name=repo.full_name,
@@ -461,7 +498,9 @@ async def refresh_all_stats(
     # show a meaningful denominator before any async work completes.
     # Static repos are known exactly; team repos need API resolution, so we
     # fall back to the cached count if available.
-    preliminary_total = sum(1 for src in config.repositories if isinstance(src, StaticRepoSource))
+    preliminary_total = sum(
+        1 for src in config.repositories if isinstance(src, StaticRepoSource)
+    )
 
     # Mark refresh as running immediately (before async work begins) so that
     # polling endpoints see it as in-progress right away.
@@ -672,7 +711,9 @@ async def load_stats_from_db(
             # Load stale issues from cache
             issue_rows = (
                 await session.exec(
-                    select(CachedIssue).where(CachedIssue.repo_full_name == cr.full_name)
+                    select(CachedIssue).where(
+                        CachedIssue.repo_full_name == cr.full_name
+                    )
                 )
             ).all()
             stale_issue_items = [
@@ -809,7 +850,9 @@ async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> i
                 delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn)  # type: ignore[arg-type]
             )
             await session.exec(  # type: ignore[call-overload]
-                delete(CachedWorkflowStatus).where(CachedWorkflowStatus.repo_full_name == fn)  # type: ignore[arg-type]
+                delete(CachedWorkflowStatus).where(
+                    CachedWorkflowStatus.repo_full_name == fn
+                )  # type: ignore[arg-type]
             )
             await session.exec(  # type: ignore[call-overload]
                 delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn)  # type: ignore[arg-type]

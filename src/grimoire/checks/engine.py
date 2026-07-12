@@ -69,7 +69,9 @@ async def run_check(
         workdir = await workspace.reset_workdir(repo.full_name, branch)
     except Exception as exc:
         output = f"Workspace setup failed: {exc}"
-        return await _persist_result(check, repo, branch, passed, output, engine, run_id)
+        return await _persist_result(
+            check, repo, branch, passed, output, engine, run_id
+        )
 
     env = target_env(workspace, repo, branch)
 

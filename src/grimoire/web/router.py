@@ -210,7 +210,9 @@ SORT_KEYS: dict[str, Any] = {
     "branches": lambda r: r.total_branches,
     "workflow_failures": lambda r: r.workflow_failures,
     "check_failures": lambda r: r.check_failures,
-    "last_activity": lambda r: r.last_commit_at or datetime.min.replace(tzinfo=timezone.utc),
+    "last_activity": lambda r: (
+        r.last_commit_at or datetime.min.replace(tzinfo=timezone.utc)
+    ),
 }
 
 SORT_LABELS: dict[str, str] = {
@@ -227,7 +229,9 @@ SORT_LABELS: dict[str, str] = {
 }
 
 
-def _sort_repos(repos: list[RepoViewModel], sort: str, direction: str) -> list[RepoViewModel]:
+def _sort_repos(
+    repos: list[RepoViewModel], sort: str, direction: str
+) -> list[RepoViewModel]:
     key_fn = SORT_KEYS.get(sort, SORT_KEYS["name"])
     return sorted(repos, key=key_fn, reverse=(direction == "desc"))
 
@@ -472,7 +476,9 @@ async def _build_repo_viewmodels() -> list[RepoViewModel]:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> HTMLResponse:
+async def dashboard(
+    request: Request, sort: str = "name", dir: str = "asc"
+) -> HTMLResponse:
     """Dashboard page — lists all tracked repositories."""
     from grimoire.github.router import _last_refresh
     from grimoire.github.service import get_refresh_progress, is_refresh_running
@@ -488,7 +494,9 @@ async def dashboard(request: Request, sort: str = "name", dir: str = "asc") -> H
             request,
             "loading.html",
             context={
-                "progress_completed": refresh_progress.completed if refresh_progress else 0,
+                "progress_completed": refresh_progress.completed
+                if refresh_progress
+                else 0,
                 "progress_total": refresh_progress.total if refresh_progress else 0,
             },
         )
@@ -610,7 +618,9 @@ async def actions_page(request: Request) -> HTMLResponse:
                 slug = row[1]
                 started_at = row[2]
                 passed = bool(row[3])
-                stats = action_stats.setdefault(slug, {"pass": 0, "fail": 0, "last_run": None})
+                stats = action_stats.setdefault(
+                    slug, {"pass": 0, "fail": 0, "last_run": None}
+                )
                 if passed:
                     stats["pass"] += 1
                 else:
@@ -672,7 +682,9 @@ async def checks_page(request: Request) -> HTMLResponse:
             slug = row[2]
             passed = bool(row[5])
             ts = row[6]
-            stats = check_stats.setdefault(slug, {"pass": 0, "fail": 0, "last_run": None})
+            stats = check_stats.setdefault(
+                slug, {"pass": 0, "fail": 0, "last_run": None}
+            )
             if passed:
                 stats["pass"] += 1
             else:
@@ -1023,7 +1035,9 @@ async def check_results_partial(
                 "ORDER BY cr.timestamp DESC"
             )
             async with AsyncSession(_checks_engine) as session:
-                orphan_rows = (await session.execute(orphan_query, params={"slug": slug})).all()
+                orphan_rows = (
+                    await session.execute(orphan_query, params={"slug": slug})
+                ).all()
             if orphan_rows:
                 results_list = [
                     {
@@ -1041,7 +1055,9 @@ async def check_results_partial(
                     {
                         "run_id": None,
                         "triggered_by": "unknown",
-                        "started_at": results_list[0]["timestamp"] if results_list else None,
+                        "started_at": results_list[0]["timestamp"]
+                        if results_list
+                        else None,
                         "pass_count": pass_count,
                         "fail_count": fail_count,
                         "results": results_list,
@@ -1068,7 +1084,9 @@ async def check_results_partial(
 
 
 @router.get("/partials/refresh-status", response_class=HTMLResponse)
-async def refresh_status_partial(request: Request, was_running: bool = False) -> HTMLResponse:
+async def refresh_status_partial(
+    request: Request, was_running: bool = False
+) -> HTMLResponse:
     """Return the refresh-button partial (idle or running state).
 
     When *was_running* is True but the refresh has finished, an
@@ -1121,7 +1139,9 @@ async def loading_status_partial(request: Request) -> HTMLResponse:
 
 
 @router.post("/partials/refresh-trigger", response_class=HTMLResponse)
-async def refresh_trigger(request: Request, background_tasks: BackgroundTasks) -> HTMLResponse:
+async def refresh_trigger(
+    request: Request, background_tasks: BackgroundTasks
+) -> HTMLResponse:
     """Trigger a data refresh and return the 'Refreshing...' button partial.
 
     The refresh is started as a background task — the response is immediate.
@@ -1223,7 +1243,12 @@ async def check_run_trigger(
     return templates.TemplateResponse(
         request,
         "partials/check_run_button.html",
-        context={"slug": slug, "running": True, "progress_completed": 0, "progress_total": 0},
+        context={
+            "slug": slug,
+            "running": True,
+            "progress_completed": 0,
+            "progress_total": 0,
+        },
     )
 
 
@@ -1236,7 +1261,11 @@ async def action_run_trigger(
     The action is started as a background task — the response is immediate.
     The returned partial includes polling to detect completion.
     """
-    from grimoire.actions.engine import ActionConflictError, is_action_running, run_action
+    from grimoire.actions.engine import (
+        ActionConflictError,
+        is_action_running,
+        run_action,
+    )
     from grimoire.actions.router import _actions
     from grimoire.actions.router import _engine as actions_engine
     from grimoire.actions.router import _repos as actions_repos
@@ -1260,7 +1289,11 @@ async def action_run_trigger(
     async def _run_in_background() -> None:
         try:
             await run_action(
-                action, actions_repos, actions_workspace, actions_engine, triggered_by="manual"
+                action,
+                actions_repos,
+                actions_workspace,
+                actions_engine,
+                triggered_by="manual",
             )
         except ActionConflictError:
             pass
@@ -1270,7 +1303,12 @@ async def action_run_trigger(
     return templates.TemplateResponse(
         request,
         "partials/action_run_button.html",
-        context={"slug": slug, "running": True, "progress_completed": 0, "progress_total": 0},
+        context={
+            "slug": slug,
+            "running": True,
+            "progress_completed": 0,
+            "progress_total": 0,
+        },
     )
 
 
@@ -1438,7 +1476,9 @@ async def backlog_items_partial(
         from grimoire.config import BacklogCategoryWeights
 
         base = _backlog_config.category_weights
-        overrides = {k: v if v >= 0 else getattr(base, k) for k, v in weight_params.items()}
+        overrides = {
+            k: v if v >= 0 else getattr(base, k) for k, v in weight_params.items()
+        }
         config_override = BacklogConfig(
             category_weights=BacklogCategoryWeights(**overrides),
             workflow_weights=_backlog_config.workflow_weights,

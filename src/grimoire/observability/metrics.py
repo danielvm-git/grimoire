@@ -8,7 +8,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 from grimoire.models import RepositoryStats
 
@@ -98,8 +104,12 @@ DATA_REFRESH_DURATION = Histogram(
 API_REQUESTS = Counter(
     "grimoire_github_api_requests_total", "Total API calls", ["endpoint", "status"]
 )
-RATE_LIMIT_REMAINING = Gauge("grimoire_github_api_rate_limit_remaining", "Rate limit remaining")
-RATE_LIMIT_RESET = Gauge("grimoire_github_api_rate_limit_reset", "Rate limit reset timestamp")
+RATE_LIMIT_REMAINING = Gauge(
+    "grimoire_github_api_rate_limit_remaining", "Rate limit remaining"
+)
+RATE_LIMIT_RESET = Gauge(
+    "grimoire_github_api_rate_limit_reset", "Rate limit reset timestamp"
+)
 
 # ---------------------------------------------------------------------------
 # /metrics endpoint
@@ -132,11 +142,15 @@ def update_repo_metrics(stats_list: list[RepositoryStats]) -> None:
         TOTAL_BRANCHES.labels(repo=repo).set(stats.total_branches)
         for wf in stats.workflows:
             val = 1 if wf.status == "success" else 0
-            WORKFLOW_STATUS.labels(repo=repo, workflow=wf.name, branch=wf.branch).set(val)
+            WORKFLOW_STATUS.labels(repo=repo, workflow=wf.name, branch=wf.branch).set(
+                val
+            )
         workflow_failures = sum(1 for wf in stats.workflows if wf.status == "failure")
         WORKFLOW_FAILURES.labels(repo=repo).set(workflow_failures)
         if stats.last_commit_at is not None:
-            LAST_COMMIT_TIMESTAMP.labels(repo=repo).set(stats.last_commit_at.timestamp())
+            LAST_COMMIT_TIMESTAMP.labels(repo=repo).set(
+                stats.last_commit_at.timestamp()
+            )
         if stats.fetched_at is not None:
             DATA_FETCHED_TIMESTAMP.labels(repo=repo).set(stats.fetched_at.timestamp())
 
@@ -161,7 +175,9 @@ def update_check_metrics(
     check_slug: str, repo: str, branch: str, passed: bool, duration_seconds: float
 ) -> None:
     """Update check metrics after execution."""
-    CHECK_STATUS.labels(repo=repo, check=check_slug, branch=branch).set(1 if passed else 0)
+    CHECK_STATUS.labels(repo=repo, check=check_slug, branch=branch).set(
+        1 if passed else 0
+    )
     CHECK_DURATION.labels(check=check_slug).observe(duration_seconds)
 
 

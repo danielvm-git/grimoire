@@ -77,7 +77,9 @@ def test_setup_logging_creates_file_handler(tmp_path: Path) -> None:
     assert log_file.parent.exists()
 
     # Check that at least one handler uses JsonFormatter
-    has_json_handler = any(isinstance(h.formatter, JsonFormatter) for h in test_logger.handlers)
+    has_json_handler = any(
+        isinstance(h.formatter, JsonFormatter) for h in test_logger.handlers
+    )
     assert has_json_handler
 
     # Clean up handlers

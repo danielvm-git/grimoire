@@ -105,7 +105,9 @@ class TeamRepoSource(BaseModel):
     workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
 
 
-RepoSource = Annotated[Union[StaticRepoSource, TeamRepoSource], Field(discriminator=None)]
+RepoSource = Annotated[
+    Union[StaticRepoSource, TeamRepoSource], Field(discriminator=None)
+]
 
 
 class StalenessConfig(BaseModel):
@@ -152,7 +154,9 @@ class RepositoryWeightRule(BaseModel):
 class BacklogConfig(BaseModel):
     """Configuration for the Backlog (prioritised problem list) page."""
 
-    category_weights: BacklogCategoryWeights = Field(default_factory=BacklogCategoryWeights)
+    category_weights: BacklogCategoryWeights = Field(
+        default_factory=BacklogCategoryWeights
+    )
     workflow_weights: dict[str, float] = Field(default_factory=dict)
     repository_weights: list[RepositoryWeightRule] = Field(default_factory=list)
 
@@ -203,7 +207,9 @@ def _parse_repo_source(raw: dict) -> RepoSource:  # type: ignore[type-arg]
         return StaticRepoSource.model_validate(raw)
     if "team" in raw:
         return TeamRepoSource.model_validate(raw)
-    raise ValueError(f"Repository source must have either 'repo' or 'team' key, got: {raw}")
+    raise ValueError(
+        f"Repository source must have either 'repo' or 'team' key, got: {raw}"
+    )
 
 
 def _get_xdg_config_path() -> Path:
@@ -241,7 +247,9 @@ def load_config(path: Path | None = None) -> GrimoireConfig:
         raw = yaml.safe_load(f)
 
     if not isinstance(raw, dict):
-        raise ValueError(f"Expected a YAML mapping at the top level, got {type(raw).__name__}")
+        raise ValueError(
+            f"Expected a YAML mapping at the top level, got {type(raw).__name__}"
+        )
 
     resolved = resolve_env_vars(raw)
     assert isinstance(resolved, dict)

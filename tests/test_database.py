@@ -79,17 +79,26 @@ async def test_cleanup_stale_runs(engine: AsyncEngine) -> None:
     async with session:
         session.add(
             CheckRunRecord(
-                check_slug="c1", check_name="C1", triggered_by="manual", status="running"
+                check_slug="c1",
+                check_name="C1",
+                triggered_by="manual",
+                status="running",
             )
         )
         session.add(
             CheckRunRecord(
-                check_slug="c2", check_name="C2", triggered_by="cron", status="completed"
+                check_slug="c2",
+                check_name="C2",
+                triggered_by="cron",
+                status="completed",
             )
         )
         session.add(
             ActionRunRecord(
-                action_slug="a1", action_name="A1", triggered_by="manual", status="running"
+                action_slug="a1",
+                action_name="A1",
+                triggered_by="manual",
+                status="running",
             )
         )
         await session.commit()
@@ -101,20 +110,26 @@ async def test_cleanup_stale_runs(engine: AsyncEngine) -> None:
     session = await get_session(engine)
     async with session:
         c1 = (
-            await session.exec(select(CheckRunRecord).where(CheckRunRecord.check_slug == "c1"))
+            await session.exec(
+                select(CheckRunRecord).where(CheckRunRecord.check_slug == "c1")
+            )
         ).first()
         assert c1 is not None
         assert c1.status == "interrupted"
         assert c1.finished_at is not None
 
         c2 = (
-            await session.exec(select(CheckRunRecord).where(CheckRunRecord.check_slug == "c2"))
+            await session.exec(
+                select(CheckRunRecord).where(CheckRunRecord.check_slug == "c2")
+            )
         ).first()
         assert c2 is not None
         assert c2.status == "completed"
 
         a1 = (
-            await session.exec(select(ActionRunRecord).where(ActionRunRecord.action_slug == "a1"))
+            await session.exec(
+                select(ActionRunRecord).where(ActionRunRecord.action_slug == "a1")
+            )
         ).first()
         assert a1 is not None
         assert a1.status == "interrupted"

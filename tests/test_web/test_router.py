@@ -19,7 +19,9 @@ class TestDashboard:
         assert "acme/api" in resp.text
         assert "acme/frontend" in resp.text
 
-    async def test_dashboard_contains_grimoire_title(self, web_client: AsyncClient) -> None:
+    async def test_dashboard_contains_grimoire_title(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/")
         assert "Grimoire" in resp.text
 
@@ -46,7 +48,9 @@ class TestRepositoryDetail:
         assert "CI" in resp.text
         assert "success" in resp.text
 
-    async def test_repo_detail_shows_stale_issues(self, web_client: AsyncClient) -> None:
+    async def test_repo_detail_shows_stale_issues(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/repo/acme/api")
         assert "Stale Issues" in resp.text
         assert "Fix legacy endpoint" in resp.text
@@ -59,7 +63,9 @@ class TestRepositoryDetail:
         assert "Refactor auth module" in resp.text
         assert "charlie" in resp.text
 
-    async def test_repo_detail_shows_last_activity(self, web_client: AsyncClient) -> None:
+    async def test_repo_detail_shows_last_activity(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/repo/acme/api")
         assert "Last Activity" in resp.text
         assert "2026-04-10" in resp.text
@@ -70,7 +76,9 @@ class TestRepositoryDetail:
         # 8 total branches shown in compact stats bar
         assert "8 branches" in resp.text
 
-    async def test_repo_detail_stale_threshold_highlighting(self, web_client: AsyncClient) -> None:
+    async def test_repo_detail_stale_threshold_highlighting(
+        self, web_client: AsyncClient
+    ) -> None:
         """acme/api has 2 stale out of 5 issues (40%) which exceeds 20% threshold → warning."""
         resp = await web_client.get("/repo/acme/api")
         assert "text-warning" in resp.text
@@ -84,7 +92,9 @@ class TestRepositoryDetail:
         # Stale Issues box should show text-success (0 stale)
         assert "Stale Issues" not in resp.text or "text-success" in resp.text
 
-    async def test_repo_without_stale_items_hides_sections(self, web_client: AsyncClient) -> None:
+    async def test_repo_without_stale_items_hides_sections(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/repo/acme/frontend")
         assert resp.status_code == 200
         # The card-level sections should not appear (stat boxes use different text)
@@ -124,16 +134,22 @@ class TestActionsPage:
         resp = await web_client_with_actions.get("/actions")
         assert "pwd" in resp.text
 
-    async def test_actions_shows_run_button(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_actions_shows_run_button(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/actions")
         assert "/partials/action-run-status/test" in resp.text
 
-    async def test_actions_shows_result_counts(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_actions_shows_result_counts(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/actions")
         assert "fa-check" in resp.text
         assert " 2" in resp.text
 
-    async def test_actions_has_results_button(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_actions_has_results_button(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/actions")
         assert "/partials/action-results/test" in resp.text
         assert "Results" in resp.text
@@ -145,7 +161,9 @@ class TestActionsPage:
         assert "/api/actions/test/toggle" in resp.text
         assert "Disable" in resp.text
 
-    async def test_actions_navbar_active(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_actions_navbar_active(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/actions")
         assert "Actions" in resp.text
 
@@ -186,7 +204,9 @@ class TestDashboardPartial:
         assert frontend_pos < api_pos
 
     async def test_sort_last_activity(self, web_client: AsyncClient) -> None:
-        resp = await web_client.get("/partials/dashboard-matrix?sort=last_activity&dir=desc")
+        resp = await web_client.get(
+            "/partials/dashboard-matrix?sort=last_activity&dir=desc"
+        )
         text = resp.text
         # acme/frontend has 2026-04-12, acme/api has 2026-04-10 — frontend should come first
         api_pos = text.index("acme/api")
@@ -245,7 +265,9 @@ class TestDashboardListPartial:
 class TestActionRunPartial:
     """Tests for GET /partials/action-run/{run_id} route."""
 
-    async def test_action_run_partial_returns_html(self, web_client: AsyncClient) -> None:
+    async def test_action_run_partial_returns_html(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/partials/action-run/1")
         assert resp.status_code == 200
         assert "text/html" in resp.headers.get("content-type", "")
@@ -282,27 +304,37 @@ class TestActionRunPartial:
 class TestActionResultsPartial:
     """Tests for GET /partials/action-results/{slug} route."""
 
-    async def test_returns_results_for_slug(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_returns_results_for_slug(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/partials/action-results/test")
         assert resp.status_code == 200
         assert "acme/api" in resp.text
         assert "acme/frontend" in resp.text
 
-    async def test_empty_when_no_results(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_empty_when_no_results(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/partials/action-results/nonexistent")
         assert resp.status_code == 200
         assert "No results for this action" in resp.text
 
-    async def test_shows_status_icons(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_shows_status_icons(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/partials/action-results/test")
         assert "status-icon-pass" in resp.text
 
-    async def test_has_output_buttons(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_has_output_buttons(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/partials/action-results/test")
         assert "/partials/action-output/" in resp.text
         assert "Output" in resp.text
 
-    async def test_shows_run_grouping(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_shows_run_grouping(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/partials/action-results/test")
         assert "<details" in resp.text
         assert "manual" in resp.text
@@ -325,7 +357,9 @@ class TestActionOutputPartial:
 class TestCheckOutputPartial:
     """Tests for GET /partials/check-output/{result_id} route."""
 
-    async def test_check_output_partial_returns_html(self, web_client: AsyncClient) -> None:
+    async def test_check_output_partial_returns_html(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/partials/check-output/1")
         assert resp.status_code == 200
         assert "text/html" in resp.headers.get("content-type", "")
@@ -334,20 +368,32 @@ class TestCheckOutputPartial:
 class TestCheckDisplay:
     """Tests for check display across dashboard views."""
 
-    async def test_matrix_show_check_icons(self, web_client_with_checks: AsyncClient) -> None:
-        resp = await web_client_with_checks.get("/partials/dashboard-matrix?sort=name&dir=asc")
+    async def test_matrix_show_check_icons(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get(
+            "/partials/dashboard-matrix?sort=name&dir=asc"
+        )
         assert resp.status_code == 200
         assert "Checks" in resp.text
         assert "status-icon-pass" in resp.text
         assert "status-icon-fail" in resp.text
 
-    async def test_matrix_show_not_run_checks(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_matrix_show_not_run_checks(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         """Watchdog targets both repos but only has results for some branches."""
-        resp = await web_client_with_checks.get("/partials/dashboard-matrix?sort=name&dir=asc")
+        resp = await web_client_with_checks.get(
+            "/partials/dashboard-matrix?sort=name&dir=asc"
+        )
         assert "status-icon-not-run" in resp.text
 
-    async def test_list_show_check_dots(self, web_client_with_checks: AsyncClient) -> None:
-        resp = await web_client_with_checks.get("/partials/dashboard-list?sort=name&dir=asc")
+    async def test_list_show_check_dots(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get(
+            "/partials/dashboard-list?sort=name&dir=asc"
+        )
         assert resp.status_code == 200
         assert "status-icon-pass" in resp.text
         assert "status-icon-fail" in resp.text
@@ -355,13 +401,17 @@ class TestCheckDisplay:
     async def test_matrix_show_check_icons_for_checks(
         self, web_client_with_checks: AsyncClient
     ) -> None:
-        resp = await web_client_with_checks.get("/partials/dashboard-matrix?sort=name&dir=asc")
+        resp = await web_client_with_checks.get(
+            "/partials/dashboard-matrix?sort=name&dir=asc"
+        )
         assert resp.status_code == 200
         assert ">Checks<" in resp.text
         assert "status-icon-pass" in resp.text
         assert "status-icon-fail" in resp.text
 
-    async def test_repo_detail_shows_checks(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_repo_detail_shows_checks(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/repo/acme/api")
         assert resp.status_code == 200
         assert "Checks" in resp.text
@@ -381,7 +431,9 @@ class TestCheckDisplay:
         resp = await web_client_with_checks.get("/repo/acme/frontend")
         assert "1 failing" in resp.text
 
-    async def test_check_output_loads_from_db(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_check_output_loads_from_db(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/partials/check-output/1")
         assert resp.status_code == 200
         assert "OK" in resp.text
@@ -416,7 +468,9 @@ class TestChecksPage:
         assert "Watchdog" in resp.text
         assert "Charm Libraries" in resp.text
 
-    async def test_checks_shows_descriptions(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_checks_shows_descriptions(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/checks")
         assert "Always green sentinel" in resp.text
         assert "Check charm libs" in resp.text
@@ -428,17 +482,23 @@ class TestChecksPage:
         assert "regex: .*" in resp.text
         assert "regex: -operator$" in resp.text
 
-    async def test_checks_shows_toggle_buttons(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_checks_shows_toggle_buttons(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/checks")
         assert "/api/checks/watchdog/toggle" in resp.text
         assert "/api/checks/charm-libs/toggle" in resp.text
 
-    async def test_checks_shows_run_buttons(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_checks_shows_run_buttons(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/checks")
         assert "/partials/check-run-status/watchdog" in resp.text
         assert "/partials/check-run-status/charm-libs" in resp.text
 
-    async def test_checks_shows_result_counts(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_checks_shows_result_counts(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/checks")
         # Watchdog has 1 pass + 1 fail from fixture data — shown as FA icons with counts
         assert "fa-check" in resp.text
@@ -451,16 +511,22 @@ class TestChecksPage:
         # Results are loaded inline per-check via HTMX
         assert "/partials/check-results/watchdog" in resp.text
 
-    async def test_checks_empty_shows_no_results_hint(self, web_client: AsyncClient) -> None:
+    async def test_checks_empty_shows_no_results_hint(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/checks")
         # Empty state — no checks configured message
         assert "No checks configured" in resp.text
 
-    async def test_checks_shows_script_preview(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_checks_shows_script_preview(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/checks")
         assert "exit 0" in resp.text
 
-    async def test_checks_navbar_active(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_checks_navbar_active(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/checks")
         assert "Checks" in resp.text
 
@@ -468,13 +534,17 @@ class TestChecksPage:
 class TestCheckResultsPartial:
     """Tests for GET /partials/check-results/{slug} route."""
 
-    async def test_returns_results_for_slug(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_returns_results_for_slug(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/partials/check-results/watchdog")
         assert resp.status_code == 200
         assert "acme/api" in resp.text
         assert "acme/frontend" in resp.text
 
-    async def test_empty_when_no_results(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_empty_when_no_results(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/partials/check-results/charm-libs")
         assert resp.status_code == 200
         assert "No results for this check" in resp.text
@@ -483,18 +553,24 @@ class TestCheckResultsPartial:
 class TestCheckRunStatusPartial:
     """Tests for GET /partials/check-run-status/{slug} route."""
 
-    async def test_idle_state_shows_run_button(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_idle_state_shows_run_button(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get("/partials/check-run-status/watchdog")
         assert resp.status_code == 200
         assert "/partials/check-run/watchdog" in resp.text
         assert "Running" not in resp.text
 
-    async def test_running_state_shows_spinner(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_running_state_shows_spinner(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         from grimoire.checks.engine import CheckProgress, _running_checks
 
         _running_checks["watchdog"] = CheckProgress(completed=2, total=5)
         try:
-            resp = await web_client_with_checks.get("/partials/check-run-status/watchdog")
+            resp = await web_client_with_checks.get(
+                "/partials/check-run-status/watchdog"
+            )
             assert resp.status_code == 200
             assert "Running" in resp.text
             assert "disabled" in resp.text
@@ -502,7 +578,9 @@ class TestCheckRunStatusPartial:
         finally:
             _running_checks.pop("watchdog", None)
 
-    async def test_transition_sends_hx_trigger(self, web_client_with_checks: AsyncClient) -> None:
+    async def test_transition_sends_hx_trigger(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
         resp = await web_client_with_checks.get(
             "/partials/check-run-status/watchdog?was_running=1"
         )
@@ -527,14 +605,20 @@ class TestCheckRunStatusPartial:
 class TestActionRunStatusPartial:
     """Tests for GET /partials/action-run-status/{slug} route."""
 
-    async def test_idle_state_shows_run_button(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_idle_state_shows_run_button(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/partials/action-run-status/test")
         assert resp.status_code == 200
         assert "/partials/action-run/test" in resp.text
         assert "Running" not in resp.text
 
-    async def test_transition_sends_hx_trigger(self, web_client_with_actions: AsyncClient) -> None:
-        resp = await web_client_with_actions.get("/partials/action-run-status/test?was_running=1")
+    async def test_transition_sends_hx_trigger(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
+        resp = await web_client_with_actions.get(
+            "/partials/action-run-status/test?was_running=1"
+        )
         assert resp.status_code == 200
         assert resp.headers.get("HX-Trigger") == "actionRunCompleted"
 
@@ -553,7 +637,9 @@ class TestRefreshPartials:
         resp = await web_client.get("/partials/refresh-status")
         assert "refresh-btn" in resp.text
 
-    async def test_refresh_status_hx_trigger_on_completion(self, web_client: AsyncClient) -> None:
+    async def test_refresh_status_hx_trigger_on_completion(
+        self, web_client: AsyncClient
+    ) -> None:
         """When was_running=1 and refresh is idle, should send HX-Trigger."""
         resp = await web_client.get("/partials/refresh-status?was_running=1")
         assert resp.status_code == 200
@@ -565,12 +651,16 @@ class TestRefreshPartials:
         resp = await web_client.get("/partials/refresh-status?was_running=0")
         assert "HX-Trigger" not in resp.headers
 
-    async def test_dashboard_contains_refresh_partial(self, web_client: AsyncClient) -> None:
+    async def test_dashboard_contains_refresh_partial(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/")
         assert "refresh-btn" in resp.text
         assert "Refresh" in resp.text
 
-    async def test_dashboard_has_refresh_completed_listener(self, web_client: AsyncClient) -> None:
+    async def test_dashboard_has_refresh_completed_listener(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/")
         assert "refreshCompleted" in resp.text
 
@@ -578,7 +668,9 @@ class TestRefreshPartials:
 class TestActionProgressUI:
     """Tests for action progress display in partials."""
 
-    async def test_action_status_idle(self, web_client_with_actions: AsyncClient) -> None:
+    async def test_action_status_idle(
+        self, web_client_with_actions: AsyncClient
+    ) -> None:
         resp = await web_client_with_actions.get("/partials/action-run-status/test")
         assert resp.status_code == 200
         assert "Running" not in resp.text
@@ -586,7 +678,9 @@ class TestActionProgressUI:
     async def test_action_status_hx_trigger_on_completion(
         self, web_client_with_actions: AsyncClient
     ) -> None:
-        resp = await web_client_with_actions.get("/partials/action-run-status/test?was_running=1")
+        resp = await web_client_with_actions.get(
+            "/partials/action-run-status/test?was_running=1"
+        )
         assert resp.status_code == 200
         assert resp.headers.get("HX-Trigger") == "actionRunCompleted"
 
@@ -646,7 +740,9 @@ class TestLoadingState:
             assert resp.status_code == 200
             assert resp.headers.get("HX-Redirect") == "/"
 
-    async def test_loading_status_partial_returns_progress(self, web_client: AsyncClient) -> None:
+    async def test_loading_status_partial_returns_progress(
+        self, web_client: AsyncClient
+    ) -> None:
         """When refresh is running, loading-status returns progress info."""
         from unittest.mock import patch
 

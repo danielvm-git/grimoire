@@ -210,7 +210,12 @@ async def test_fetch_stats_stale_detection(client: GitHubClient) -> None:
         return_value=httpx.Response(
             200,
             json=[
-                {"number": 10, "title": "Old PR", "updated_at": old_date, "created_at": old_date},
+                {
+                    "number": 10,
+                    "title": "Old PR",
+                    "updated_at": old_date,
+                    "created_at": old_date,
+                },
                 {
                     "number": 11,
                     "title": "Fresh PR",
@@ -272,7 +277,9 @@ async def test_fetch_stats_stale_detection(client: GitHubClient) -> None:
         )
     )
 
-    repo = TrackedRepository(full_name="owner/repo1", default_branch="main", branches=["main"])
+    repo = TrackedRepository(
+        full_name="owner/repo1", default_branch="main", branches=["main"]
+    )
     staleness = StalenessConfig(issues_days=365, pull_requests_days=30)
     stats = await fetch_repository_stats(repo, client, staleness)
 
@@ -351,9 +358,15 @@ async def test_save_and_load_stats(engine: AsyncEngine) -> None:
 
 async def test_save_replaces_old_data(engine: AsyncEngine) -> None:
     """Saving twice should replace, not duplicate, cached records."""
-    repos = [TrackedRepository(full_name="owner/repo1", default_branch="main", branches=["main"])]
+    repos = [
+        TrackedRepository(
+            full_name="owner/repo1", default_branch="main", branches=["main"]
+        )
+    ]
     now = datetime.now(UTC)
-    stats_v1 = [RepositoryStats(full_name="owner/repo1", default_branch="main", fetched_at=now)]
+    stats_v1 = [
+        RepositoryStats(full_name="owner/repo1", default_branch="main", fetched_at=now)
+    ]
     stats_v2 = [
         RepositoryStats(
             full_name="owner/repo1",
@@ -382,7 +395,11 @@ async def test_refresh_falls_back_to_cache_on_304(
 ) -> None:
     """When repo resolution returns nothing (all 304s), cached repos are used."""
     # Pre-populate the DB with cached data
-    repos = [TrackedRepository(full_name="myorg/svc", default_branch="main", branches=["main"])]
+    repos = [
+        TrackedRepository(
+            full_name="myorg/svc", default_branch="main", branches=["main"]
+        )
+    ]
     now = datetime.now(UTC)
     stats_list = [
         RepositoryStats(
@@ -427,7 +444,9 @@ async def test_refresh_falls_back_to_cache_on_304(
 
 
 @respx.mock
-async def test_workflow_runs_304_preserves_previous_status(client: GitHubClient) -> None:
+async def test_workflow_runs_304_preserves_previous_status(
+    client: GitHubClient,
+) -> None:
     """When get_workflow_runs returns 304, preserve previous workflow status."""
     # Mock endpoints for a repo with one workflow
     respx.get("https://api.github.com/repos/owner/repo1/issues").mock(
@@ -441,15 +460,17 @@ async def test_workflow_runs_304_preserves_previous_status(client: GitHubClient)
             200,
             json={
                 "total_count": 1,
-                "workflows": [{"id": 42, "name": "CI", "html_url": "https://github.com/wf"}],
+                "workflows": [
+                    {"id": 42, "name": "CI", "html_url": "https://github.com/wf"}
+                ],
             },
             headers=_rl_headers(),
         )
     )
     # Workflow runs returns 304 (cache hit)
-    respx.get("https://api.github.com/repos/owner/repo1/actions/workflows/42/runs").mock(
-        return_value=httpx.Response(304, headers=_rl_headers())
-    )
+    respx.get(
+        "https://api.github.com/repos/owner/repo1/actions/workflows/42/runs"
+    ).mock(return_value=httpx.Response(304, headers=_rl_headers()))
     respx.get("https://api.github.com/repos/owner/repo1/branches/main").mock(
         return_value=httpx.Response(
             200,
@@ -467,7 +488,9 @@ async def test_workflow_runs_304_preserves_previous_status(client: GitHubClient)
         return_value=httpx.Response(200, json=[], headers=_rl_headers())
     )
 
-    repo = TrackedRepository(full_name="owner/repo1", default_branch="main", branches=["main"])
+    repo = TrackedRepository(
+        full_name="owner/repo1", default_branch="main", branches=["main"]
+    )
     previous = RepositoryStats(
         full_name="owner/repo1",
         default_branch="main",
@@ -504,8 +527,12 @@ async def test_prune_removes_repos_not_in_config(engine: AsyncEngine) -> None:
     from grimoire.github.service import prune_removed_repos
 
     # Seed DB with two repos
-    repo_a = TrackedRepository(full_name="org/keep", default_branch="main", branches=["main"])
-    repo_b = TrackedRepository(full_name="org/remove", default_branch="main", branches=["main"])
+    repo_a = TrackedRepository(
+        full_name="org/keep", default_branch="main", branches=["main"]
+    )
+    repo_b = TrackedRepository(
+        full_name="org/remove", default_branch="main", branches=["main"]
+    )
     stats = [
         RepositoryStats(full_name="org/keep", default_branch="main"),
         RepositoryStats(full_name="org/remove", default_branch="main"),
@@ -527,7 +554,9 @@ async def test_prune_skipped_with_team_sources(engine: AsyncEngine) -> None:
     from grimoire.github.service import prune_removed_repos
 
     # Seed DB with a repo
-    repo = TrackedRepository(full_name="org/repo", default_branch="main", branches=["main"])
+    repo = TrackedRepository(
+        full_name="org/repo", default_branch="main", branches=["main"]
+    )
     await save_stats_to_db(
         engine, [RepositoryStats(full_name="org/repo", default_branch="main")], [repo]
     )
@@ -551,7 +580,9 @@ async def test_prune_stale_data_removes_repos(engine: AsyncEngine) -> None:
     """Repos not in the active set are fully removed from the DB."""
     # Seed two repos
     for name in ("org/keep", "org/stale"):
-        repo = TrackedRepository(full_name=name, default_branch="main", branches=["main"])
+        repo = TrackedRepository(
+            full_name=name, default_branch="main", branches=["main"]
+        )
         await save_stats_to_db(
             engine,
             [RepositoryStats(full_name=name, default_branch="main")],
@@ -559,7 +590,11 @@ async def test_prune_stale_data_removes_repos(engine: AsyncEngine) -> None:
         )
 
     # Only org/keep is active
-    active = [TrackedRepository(full_name="org/keep", default_branch="main", branches=["main"])]
+    active = [
+        TrackedRepository(
+            full_name="org/keep", default_branch="main", branches=["main"]
+        )
+    ]
     pruned = await prune_stale_data(engine, active)
     assert pruned == 1
 
@@ -570,7 +605,9 @@ async def test_prune_stale_data_removes_repos(engine: AsyncEngine) -> None:
 async def test_prune_stale_data_cleans_related_rows(engine: AsyncEngine) -> None:
     """Issues, PRs, workflows, and check results for stale repos are cleaned."""
     repo_name = "org/stale"
-    repo = TrackedRepository(full_name=repo_name, default_branch="main", branches=["main"])
+    repo = TrackedRepository(
+        full_name=repo_name, default_branch="main", branches=["main"]
+    )
     await save_stats_to_db(
         engine,
         [RepositoryStats(full_name=repo_name, default_branch="main")],
@@ -681,11 +718,17 @@ async def test_prune_workspace_dirs(engine: AsyncEngine, tmp_path) -> None:
     (workspace / "org" / "stale").mkdir(parents=True)
     (workspace / "other" / "gone").mkdir(parents=True)
 
-    active = [TrackedRepository(full_name="org/keep", default_branch="main", branches=["main"])]
+    active = [
+        TrackedRepository(
+            full_name="org/keep", default_branch="main", branches=["main"]
+        )
+    ]
 
     # Seed the stale repos in DB so prune counts them
     for name in ("org/stale", "other/gone"):
-        repo = TrackedRepository(full_name=name, default_branch="main", branches=["main"])
+        repo = TrackedRepository(
+            full_name=name, default_branch="main", branches=["main"]
+        )
         await save_stats_to_db(
             engine,
             [RepositoryStats(full_name=name, default_branch="main")],
@@ -715,7 +758,9 @@ def test_refresh_progress_initial_state() -> None:
 
 
 @respx.mock
-async def test_refresh_tracks_progress(client: GitHubClient, engine: AsyncEngine) -> None:
+async def test_refresh_tracks_progress(
+    client: GitHubClient, engine: AsyncEngine
+) -> None:
     """Progress should be set during refresh and cleared after."""
     from grimoire.github.service import (
         get_refresh_progress,
@@ -723,7 +768,11 @@ async def test_refresh_tracks_progress(client: GitHubClient, engine: AsyncEngine
     )
 
     # Pre-populate cached data
-    repos = [TrackedRepository(full_name="myorg/svc", default_branch="main", branches=["main"])]
+    repos = [
+        TrackedRepository(
+            full_name="myorg/svc", default_branch="main", branches=["main"]
+        )
+    ]
     now = datetime.now(UTC)
     stats_list = [
         RepositoryStats(
@@ -747,7 +796,8 @@ async def test_refresh_tracks_progress(client: GitHubClient, engine: AsyncEngine
     ]:
         respx.get(f"https://api.github.com{pattern}").mock(
             return_value=httpx.Response(
-                304, headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"}
+                304,
+                headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
             )
         )
 

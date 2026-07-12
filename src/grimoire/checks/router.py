@@ -187,7 +187,9 @@ async def list_check_runs(slug: str) -> list[CheckRunSummary]:
 
         summaries: list[CheckRunSummary] = []
         for run in runs:
-            repo_stmt = select(CheckResultRecord).where(CheckResultRecord.run_id == run.id)
+            repo_stmt = select(CheckResultRecord).where(
+                CheckResultRecord.run_id == run.id
+            )
             repo_results = (await session.exec(repo_stmt)).all()
             total = len(repo_results)
             passed = sum(1 for r in repo_results if r.passed)
@@ -223,7 +225,9 @@ async def get_check_run(slug: str, run_id: int) -> CheckRunDetail:
         if run is None:
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
 
-        result_stmt = select(CheckResultRecord).where(CheckResultRecord.run_id == run_id)
+        result_stmt = select(CheckResultRecord).where(
+            CheckResultRecord.run_id == run_id
+        )
         results = (await session.exec(result_stmt)).all()
 
     return CheckRunDetail(

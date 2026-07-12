@@ -90,7 +90,9 @@ class GitHubClient:
 
     @property
     def is_rate_limited(self) -> bool:
-        return self._rate_limit_remaining is not None and self._rate_limit_remaining == 0
+        return (
+            self._rate_limit_remaining is not None and self._rate_limit_remaining == 0
+        )
 
     @property
     def is_degraded(self) -> bool:
@@ -129,7 +131,9 @@ class GitHubClient:
             return None
         return [i for i in items if "pull_request" not in i]
 
-    async def get_open_pull_requests(self, full_name: str) -> list[dict[str, Any]] | None:
+    async def get_open_pull_requests(
+        self, full_name: str
+    ) -> list[dict[str, Any]] | None:
         owner, repo = full_name.split("/", 1)
         return await self._paginated_get(
             f"/repos/{owner}/{repo}/pulls",
@@ -278,7 +282,9 @@ class GitHubClient:
 
                 if response.status_code == 403:
                     if self.is_rate_limited:
-                        raise RateLimitError("GitHub API rate limit exceeded", status_code=403)
+                        raise RateLimitError(
+                            "GitHub API rate limit exceeded", status_code=403
+                        )
                     raise GitHubAPIError(f"Forbidden: {response.text}", status_code=403)
 
                 if response.status_code in _TRANSIENT_STATUS_CODES:
@@ -297,7 +303,11 @@ class GitHubClient:
 
                 return response.json()
 
-            except (httpx.TimeoutException, httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+            except (
+                httpx.TimeoutException,
+                httpx.ConnectError,
+                httpx.RemoteProtocolError,
+            ) as exc:
                 last_exc = exc
                 if attempt < _MAX_RETRIES - 1:
                     await asyncio.sleep(self._backoff_factors[attempt])
@@ -307,7 +317,10 @@ class GitHubClient:
                 ) from exc
 
             except GitHubAPIError as exc:
-                if exc.status_code in _TRANSIENT_STATUS_CODES and attempt < _MAX_RETRIES - 1:
+                if (
+                    exc.status_code in _TRANSIENT_STATUS_CODES
+                    and attempt < _MAX_RETRIES - 1
+                ):
                     last_exc = exc
                     await asyncio.sleep(self._backoff_factors[attempt])
                     continue
@@ -354,8 +367,13 @@ class GitHubClient:
             self._rate_limit_limit = int(limit)
         if reset is not None:
             self._rate_limit_reset = float(reset)
-        if self._rate_limit_remaining is not None and self._rate_limit_reset is not None:
-            update_rate_limit_metrics(self._rate_limit_remaining, int(self._rate_limit_reset))
+        if (
+            self._rate_limit_remaining is not None
+            and self._rate_limit_reset is not None
+        ):
+            update_rate_limit_metrics(
+                self._rate_limit_remaining, int(self._rate_limit_reset)
+            )
 
     # -- API request metrics -------------------------------------------------
 

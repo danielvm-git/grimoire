@@ -224,7 +224,9 @@ class WorkspaceManager:
                 "config", "user.signingkey", str(git_cfg.signing.key_path), cwd=bare_dir
             )
 
-    async def _ensure_worktree(self, full_name: str, branch: str, bare_dir: Path) -> None:
+    async def _ensure_worktree(
+        self, full_name: str, branch: str, bare_dir: Path
+    ) -> None:
         workdir = self.get_workdir(full_name, branch)
         if workdir.exists():
             logger.debug("worktree already exists: %s", workdir)
@@ -233,4 +235,6 @@ class WorkspaceManager:
         try:
             await self._run_git("worktree", "add", str(workdir), branch, cwd=bare_dir)
         except WorkspaceError as exc:
-            logger.warning("failed to add worktree for %s/%s: %s", full_name, branch, exc)
+            logger.warning(
+                "failed to add worktree for %s/%s: %s", full_name, branch, exc
+            )

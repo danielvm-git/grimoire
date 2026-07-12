@@ -32,7 +32,9 @@ class TargetSpec(BaseModel):
 
     @model_validator(mode="after")
     def exactly_one_target(self) -> Self:
-        set_count = sum(1 for v in [self.list, self.regex, self.script] if v is not None)
+        set_count = sum(
+            1 for v in [self.list, self.regex, self.script] if v is not None
+        )
         if set_count != 1:
             raise ValueError("Exactly one of 'list', 'regex', or 'script' must be set")
         return self
@@ -93,7 +95,9 @@ async def resolve_targets(
 
     if targets.regex is not None:
         pattern = re.compile(targets.regex)
-        return [(r, _observed_branches(r)) for r in repos if pattern.search(r.full_name)]
+        return [
+            (r, _observed_branches(r)) for r in repos if pattern.search(r.full_name)
+        ]
 
     # script targeting: evaluated per branch
     assert targets.script is not None

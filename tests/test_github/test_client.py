@@ -72,7 +72,9 @@ async def test_get_open_issues_filters_prs(client: GitHubClient) -> None:
 
 @respx.mock
 async def test_pagination(client: GitHubClient) -> None:
-    page2_url = "https://api.github.com/repos/owner/repo/issues?state=open&per_page=100&page=2"
+    page2_url = (
+        "https://api.github.com/repos/owner/repo/issues?state=open&per_page=100&page=2"
+    )
     route = respx.get("https://api.github.com/repos/owner/repo/issues")
     route.side_effect = [
         httpx.Response(
@@ -275,7 +277,9 @@ async def test_get_workflow_runs(client: GitHubClient) -> None:
             200,
             json={
                 "total_count": 1,
-                "workflow_runs": [{"id": 100, "conclusion": "success", "html_url": "https://..."}],
+                "workflow_runs": [
+                    {"id": 100, "conclusion": "success", "html_url": "https://..."}
+                ],
             },
             headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
         )
@@ -289,7 +293,9 @@ async def test_get_workflow_runs(client: GitHubClient) -> None:
 @respx.mock
 async def test_get_workflow_runs_no_etag_caching(client: GitHubClient) -> None:
     """Workflow runs must not use ETag caching so status transitions are always visible."""
-    route = respx.get("https://api.github.com/repos/owner/repo/actions/workflows/1/runs")
+    route = respx.get(
+        "https://api.github.com/repos/owner/repo/actions/workflows/1/runs"
+    )
 
     # First call returns in_progress run with an ETag header
     route.side_effect = [
@@ -297,7 +303,9 @@ async def test_get_workflow_runs_no_etag_caching(client: GitHubClient) -> None:
             200,
             json={
                 "total_count": 1,
-                "workflow_runs": [{"id": 200, "conclusion": None, "html_url": "https://..."}],
+                "workflow_runs": [
+                    {"id": 200, "conclusion": None, "html_url": "https://..."}
+                ],
             },
             headers={
                 "X-RateLimit-Remaining": "4999",
@@ -310,7 +318,9 @@ async def test_get_workflow_runs_no_etag_caching(client: GitHubClient) -> None:
             200,
             json={
                 "total_count": 1,
-                "workflow_runs": [{"id": 200, "conclusion": "success", "html_url": "https://..."}],
+                "workflow_runs": [
+                    {"id": 200, "conclusion": "success", "html_url": "https://..."}
+                ],
             },
             headers={
                 "X-RateLimit-Remaining": "4998",
@@ -435,19 +445,27 @@ def test_normalize_endpoint_workflow_runs() -> None:
 def test_normalize_endpoint_git_commit() -> None:
     """Git commit SHA is normalized."""
     path = "/repos/org/repo/git/commits/abc123def456"
-    assert GitHubClient._normalize_endpoint(path) == "/repos/{owner}/{repo}/git/commits/{sha}"
+    assert (
+        GitHubClient._normalize_endpoint(path)
+        == "/repos/{owner}/{repo}/git/commits/{sha}"
+    )
 
 
 def test_normalize_endpoint_branch() -> None:
     """Branch names are normalized."""
     path = "/repos/org/repo/branches/feature/my-branch"
-    assert GitHubClient._normalize_endpoint(path) == "/repos/{owner}/{repo}/branches/{branch}"
+    assert (
+        GitHubClient._normalize_endpoint(path)
+        == "/repos/{owner}/{repo}/branches/{branch}"
+    )
 
 
 def test_normalize_endpoint_team_repos() -> None:
     """Team slugs are normalized."""
     path = "/orgs/my-org/teams/backend-team/repos"
-    assert GitHubClient._normalize_endpoint(path) == "/orgs/my-org/teams/{team_slug}/repos"
+    assert (
+        GitHubClient._normalize_endpoint(path) == "/orgs/my-org/teams/{team_slug}/repos"
+    )
 
 
 def test_normalize_endpoint_full_url() -> None:
@@ -469,8 +487,12 @@ async def test_api_requests_metric_incremented(client: GitHubClient) -> None:
         )
     )
 
-    before = API_REQUESTS.labels(endpoint="/repos/{owner}/{repo}", status="200")._value.get()
+    before = API_REQUESTS.labels(
+        endpoint="/repos/{owner}/{repo}", status="200"
+    )._value.get()
     await client.get_repo("owner/repo")
-    after = API_REQUESTS.labels(endpoint="/repos/{owner}/{repo}", status="200")._value.get()
+    after = API_REQUESTS.labels(
+        endpoint="/repos/{owner}/{repo}", status="200"
+    )._value.get()
 
     assert after == before + 1

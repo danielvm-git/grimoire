@@ -82,7 +82,11 @@ class TestSQLiteCorruption:
         ws = MockWorkspace(tmp_path)
         try:
             result = await run_check(
-                _check(), _repo(), "main", ws, engine  # type: ignore[arg-type]
+                _check(),
+                _repo(),
+                "main",
+                ws,
+                engine,  # type: ignore[arg-type]
             )
             assert result.check_slug == "test-check"
         except Exception:
@@ -107,7 +111,9 @@ class TestMalformedAPI:
         repo.branches = ["main"]
 
         stats = await fetch_repository_stats(
-            repo, mock_client, StalenessConfig(pull_requests_days=30, issues_days=365)  # type: ignore[arg-type]
+            repo,
+            mock_client,
+            StalenessConfig(pull_requests_days=30, issues_days=365),  # type: ignore[arg-type]
         )
         assert len(stats.warnings) > 0
 
@@ -126,8 +132,11 @@ class TestConcurrentRace:
 
         def _act(script: str = "echo ok") -> ActionDefinition:
             return ActionDefinition(
-                name="Test", slug="test-action", description=".",
-                targets=TargetSpec(list=["acme/repo"]), script=script,
+                name="Test",
+                slug="test-action",
+                description=".",
+                targets=TargetSpec(list=["acme/repo"]),
+                script=script,
             )
 
         task1 = asyncio.create_task(
@@ -137,7 +146,11 @@ class TestConcurrentRace:
 
         with pytest.raises(ActionConflictError, match="already running"):
             await run_action(
-                _act("echo ok"), repos, ws, engine, triggered_by="manual"  # type: ignore[arg-type]
+                _act("echo ok"),
+                repos,
+                ws,
+                engine,
+                triggered_by="manual",  # type: ignore[arg-type]
             )
 
         await task1

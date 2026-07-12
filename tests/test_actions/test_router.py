@@ -79,7 +79,9 @@ async def action_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.fixture
-async def action_client_with_engine(tmp_path: Path) -> AsyncIterator[tuple[AsyncClient, object]]:
+async def action_client_with_engine(
+    tmp_path: Path,
+) -> AsyncIterator[tuple[AsyncClient, object]]:
     """Provide an async HTTP client plus the engine for direct DB access."""
     engine = await get_engine(str(tmp_path / "test.db"))
     await create_tables(engine)
@@ -142,7 +144,9 @@ class TestRunAction:
         finally:
             _running_actions.pop("test-action", None)
 
-    async def test_run_action_with_repo_filter(self, action_client: AsyncClient) -> None:
+    async def test_run_action_with_repo_filter(
+        self, action_client: AsyncClient
+    ) -> None:
         resp = await action_client.post("/api/actions/test-action/run?repo=acme/repo")
         assert resp.status_code == 200
         body = resp.json()

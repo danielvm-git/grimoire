@@ -39,14 +39,18 @@ def load_actions(data_dir: Path) -> list[ActionDefinition]:
     for yaml_file in sorted(actions_dir.glob("*.yaml")):
         slug = yaml_file.stem
         if slug in seen_slugs:
-            raise ValueError(f"Duplicate action slug '{slug}': {seen_slugs[slug]} and {yaml_file}")
+            raise ValueError(
+                f"Duplicate action slug '{slug}': {seen_slugs[slug]} and {yaml_file}"
+            )
         seen_slugs[slug] = yaml_file
 
         with open(yaml_file) as f:
             raw = yaml.safe_load(f)
 
         if not isinstance(raw, dict):
-            raise ValueError(f"Expected a YAML mapping in {yaml_file}, got {type(raw).__name__}")
+            raise ValueError(
+                f"Expected a YAML mapping in {yaml_file}, got {type(raw).__name__}"
+            )
 
         raw["slug"] = slug
         actions.append(ActionDefinition.model_validate(raw))

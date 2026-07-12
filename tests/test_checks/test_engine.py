@@ -146,7 +146,9 @@ class TestRunCheck:
         async with AsyncSession(engine) as session:
             from sqlmodel import select
 
-            stmt = select(CheckResultRecord).where(CheckResultRecord.check_slug == "test-check")
+            stmt = select(CheckResultRecord).where(
+                CheckResultRecord.check_slug == "test-check"
+            )
             rows = (await session.exec(stmt)).all()
 
         assert len(rows) == 1
@@ -176,7 +178,9 @@ class TestRunningStateTracking:
             script="exit 0",
             description="",
         )
-        repo = TrackedRepository(full_name="acme/repo", default_branch="main", source="static")
+        repo = TrackedRepository(
+            full_name="acme/repo", default_branch="main", source="static"
+        )
         workspace = MockWorkspace(tmp_path)
 
         assert not is_check_running("tracker-test")
@@ -193,7 +197,9 @@ class TestRunningStateTracking:
 class TestRunCheckForAllTargets:
     """End-to-end targeting behavior including per-branch script filtering."""
 
-    async def test_list_targeting_runs_on_all_observed_branches(self, tmp_path: Path) -> None:
+    async def test_list_targeting_runs_on_all_observed_branches(
+        self, tmp_path: Path
+    ) -> None:
         from sqlmodel import select
 
         from grimoire.checks.engine import run_check_for_all_targets
@@ -220,12 +226,16 @@ class TestRunCheckForAllTargets:
         async with AsyncSession(engine) as session:
             rows = (
                 await session.exec(
-                    select(CheckResultRecord).where(CheckResultRecord.check_slug == "list-check")
+                    select(CheckResultRecord).where(
+                        CheckResultRecord.check_slug == "list-check"
+                    )
                 )
             ).all()
         assert sorted(r.branch for r in rows) == ["develop", "main"]
 
-    async def test_script_targeting_restricts_to_matching_branches(self, tmp_path: Path) -> None:
+    async def test_script_targeting_restricts_to_matching_branches(
+        self, tmp_path: Path
+    ) -> None:
         """A target script that only accepts the default branch scopes the check to it."""
         from sqlmodel import select
 
@@ -253,7 +263,9 @@ class TestRunCheckForAllTargets:
         async with AsyncSession(engine) as session:
             rows = (
                 await session.exec(
-                    select(CheckResultRecord).where(CheckResultRecord.check_slug == "default-only")
+                    select(CheckResultRecord).where(
+                        CheckResultRecord.check_slug == "default-only"
+                    )
                 )
             ).all()
         assert [r.branch for r in rows] == ["main"]

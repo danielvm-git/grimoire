@@ -31,8 +31,14 @@ class BacklogCategory(str, Enum):
 # Labels and icons used in templates
 CATEGORY_DISPLAY = {
     BacklogCategory.FAILING_WORKFLOW: ("Failing Workflow", "fa-solid fa-gear"),
-    BacklogCategory.FAILING_CHECK_ERROR: ("Failing Check", "fa-solid fa-clipboard-check"),
-    BacklogCategory.FAILING_CHECK_WARNING: ("Check Warning", "fa-solid fa-clipboard-check"),
+    BacklogCategory.FAILING_CHECK_ERROR: (
+        "Failing Check",
+        "fa-solid fa-clipboard-check",
+    ),
+    BacklogCategory.FAILING_CHECK_WARNING: (
+        "Check Warning",
+        "fa-solid fa-clipboard-check",
+    ),
     BacklogCategory.STALE_PR: ("Stale PR", "fa-solid fa-code-pull-request"),
     BacklogCategory.STALE_ISSUE: ("Stale Issue", "fa-solid fa-circle-exclamation"),
 }
@@ -213,7 +219,9 @@ def compute_score(
 ) -> float:
     """Compute the priority score for a backlog item."""
     category_weight = _get_category_weight(category, config)
-    workflow_mult = _get_workflow_multiplier(workflow_name, config) if workflow_name else 1.0
+    workflow_mult = (
+        _get_workflow_multiplier(workflow_name, config) if workflow_name else 1.0
+    )
     age_factor = _compute_age_factor(age_days, reference_days)
     return category_weight * repo_weight * workflow_mult * age_factor
 
@@ -250,7 +258,11 @@ def _collect_workflow_items(
             continue
         category_weight = _get_category_weight(BacklogCategory.FAILING_WORKFLOW, config)
         workflow_mult = _get_workflow_multiplier(wf.name, config)
-        score = category_weight * resolve_repo_weight(repo.full_name, config) * workflow_mult
+        score = (
+            category_weight
+            * resolve_repo_weight(repo.full_name, config)
+            * workflow_mult
+        )
         items.append(
             BacklogItem(
                 category=BacklogCategory.FAILING_WORKFLOW,
@@ -411,7 +423,9 @@ def build_backlog_items(
 
         all_items.extend(_collect_workflow_items(stats, repo, config, now))
         all_items.extend(_collect_stale_pr_items(stats, repo, config, staleness, now))
-        all_items.extend(_collect_stale_issue_items(stats, repo, config, staleness, now))
+        all_items.extend(
+            _collect_stale_issue_items(stats, repo, config, staleness, now)
+        )
         all_items.extend(
             _collect_check_items(
                 repo, branches, check_targets, results_by_key, check_defs, config, now

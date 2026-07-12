@@ -1,0 +1,10 @@
+{
+    "mcpServers": {
+        "bigbase": {
+            "url": "https://mcp.bigbase.click/mcp",
+            "headers": {
+                "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJlbWFpbCI6ImRhbmllbHZtQGdtYWlsLmNvbSIsInJvbGUiOiJhZG1pbiIsIm9yZ19pZCI6MSwiZXhwIjoxNzgzNzkxMjMzLCJpYXQiOjE3ODM3MDQ4MzN9.zEGTYrV_-KLdsQQ-f2IKp11bSwT8JmcIdRv_tqWsJUE"
+            }
+        }
+    }
+}

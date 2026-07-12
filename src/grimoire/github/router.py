@@ -92,7 +92,9 @@ async def get_repo_detail(owner: str, name: str) -> RepoDetailResponse:
     stats = _cache.get(full_name)
     repo = _repos.get(full_name)
     if stats is None or repo is None:
-        raise HTTPException(status_code=404, detail=f"Repository {full_name} not found in cache")
+        raise HTTPException(
+            status_code=404, detail=f"Repository {full_name} not found in cache"
+        )
 
     return RepoDetailResponse(
         full_name=stats.full_name,

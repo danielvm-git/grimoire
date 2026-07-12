@@ -11,7 +11,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.app import create_app
 from grimoire.checks.loader import CheckDefinition
-from grimoire.database import CheckResultRecord, CheckRunRecord, create_tables, get_engine
+from grimoire.database import (
+    CheckResultRecord,
+    CheckRunRecord,
+    create_tables,
+    get_engine,
+)
 from grimoire.github.router import update_cache
 from grimoire.models import (
     IssueDetail,

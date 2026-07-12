@@ -14,7 +14,12 @@ from grimoire.actions.engine import (
     run_action,
 )
 from grimoire.actions.loader import ActionDefinition
-from grimoire.database import ActionRunRecord, ActionRunRepoRecord, create_tables, get_engine
+from grimoire.database import (
+    ActionRunRecord,
+    ActionRunRepoRecord,
+    create_tables,
+    get_engine,
+)
 from grimoire.models import TrackedRepository
 from grimoire.targeting import TargetSpec
 
@@ -57,7 +62,9 @@ def _action(script: str = "echo hello") -> ActionDefinition:
     )
 
 
-def _repo(name: str = "acme/repo", branches: list[str] | None = None) -> TrackedRepository:
+def _repo(
+    name: str = "acme/repo", branches: list[str] | None = None
+) -> TrackedRepository:
     return TrackedRepository(
         full_name=name,
         default_branch="main",
@@ -285,7 +292,9 @@ class TestRunAction:
         assert result.results[1].branch == "develop"
         assert ws.reset_calls == [("acme/repo", "main"), ("acme/repo", "develop")]
 
-    async def test_script_targeting_restricts_to_default_branch(self, tmp_path: Path) -> None:
+    async def test_script_targeting_restricts_to_default_branch(
+        self, tmp_path: Path
+    ) -> None:
         """Script targeting evaluated per branch scopes the action correctly."""
         engine = await get_engine(str(tmp_path / "test.db"))
         await create_tables(engine)
@@ -442,7 +451,9 @@ class TestActionProgress:
         await create_tables(engine)
         ws = MockWorkspace(tmp_path)
 
-        result = await run_action(_action("exit 1"), [_repo()], ws, engine, triggered_by="manual")
+        result = await run_action(
+            _action("exit 1"), [_repo()], ws, engine, triggered_by="manual"
+        )
 
         assert not is_action_running("test-action")
         assert get_action_progress("test-action") is None

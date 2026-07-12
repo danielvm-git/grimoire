@@ -76,7 +76,9 @@ class TestTargetSpecValidation:
 
 
 class TestResolveTargetsList:
-    async def test_list_match_expands_to_all_observed_branches(self, tmp_path: Path) -> None:
+    async def test_list_match_expands_to_all_observed_branches(
+        self, tmp_path: Path
+    ) -> None:
         ws = MockWorkspace(tmp_path)
         spec = TargetSpec(list=["acme/alpha", "acme/beta"])
         result = await resolve_targets(spec, _repos(), ws)  # type: ignore[arg-type]
@@ -94,7 +96,9 @@ class TestResolveTargetsList:
 
 
 class TestResolveTargetsRegex:
-    async def test_regex_match_expands_to_all_observed_branches(self, tmp_path: Path) -> None:
+    async def test_regex_match_expands_to_all_observed_branches(
+        self, tmp_path: Path
+    ) -> None:
         ws = MockWorkspace(tmp_path)
         spec = TargetSpec(regex="acme/.*")
         result = await resolve_targets(spec, _repos(), ws)  # type: ignore[arg-type]
@@ -135,7 +139,9 @@ class TestResolveTargetsScript:
         spec = TargetSpec(script='[ "$BRANCH" = "$DEFAULT_BRANCH" ]')
         repos = [
             TrackedRepository(
-                full_name="acme/beta", default_branch="main", branches=["main", "develop"]
+                full_name="acme/beta",
+                default_branch="main",
+                branches=["main", "develop"],
             ),
         ]
         result = await resolve_targets(spec, repos, ws)  # type: ignore[arg-type]

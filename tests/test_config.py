@@ -109,7 +109,9 @@ class TestLoadConfig:
         assert repo_source.team == "org/my-team"
         assert repo_source.exclude == ["org/excluded"]
 
-    def test_env_var_in_token(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_env_var_in_token(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("TEST_GH_TOKEN", "ghp_from_env")
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
@@ -192,7 +194,9 @@ class TestLoadConfig:
         assert config.git.signing is not None
         assert config.git.signing.format == "ssh"
 
-    def test_defaults_applied(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_defaults_applied(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
             textwrap.dedent("""\
@@ -235,7 +239,9 @@ class TestLoadConfig:
         assert config.staleness.problematic_stale_issues_pct == 30
         assert config.staleness.problematic_stale_prs_pct == 10
 
-    def test_config_from_env_var(self, tmp_config: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_config_from_env_var(
+        self, tmp_config: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.setenv("GRIMOIRE_CONFIG", str(tmp_config))
         config = load_config()
         assert config.github.token == "ghp_test_token_123"
@@ -326,9 +332,14 @@ class TestWorkflowMatchesFilter:
         from grimoire.github.service import _workflow_matches_filter
 
         # "Tests CI" matches include, doesn't match exclude → allowed
-        assert _workflow_matches_filter("Tests CI", ["Tests *"], ["Tests nightly"]) is True
+        assert (
+            _workflow_matches_filter("Tests CI", ["Tests *"], ["Tests nightly"]) is True
+        )
         # "Tests nightly" matches include AND exclude → excluded
-        assert _workflow_matches_filter("Tests nightly", ["Tests *"], ["Tests nightly"]) is False
+        assert (
+            _workflow_matches_filter("Tests nightly", ["Tests *"], ["Tests nightly"])
+            is False
+        )
         # "Publish" doesn't match include → excluded
         assert _workflow_matches_filter("Publish", ["Tests *"], ["Publish"]) is False
 

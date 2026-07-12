@@ -54,7 +54,11 @@ from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import DATA_REFRESH_DURATION, update_repo_metrics
 from grimoire.observability.metrics import router as metrics_router
 from grimoire.web.router import router as web_router
-from grimoire.web.router import set_backlog_config, set_refresh_schedule, set_staleness_config
+from grimoire.web.router import (
+    set_backlog_config,
+    set_refresh_schedule,
+    set_staleness_config,
+)
 from grimoire.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
@@ -132,13 +136,17 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 default=None,
             )
             if oldest:
-                age_minutes = (datetime.now(tz=timezone.utc) - oldest).total_seconds() / 60
+                age_minutes = (
+                    datetime.now(tz=timezone.utc) - oldest
+                ).total_seconds() / 60
                 # Compute expected interval from the cron schedule
                 trigger = CronTrigger.from_crontab(config.refresh_schedule)
                 now = datetime.now(tz=timezone.utc)
                 next1 = trigger.get_next_fire_time(None, now)
                 next2 = trigger.get_next_fire_time(next1, next1) if next1 else None
-                interval_minutes = (next2 - next1).total_seconds() / 60 if next1 and next2 else 5
+                interval_minutes = (
+                    (next2 - next1).total_seconds() / 60 if next1 and next2 else 5
+                )
                 cache_is_fresh = age_minutes < interval_minutes
                 logger.info(
                     "DB cache: %d repos, oldest data %.1f min ago (%s)",
@@ -178,7 +186,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 update_cache(cached_repos, cached_stats, timestamp=newest_fetched_at)
                 update_repo_metrics(cached_stats)
                 repos = cached_repos
-                logger.info("Loaded %d repositories from cache (fallback)", len(cached_repos))
+                logger.info(
+                    "Loaded %d repositories from cache (fallback)", len(cached_repos)
+                )
         except Exception:
             logger.exception("Failed to load cached data from database")
 

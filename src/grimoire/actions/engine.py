@@ -135,7 +135,9 @@ async def run_action(
 
             for repo, branches in resolved:
                 for branch in branches:
-                    passed, output = await _execute_action(action, repo, branch, workspace)
+                    passed, output = await _execute_action(
+                        action, repo, branch, workspace
+                    )
                     result = ActionRepoResult(
                         repo_full_name=repo.full_name,
                         branch=branch,
@@ -204,7 +206,9 @@ async def _execute_global_action(
             stderr=asyncio.subprocess.STDOUT,
             env=env,
         )
-        stdout_bytes, _ = await asyncio.wait_for(proc.communicate(), timeout=_DEFAULT_TIMEOUT)
+        stdout_bytes, _ = await asyncio.wait_for(
+            proc.communicate(), timeout=_DEFAULT_TIMEOUT
+        )
         output = stdout_bytes.decode(errors="replace")
         passed = proc.returncode == 0
     except asyncio.TimeoutError:
@@ -252,7 +256,9 @@ async def _execute_action(
             stderr=asyncio.subprocess.STDOUT,
             env=env,
         )
-        stdout_bytes, _ = await asyncio.wait_for(proc.communicate(), timeout=_DEFAULT_TIMEOUT)
+        stdout_bytes, _ = await asyncio.wait_for(
+            proc.communicate(), timeout=_DEFAULT_TIMEOUT
+        )
         output = stdout_bytes.decode(errors="replace")
         passed = proc.returncode == 0
     except asyncio.TimeoutError:

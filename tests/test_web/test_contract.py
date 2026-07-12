@@ -92,12 +92,17 @@ class TestChecksListContract:
 
         checks = [
             CheckDefinition(
-                name="Test", slug="test-check", description="desc",
-                targets=TargetSpec(list=["acme/repo"]), script="echo ok",
+                name="Test",
+                slug="test-check",
+                description="desc",
+                targets=TargetSpec(list=["acme/repo"]),
+                script="echo ok",
             )
         ]
         repos = [TrackedRepository(full_name="acme/repo", default_branch="main")]
-        ws = type("WS", (), {"get_workdir": lambda s, a, b: tmp_path, "get_env": lambda s: {}})()
+        ws = type(
+            "WS", (), {"get_workdir": lambda s, a, b: tmp_path, "get_env": lambda s: {}}
+        )()
 
         set_checks_state(checks, repos, ws, engine)
 
@@ -127,9 +132,12 @@ class TestChecksResultsContract:
         from sqlmodel.ext.asyncio.session import AsyncSession
 
         record = CheckResultRecord(
-            check_name="Test", check_slug="test-check",
-            repo_full_name="acme/repo", branch="main",
-            passed=True, output="ok",
+            check_name="Test",
+            check_slug="test-check",
+            repo_full_name="acme/repo",
+            branch="main",
+            passed=True,
+            output="ok",
             timestamp=datetime.now(timezone.utc),
         )
         async with AsyncSession(engine) as session:
@@ -138,12 +146,22 @@ class TestChecksResultsContract:
 
         checks = [
             CheckDefinition(
-                name="Test", slug="test-check", description="desc",
-                targets=TargetSpec(list=["acme/repo"]), script="echo ok",
+                name="Test",
+                slug="test-check",
+                description="desc",
+                targets=TargetSpec(list=["acme/repo"]),
+                script="echo ok",
             )
         ]
         repos = [TrackedRepository(full_name="acme/repo", default_branch="main")]
-        ws = type("WS", (), {"get_workdir": lambda s, a, b: tmp_path, "get_env": lambda s: {"GH_TOKEN": "t"}})()
+        ws = type(
+            "WS",
+            (),
+            {
+                "get_workdir": lambda s, a, b: tmp_path,
+                "get_env": lambda s: {"GH_TOKEN": "t"},
+            },
+        )()
 
         set_checks_state(checks, repos, ws, engine)
 

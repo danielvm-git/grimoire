@@ -265,7 +265,9 @@ class TestResolveRepoWeight:
 NOW = datetime(2026, 5, 1, tzinfo=timezone.utc)
 
 
-def _make_repo(name: str = "acme/api", branches: list[str] | None = None) -> TrackedRepository:
+def _make_repo(
+    name: str = "acme/api", branches: list[str] | None = None
+) -> TrackedRepository:
     return TrackedRepository(
         full_name=name,
         default_branch="main",
@@ -463,7 +465,9 @@ class TestBuildBacklogItems:
 
     def test_items_sorted_by_score_descending(self) -> None:
         """Multiple item types should be sorted highest-score-first."""
-        wf = WorkflowStatus(name="CI", branch="main", status="failure", url="", run_url="")
+        wf = WorkflowStatus(
+            name="CI", branch="main", status="failure", url="", run_url=""
+        )
         issue = IssueDetail(
             number=1,
             title="Old",
@@ -488,7 +492,9 @@ class TestBuildBacklogItems:
 
     def test_repo_priority_affects_ranking(self) -> None:
         """A low-weight repo's workflow should rank below a high-weight repo's stale PR."""
-        wf = WorkflowStatus(name="CI", branch="main", status="failure", url="", run_url="")
+        wf = WorkflowStatus(
+            name="CI", branch="main", status="failure", url="", run_url=""
+        )
         pr = PullRequestDetail(
             number=1,
             title="PR",
@@ -745,14 +751,18 @@ class TestBacklogRoute:
         assert resp.status_code == 200
         assert "Backlog" in resp.text
 
-    async def test_backlog_page_shows_failing_workflow(self, web_client: AsyncClient) -> None:
+    async def test_backlog_page_shows_failing_workflow(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/backlog")
         assert resp.status_code == 200
         # acme/frontend has a failing Build workflow
         assert "acme/frontend" in resp.text
         assert "Build" in resp.text
 
-    async def test_backlog_page_shows_stale_items(self, web_client: AsyncClient) -> None:
+    async def test_backlog_page_shows_stale_items(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/backlog")
         assert resp.status_code == 200
         # acme/api has stale PRs and issues
@@ -768,7 +778,9 @@ class TestBacklogRoute:
         self,
         web_client: AsyncClient,
     ) -> None:
-        resp = await web_client.get("/partials/backlog-items?categories=failing_workflow")
+        resp = await web_client.get(
+            "/partials/backlog-items?categories=failing_workflow"
+        )
         assert resp.status_code == 200
         assert "Build" in resp.text
 
@@ -1047,7 +1059,9 @@ class TestGroupByType:
                 description="Workflow 'Build' failing on `main`",
                 score=100.0,
             ),
-            self._make_item(BacklogCategory.FAILING_CHECK_ERROR, repo="b/2", score=80.0),
+            self._make_item(
+                BacklogCategory.FAILING_CHECK_ERROR, repo="b/2", score=80.0
+            ),
         ]
         groups = group_by_type(items)
         assert len(groups) == 4
@@ -1075,12 +1089,16 @@ class TestBacklogGroupedByTypeRoutes:
         # Should contain a <details> element for grouped view
         assert "<details" in resp.text
 
-    async def test_backlog_partial_grouped_by_type(self, web_client: AsyncClient) -> None:
+    async def test_backlog_partial_grouped_by_type(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/partials/backlog-items?group_by=type")
         assert resp.status_code == 200
         assert "<details" in resp.text
 
-    async def test_backlog_type_view_shows_workflow_group(self, web_client: AsyncClient) -> None:
+    async def test_backlog_type_view_shows_workflow_group(
+        self, web_client: AsyncClient
+    ) -> None:
         resp = await web_client.get("/backlog?group_by=type")
         assert resp.status_code == 200
         # acme/frontend has a failing "Build" workflow, grouped under "Workflows"

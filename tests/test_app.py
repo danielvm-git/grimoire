@@ -41,6 +41,7 @@ class TestLifespanFreshness:
         self, mock_config: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """App should start cleanly when DB cache is fresh."""
+
         # Mock GitHub client to avoid real API calls during refresh
         async def _close() -> None:
             pass
@@ -64,7 +65,9 @@ class TestLifespanFreshness:
 
             app = create_app()
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 resp = await client.get("/health")
                 assert resp.status_code == 200
                 data = resp.json()
@@ -113,6 +116,7 @@ class TestLifespanShutdown:
         self, mock_config: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """App serves health even after workspace failure."""
+
         async def _close() -> None:
             pass
 
@@ -136,7 +140,9 @@ class TestLifespanShutdown:
 
             app = create_app()
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 resp = await client.get("/health")
                 assert resp.status_code == 200
                 data = resp.json()
@@ -150,6 +156,7 @@ class TestLifespanResilience:
         self, mock_config: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """App should start even if workspace setup fails."""
+
         async def _close() -> None:
             pass
 
@@ -174,7 +181,9 @@ class TestLifespanResilience:
 
             app = create_app()
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 resp = await client.get("/health")
                 assert resp.status_code == 200
                 data = resp.json()

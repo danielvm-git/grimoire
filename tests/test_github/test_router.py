@@ -12,7 +12,9 @@ def _make_repo(name: str = "owner/repo") -> TrackedRepository:
     return TrackedRepository(full_name=name, branches=["main"], source=name)
 
 
-def _make_stats(name: str = "owner/repo", fetched_at: datetime | None = None) -> RepositoryStats:
+def _make_stats(
+    name: str = "owner/repo", fetched_at: datetime | None = None
+) -> RepositoryStats:
     return RepositoryStats(
         full_name=name,
         default_branch="main",
