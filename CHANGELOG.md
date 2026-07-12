@@ -1,3 +1,10 @@
+## [0.3.3](https://github.com/danielvm-git/grimoire/compare/v0.3.2...v0.3.3) (2026-07-12)
+
+
+### Bug Fixes
+
+* **deploy:** add uv.lock back for BigBase uv sync ([0ffb318](https://github.com/danielvm-git/grimoire/commit/0ffb318c56465b76b52cc0d0043733cba025f996))
+
 ## [0.3.2](https://github.com/danielvm-git/grimoire/compare/v0.3.1...v0.3.2) (2026-07-12)
 
 
