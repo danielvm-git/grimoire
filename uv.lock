@@ -354,7 +354,7 @@ wheels = [
 [[package]]
 name = "grimoire-dashboard"
 version = "0.1.8"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "aiosqlite" },
     { name = "apscheduler" },
