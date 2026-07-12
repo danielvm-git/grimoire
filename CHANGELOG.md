@@ -1,3 +1,10 @@
+## [0.3.2](https://github.com/danielvm-git/grimoire/compare/v0.3.1...v0.3.2) (2026-07-12)
+
+
+### Bug Fixes
+
+* **deploy:** remove uv.lock so BigBase uses pip install ([5e9eee8](https://github.com/danielvm-git/grimoire/commit/5e9eee845f52c2c3c5db539b0f502663dcd90909))
+
 ## [0.3.1](https://github.com/danielvm-git/grimoire/compare/v0.3.0...v0.3.1) (2026-07-12)
 
 
