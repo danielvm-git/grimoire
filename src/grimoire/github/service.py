@@ -850,9 +850,7 @@ async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> i
                 delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn)  # type: ignore[arg-type]
             )
             await session.exec(  # type: ignore[call-overload]
-                delete(CachedWorkflowStatus).where(
-                    CachedWorkflowStatus.repo_full_name == fn
-                )  # type: ignore[arg-type]
+                delete(CachedWorkflowStatus).where(CachedWorkflowStatus.repo_full_name == fn)  # type: ignore[arg-type]
             )
             await session.exec(  # type: ignore[call-overload]
                 delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn)  # type: ignore[arg-type]
