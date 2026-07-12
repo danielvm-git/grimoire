@@ -294,6 +294,7 @@ def create_app() -> FastAPI:
         description="Self-hostable GitHub repository monitoring dashboard",
         version=VERSION,
         lifespan=lifespan,
+        docs_url="/api/docs",
     )
 
     # API routers
