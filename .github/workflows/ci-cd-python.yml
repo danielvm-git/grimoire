@@ -108,7 +108,10 @@ jobs:
           node-version: 22
 
       - name: Install semantic-release
-        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git
+        run: >-
+          npm install -g semantic-release
+          @semantic-release/changelog
+          @semantic-release/git
 
       - name: Run semantic-release
         run: npx semantic-release
@@ -119,7 +122,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     needs: [semantic-release]
-    if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      success()
+      && github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
     concurrency:
       group: deploy-python-${{ github.ref }}
       cancel-in-progress: false
