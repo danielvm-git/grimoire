@@ -1,3 +1,10 @@
+# [0.3.0](https://github.com/danielvm-git/grimoire/compare/v0.2.1...v0.3.0) (2026-07-12)
+
+
+### Features
+
+* enable API docs at /api/docs endpoint ([1db77ea](https://github.com/danielvm-git/grimoire/commit/1db77eacd95c690bafd3212c2da1426edab63d12))
+
 ## [0.2.1](https://github.com/danielvm-git/grimoire/compare/v0.2.0...v0.2.1) (2026-07-12)
 
 
