@@ -27,6 +27,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "actionlint-py>=1.7.10.24",
+    "build>=1.0",
     "codespell>=2.4.1",
     "pyright>=1.1.408",
     "pytest>=9.0.2",
