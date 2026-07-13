@@ -1,3 +1,10 @@
+## [0.3.8](https://github.com/danielvm-git/grimoire/compare/v0.3.7...v0.3.8) (2026-07-13)
+
+
+### Bug Fixes
+
+* **config:** include config.yaml in repo so it deploys to BigBase ([c813587](https://github.com/danielvm-git/grimoire/commit/c8135878f4460e7096035fe1d2d9fc73b72ca42b))
+
 ## [0.3.7](https://github.com/danielvm-git/grimoire/compare/v0.3.6...v0.3.7) (2026-07-13)
 
 
