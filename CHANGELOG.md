@@ -1,3 +1,10 @@
+## [0.3.6](https://github.com/danielvm-git/grimoire/compare/v0.3.5...v0.3.6) (2026-07-13)
+
+
+### Bug Fixes
+
+* **deploy:** remove root JSON stub that shadowed dashboard route ([cfe916f](https://github.com/danielvm-git/grimoire/commit/cfe916f6c2e109f714ae95b1629c1983f2b94bc9))
+
 ## [0.3.5](https://github.com/danielvm-git/grimoire/compare/v0.3.4...v0.3.5) (2026-07-13)
 
 
