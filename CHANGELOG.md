@@ -1,3 +1,15 @@
+## [0.3.9](https://github.com/danielvm-git/grimoire/compare/v0.3.8...v0.3.9) (2026-07-13)
+
+
+### Bug Fixes
+
+* **assets:** replace favicon.ico with correct Grimoire book icon ([6e93fef](https://github.com/danielvm-git/grimoire/commit/6e93fefb0425d9ca794a2f896058efd5dd8ffe0a))
+
+
+### Reverts
+
+* **security:** remove CSP middleware — BigBase handles CSP ([4dc6289](https://github.com/danielvm-git/grimoire/commit/4dc628966a972ff48b7118736abf231b6595bfe7))
+
 ## [0.3.8](https://github.com/danielvm-git/grimoire/compare/v0.3.7...v0.3.8) (2026-07-13)
 
 
