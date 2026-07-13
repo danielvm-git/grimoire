@@ -1,0 +1,9 @@
+version: 1
+framework: python
+build:
+  command: uv sync --frozen
+start:
+  asgi_import: "grimoire.app:create_app --factory"
+  port: 8000
+health_check:
+  path: /health
