@@ -1,0 +1,53 @@
+# Grimoire Configuration
+github:
+  token: "${GITHUB_TOKEN}"
+
+git:
+  user:
+    name: "Daniel"
+    email: "danielvm-git@users.noreply.github.com"
+
+repositories:
+  - repo: "danielvm-git/agentic-cps"
+  - repo: "danielvm-git/astro-wiki"
+  - repo: "danielvm-git/astrobiologia"
+  - repo: "danielvm-git/astrobiology"
+  - repo: "danielvm-git/bicicleta"
+  - repo: "danielvm-git/big-bolao"
+  - repo: "danielvm-git/big-clipboard-manager"
+  - repo: "danielvm-git/big-counter"
+  - repo: "danielvm-git/big-dock-locker"
+  - repo: "danielvm-git/big-dock-locker-site"
+  - repo: "danielvm-git/big-kickass-readme"
+  - repo: "danielvm-git/big-news"
+  - repo: "danielvm-git/big-server-monitor"
+  - repo: "danielvm-git/big-stream"
+  - repo: "danielvm-git/big-token-saver"
+  - repo: "danielvm-git/bigbase"
+  - repo: "danielvm-git/bigflint"
+  - repo: "danielvm-git/bigpowers"
+  - repo: "danielvm-git/bigpowers-benchmark"
+  - repo: "danielvm-git/bigpowers-showcase"
+  - repo: "danielvm-git/bigspec"
+  - repo: "danielvm-git/binance-trading-bot"
+  - repo: "danielvm-git/binance-trading-robot"
+  - repo: "danielvm-git/bmad-method"
+  - repo: "danielvm-git/brand_identity_danielvm"
+  - repo: "danielvm-git/clean-install-guide"
+  - repo: "danielvm-git/dev-checklist"
+  - repo: "danielvm-git/get-things-done"
+  - repo: "danielvm-git/grimoire"
+  - repo: "danielvm-git/gsd-semantic-release"
+
+staleness:
+  pull_requests_days: 30
+  issues_days: 365
+  problematic_stale_issues_pct: 20
+  problematic_stale_prs_pct: 20
+
+refresh_schedule: "*/30 * * * *"
+
+data_dir: "./data"
+workspace_dir: "./workspace"
+database_path: "./grimoire.db"
+log_file: "./grimoire.log"
