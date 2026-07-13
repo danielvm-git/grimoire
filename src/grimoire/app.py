@@ -12,9 +12,10 @@ from typing import AsyncIterator
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from grimoire.actions.loader import load_actions
 from grimoire.actions.router import router as actions_router
@@ -64,6 +65,29 @@ from grimoire.workspace.manager import WorkspaceManager
 logger = logging.getLogger(__name__)
 
 VERSION = version("grimoire-dashboard")
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers including a permissive CSP for the web UI."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        # Only set CSP for HTML responses (web UI), not API/health endpoints
+        content_type = response.headers.get("content-type", "")
+        if "text/html" in content_type:
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+                "https://cdn.tailwindcss.com https://unpkg.com; "
+                "style-src 'self' 'unsafe-inline' "
+                "https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+                "img-src 'self' data: https:; "
+                "font-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'"
+            )
+            response.headers["Content-Security-Policy"] = csp
+        return response
 
 
 @asynccontextmanager
@@ -296,6 +320,9 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         docs_url="/api/docs",
     )
+
+    # Security headers — must be added before routers so it wraps all responses
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # API routers
     app.include_router(repos_router, prefix="/api")
