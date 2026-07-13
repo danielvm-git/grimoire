@@ -1,3 +1,10 @@
+## [0.3.5](https://github.com/danielvm-git/grimoire/compare/v0.3.4...v0.3.5) (2026-07-13)
+
+
+### Bug Fixes
+
+* **deploy:** read PORT env var in app.py for BigBase deployment ([44f7b20](https://github.com/danielvm-git/grimoire/commit/44f7b2016e1b6d464f707049352241992c6a429c))
+
 ## [0.3.4](https://github.com/danielvm-git/grimoire/compare/v0.3.3...v0.3.4) (2026-07-12)
 
 
