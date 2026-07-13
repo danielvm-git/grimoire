@@ -1,3 +1,10 @@
+## [0.3.7](https://github.com/danielvm-git/grimoire/compare/v0.3.6...v0.3.7) (2026-07-13)
+
+
+### Bug Fixes
+
+* **security:** add CSP middleware to allow external CDN resources ([cf0076e](https://github.com/danielvm-git/grimoire/commit/cf0076eb70303396a6cbcc22f822811767328a6a))
+
 ## [0.3.6](https://github.com/danielvm-git/grimoire/compare/v0.3.5...v0.3.6) (2026-07-13)
 
 
