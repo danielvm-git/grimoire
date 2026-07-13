@@ -1,50 +1,47 @@
-"""Entry point for BigBase deployment."""
+"""Entry point for BigBase deployment — fast health check + full app in background."""
 
-import asyncio
 import sys
+import threading
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
-print("Grimoire starting...", file=sys.stderr, flush=True)
 
 from fastapi import FastAPI  # noqa: E402
 
-# Minimal app that starts immediately for health check
+# Minimal app — responds to health checks immediately.
+# The full Grimoire app loads in the background and its routes
+# (including the dashboard at /) are merged once ready.
 app = FastAPI(title="Grimoire")
 
 
-@app.get("/")
-async def root():
-    return {"status": "ok", "name": "Grimoire Dashboard"}
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
-# Try to start the full app in the background
-async def start_real_app():
+def _load_full_app() -> None:
+    """Load the full Grimoire app in a background thread.
+
+    Merges all routes from the real app into the running minimal app,
+    skipping /health which is already defined above for fast startup.
+    """
     try:
-        from grimoire.app import create_app
+        from grimoire.app import create_app  # noqa: E402
 
         real = create_app()
-        # Copy routes from real app
+        existing_paths = {route.path for route in app.routes}
         for route in real.routes:
-            app.router.routes.append(route)
+            if route.path not in existing_paths:
+                app.router.routes.append(route)
         print("Grimoire full app loaded", file=sys.stderr, flush=True)
     except Exception:
         import traceback
 
         traceback.print_exc(file=sys.stderr)
-        print("Running in degraded mode", file=sys.stderr, flush=True)
+        print("Grimoire running in degraded mode", file=sys.stderr, flush=True)
 
 
-# Schedule async startup
-import threading  # noqa: E402
-
-
-def _start():
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(start_real_app())
-
-
-t = threading.Thread(target=_start, daemon=True)
+t = threading.Thread(target=_load_full_app, daemon=True)
 t.start()
 
 if __name__ == "__main__":
