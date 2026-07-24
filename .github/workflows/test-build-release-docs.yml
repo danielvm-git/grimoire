@@ -1,0 +1,110 @@
+name: Test Build Release Docs
+# version: 3.0.0 — adapted from workflow-templates/test-build-release-pages-mkdocs.yml
+# story: e10s02
+# Renamed pair (docs cannot share fixed v3 filenames with the Python app stack).
+# Pair with deploy-docs.yml.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/user/**"
+      - ".github/workflows/test-build-release-docs.yml"
+      - ".github/workflows/deploy-docs.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/user/**"
+      - ".github/workflows/test-build-release-docs.yml"
+      - ".github/workflows/deploy-docs.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Check Conventional Commits
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git fetch origin main --depth=1 2>/dev/null || true
+          BASE=origin/main
+          if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            echo "WARN: origin/main not available — skipping Conventional Commits check"
+            exit 0
+          fi
+          git log "$BASE"..HEAD --oneline | while read -r line; do
+            if ! echo "$line" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: "; then
+              echo "FAIL: Non-conventional commit: $line"
+              exit 1
+            fi
+          done
+          echo "PASS: All commits follow Conventional Commits"
+
+      - name: Check no AI agent attribution
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git fetch origin main --depth=1 2>/dev/null || true
+          BASE=origin/main
+          if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            echo "WARN: origin/main not available — skipping AI attribution check"
+            exit 0
+          fi
+          if git log "$BASE"..HEAD --format="%B" | grep -qiE '^co[- ]authored[- ]by:'; then
+            echo "FAIL: Co-authored-by: footer found — blocked by CONVENTIONS.md"
+            exit 1
+          fi
+          echo "PASS: No AI agent attribution"
+
+      - name: Install mkdocs-material
+        run: pip install mkdocs-material
+
+      - name: Validate docs build
+        run: mkdocs build --config-file docs/user/mkdocs.yml
+
+  build:
+    needs: [test]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install mkdocs-material
+        run: pip install mkdocs-material
+
+      - name: Build docs
+        run: mkdocs build --config-file docs/user/mkdocs.yml
+
+      - name: Upload pages-site artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-site
+          path: site/
+          retention-days: 3
+
+  release:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - name: No version bump for docs
+        run: echo "no version bump for docs"

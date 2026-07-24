@@ -1,0 +1,139 @@
+name: Test Build Release
+# version: 3.0.0 — adapted from workflow-templates/test-build-release-python.yml
+# story: e10s01
+# Pair with deploy.yml. Grimoire toolchain: just check (ruff/pyright/codespell/pytest) — not mypy.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/test-build-release-docs.yml"
+      - ".github/workflows/deploy-docs.yml"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "*.md"
+      - ".github/workflows/test-build-release-docs.yml"
+      - ".github/workflows/deploy-docs.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pipeline-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  APP_TYPE: python
+  SITE_URL: "https://grimoire.bigbase.click"
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: extractions/setup-just@v3
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Preflight
+        run: bash scripts/preflight.sh
+
+      - name: Check Conventional Commits
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git fetch origin main --depth=1 2>/dev/null || true
+          BASE=origin/main
+          if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            echo "WARN: origin/main not available — skipping Conventional Commits check"
+            exit 0
+          fi
+          git log "$BASE"..HEAD --oneline | while read -r line; do
+            if ! echo "$line" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: "; then
+              echo "FAIL: Non-conventional commit: $line"
+              exit 1
+            fi
+          done
+          echo "PASS: All commits follow Conventional Commits"
+
+      - name: Check no AI agent attribution
+        if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
+          git fetch origin main --depth=1 2>/dev/null || true
+          BASE=origin/main
+          if ! git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            echo "WARN: origin/main not available — skipping AI attribution check"
+            exit 0
+          fi
+          if git log "$BASE"..HEAD --format="%B" | grep -qiE '^co[- ]authored[- ]by:'; then
+            echo "FAIL: Co-authored-by: footer found — blocked by CONVENTIONS.md"
+            exit 1
+          fi
+          echo "PASS: No AI agent attribution"
+
+  build:
+    needs: [test]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Build
+        run: uv build || echo "No build step defined"
+
+      - name: Write deploy-meta
+        run: |
+          jq -n \
+            --arg sha "${{ github.sha }}" \
+            --arg ref "${{ github.ref_name }}" \
+            --arg app_type "${{ env.APP_TYPE }}" \
+            '{sha: $sha, ref: $ref, app_type: $app_type}' > deploy-meta.json
+
+      - name: Upload deploy-meta artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: deploy-meta
+          path: deploy-meta.json
+          retention-days: 3
+
+  release:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install semantic-release
+        run: npm install --no-save semantic-release @semantic-release/changelog @semantic-release/git
+
+      - name: Run semantic-release
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

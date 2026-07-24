@@ -1,0 +1,61 @@
+name: Deploy
+# version: 3.0.0 — adapted from workflow-templates/deploy-python.yml
+# story: e10s01
+# Triggered by test-build-release.yml only (workflow name must match exactly)
+
+on:
+  workflow_run:
+    workflows: ["Test Build Release"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  SITE_URL: "https://grimoire.bigbase.click"
+
+jobs:
+  deploy:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Download deploy-meta artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: deploy-meta
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.event.workflow_run.repository.full_name }}
+          path: deploy-meta
+
+      - name: Verify deploy-meta artifact
+        id: meta
+        run: |
+          if [ ! -s deploy-meta/deploy-meta.json ]; then
+            echo "::error::deploy-meta artifact missing or empty"
+            exit 1
+          fi
+          REF=$(jq -r '.sha' deploy-meta/deploy-meta.json)
+          APP_TYPE=$(jq -r '.app_type' deploy-meta/deploy-meta.json)
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "app_type=$APP_TYPE" >> "$GITHUB_OUTPUT"
+          echo "Deploy metadata: $(cat deploy-meta/deploy-meta.json)"
+
+      - name: Deploy to BigBase
+        uses: danielvm-git/.github/actions/bigbase-deploy@v1
+        with:
+          site_id: ${{ secrets.BIGBASE_SITE_ID }}
+          app_type: ${{ steps.meta.outputs.app_type }}
+          site_url: ${{ env.SITE_URL }}
+          deploy_token: ${{ secrets.BIGBASE_DEPLOY_TOKEN }}
+          ref: ${{ steps.meta.outputs.ref }}
+          branch: main

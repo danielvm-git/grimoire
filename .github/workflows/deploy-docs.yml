@@ -1,0 +1,88 @@
+name: Deploy Docs
+# version: 3.0.0 — adapted from workflow-templates/deploy-pages-mkdocs.yml
+# story: e10s02
+# Triggered by test-build-release-docs.yml (name must match exactly)
+
+on:
+  workflow_run:
+    workflows: ["Test Build Release Docs"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: deploy-github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download pages-site artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: pages-site
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+          repository: ${{ github.event.workflow_run.repository.full_name }}
+          path: site
+
+      - name: Verify pages-site artifact
+        run: |
+          if [ ! -d site ] || [ -z "$(find site -type f | head -1)" ]; then
+            echo "::error::pages-site artifact missing or empty"
+            exit 1
+          fi
+          echo "pages-site artifact verified ($(find site -type f | wc -l | tr -d ' ') files)"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages (attempt 1)
+        id: deploy_attempt_1
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      - name: Wait before retry
+        if: steps.deploy_attempt_1.outcome == 'failure'
+        run: sleep 45
+
+      - name: Deploy to GitHub Pages (attempt 2)
+        id: deploy_attempt_2
+        if: steps.deploy_attempt_1.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      - name: Wait before final retry
+        if: steps.deploy_attempt_1.outcome == 'failure' && steps.deploy_attempt_2.outcome == 'failure'
+        run: sleep 45
+
+      - name: Deploy to GitHub Pages (attempt 3)
+        id: deploy_attempt_3
+        if: steps.deploy_attempt_1.outcome == 'failure' && steps.deploy_attempt_2.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        continue-on-error: true
+
+      - name: Verify deployment succeeded
+        id: deployment
+        run: |
+          if [ "${{ steps.deploy_attempt_1.outcome }}" = "success" ] || \
+             [ "${{ steps.deploy_attempt_2.outcome }}" = "success" ] || \
+             [ "${{ steps.deploy_attempt_3.outcome }}" = "success" ]; then
+            echo "GitHub Pages deployment succeeded"
+          else
+            echo "::error::GitHub Pages deployment failed after 3 attempts"
+            exit 1
+          fi
