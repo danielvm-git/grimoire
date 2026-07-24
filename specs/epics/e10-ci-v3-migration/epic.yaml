@@ -1,0 +1,76 @@
+# e10 — CI/CD v3 Migration
+# Track B from plan: ci_issues_skill_routing — issues #1 + #5 on danielvm-git/grimoire
+# Migrates from single-file ci-cd-*.yml to v3 test-build-release + deploy pairs
+
+title: "CI/CD v3 Migration"
+status: done
+depends_on: [e07]
+source: "issues #1/#5 + workflow-templates v3.0.0 (danielvm-git/.github)"
+
+stories:
+  - id: e10s01
+    title: "Python app pair: test-build-release + deploy"
+    status: done
+    bcps: 3
+    description: |
+      Adopt org workflow templates v3 for the Python app stack:
+      - Copy test-build-release-python.yml → .github/workflows/test-build-release.yml
+      - Copy deploy-python.yml → .github/workflows/deploy.yml
+      - Keep workflow name exactly "Test Build Release" (deploy workflow_run hard-codes it)
+      - APP_TYPE: python; SITE_URL: https://grimoire.bigbase.click
+      - Adapt toolchain: preflight via scripts/preflight.sh → `just check`
+        (pyright/codespell/ruff/pytest — NOT mypy)
+      - Delete .github/workflows/ci-cd-python.yml
+      Requires GitHub Environment `production` and BIGBASE_* secrets (Track A ops).
+    tasks:
+      - id: e10s01-t01
+        title: "Add scripts/preflight.sh wrapping just check"
+        status: done
+      - id: e10s01-t02
+        title: "Add test-build-release.yml adapted for grimoire"
+        status: done
+      - id: e10s01-t03
+        title: "Add deploy.yml with production env + BigBase deploy"
+        status: done
+      - id: e10s01-t04
+        title: "Delete ci-cd-python.yml"
+        status: done
+    verify:
+      - "test -f .github/workflows/test-build-release.yml"
+      - "test -f .github/workflows/deploy.yml"
+      - "test -f scripts/preflight.sh"
+      - "test ! -f .github/workflows/ci-cd-python.yml"
+      - "grep -q 'name: Test Build Release' .github/workflows/test-build-release.yml"
+      - "grep -q 'Test Build Release' .github/workflows/deploy.yml"
+      - "grep -q 'APP_TYPE: python' .github/workflows/test-build-release.yml"
+      - "grep -q 'grimoire.bigbase.click' .github/workflows/deploy.yml"
+
+  - id: e10s02
+    title: "Docs pair renamed: test-build-release-docs + deploy-docs"
+    status: done
+    bcps: 2
+    description: |
+      App + docs cannot share the fixed v3 filenames in one repo. Commit to renamed pair:
+      - test-build-release-docs.yml with name: "Test Build Release Docs"
+      - deploy-docs.yml with workflow_run.workflows: ["Test Build Release Docs"]
+      Source: test-build-release-pages-mkdocs.yml + deploy-pages-mkdocs.yml
+      MkDocs config path remains docs/user/mkdocs.yml (not docs/mkdocs.yml).
+      Delete .github/workflows/ci-cd-pages-mkdocs.yml.
+      Remains GitHub Pages (github-pages env); no BigBase secrets.
+    tasks:
+      - id: e10s02-t01
+        title: "Add test-build-release-docs.yml"
+        status: done
+      - id: e10s02-t02
+        title: "Add deploy-docs.yml listening for Test Build Release Docs"
+        status: done
+      - id: e10s02-t03
+        title: "Delete ci-cd-pages-mkdocs.yml"
+        status: done
+    verify:
+      - "test -f .github/workflows/test-build-release-docs.yml"
+      - "test -f .github/workflows/deploy-docs.yml"
+      - "test ! -f .github/workflows/ci-cd-pages-mkdocs.yml"
+      - "grep -q 'name: Test Build Release Docs' .github/workflows/test-build-release-docs.yml"
+      - "grep -q 'Test Build Release Docs' .github/workflows/deploy-docs.yml"
+      - "grep -q 'docs/user/mkdocs.yml' .github/workflows/test-build-release-docs.yml"
