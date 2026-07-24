@@ -1,3 +1,10 @@
+# [0.4.0](https://github.com/danielvm-git/grimoire/compare/v0.3.9...v0.4.0) (2026-07-24)
+
+
+### Features
+
+* **checks:** add CI/CD pipeline audit check ([3df4db5](https://github.com/danielvm-git/grimoire/commit/3df4db5249b14b0e4cb644cab7276eb3eca225c0))
+
 ## [0.3.9](https://github.com/danielvm-git/grimoire/compare/v0.3.8...v0.3.9) (2026-07-13)
 
 
