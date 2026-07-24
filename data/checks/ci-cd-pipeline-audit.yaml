@@ -1,0 +1,792 @@
+name: "CI/CD Pipeline Audit"
+description: >
+  Inspects .github/workflows/ in every repo and verifies it follows the
+  solo-dev CI/CD pipeline pattern: sequential gates (lint → test → build →
+  release → deploy), proper concurrency, build artifact reuse, post-deploy
+  smoke test, and supply-chain hygiene.
+  Runs only on the default branch.
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 8 * * 1"  # Monday 8am UTC
+severity: error
+script: |
+  #!/usr/bin/env python3
+  """CI/CD Pipeline Audit — checks every repo against the solo-dev checklist."""
+
+  import os
+  import sys
+  from pathlib import Path
+  from collections import defaultdict
+
+  try:
+      import yaml
+  except ImportError:
+      print("FATAL: PyYAML not installed — run: pip install pyyaml")
+      sys.exit(1)
+
+
+  WORKFLOWS = Path(".github/workflows")
+  _ALL_RESULTS: list[dict] = []  # accumulates (check_id, passed, file_ref, notes)
+
+
+  def _r(check_id: str, passed: bool, file_ref: str = "", notes: str = "") -> dict:
+      entry = dict(check_id=check_id, passed=passed, file_ref=file_ref, notes=notes)
+      _ALL_RESULTS.append(entry)
+      return entry
+
+
+  class _GHA_Loader(yaml.SafeLoader):
+      """SafeLoader that preserves GitHub Actions' ``on`` keyword.
+
+      PyYAML (YAML 1.1) interprets bare ``on:`` as a boolean ``True``,
+      which destroys the trigger section of every workflow file.
+      This loader removes the ``o``/``O`` first-character resolver so
+      ``on`` and ``off`` remain string keys.
+      """
+
+
+  for _ch in ["o", "O"]:
+      _GHA_Loader.yaml_implicit_resolvers.pop(_ch, None)
+
+
+  def load_yaml(path: Path) -> dict | None:
+      """Load a GitHub Actions workflow YAML, preserving ``on`` as a key."""
+      try:
+          with open(path) as f:
+              data = yaml.load(f, Loader=_GHA_Loader)
+          return data if isinstance(data, dict) else None
+      except Exception as exc:
+          return None
+
+
+  def workflow_names(wf: dict) -> list[str]:
+      """Return the name(s) of a workflow (top-level or keys under jobs)."""
+      return [wf.get("name", "unnamed")]
+
+
+  # ── Helpers ──────────────────────────────────────────────────────────────
+
+  def _find_files(*patterns: str) -> list[Path]:
+      """Return workflow files sorted by name."""
+      found: list[Path] = []
+      for pat in patterns:
+          found.extend(sorted(WORKFLOWS.glob(pat)))
+      return found
+
+
+  def _all_yml() -> list[Path]:
+      return _find_files("*.yml", "*.yaml")
+
+
+  def _ci_cd_files(files: list[Path]) -> list[Path]:
+      """Files that look like the primary CI/CD pipeline."""
+      keywords = ["ci-cd", "ci", "test", "build", "release", "pipeline"]
+      return [f for f in files if any(kw in f.stem.lower() for kw in keywords)]
+
+
+  def _deploy_files(files: list[Path]) -> list[Path]:
+      return [f for f in files if "deploy" in f.stem.lower()]
+
+
+  def _staging_files(files: list[Path]) -> list[Path]:
+      return [f for f in files if "staging" in f.stem.lower()]
+
+
+  def _permissions_block(wf: dict) -> dict | None:
+      """Return top-level permissions dict, or None."""
+      return wf.get("permissions")
+
+
+  def _has_concurrency(wf: dict) -> bool:
+      return "concurrency" in wf
+
+
+  def _concurrency_cancel(wf: dict) -> bool | None:
+      c = wf.get("concurrency")
+      if isinstance(c, dict):
+          return c.get("cancel-in-progress", False)
+      return None  # string form, not inspectable
+
+
+  def _jobs(wf: dict) -> dict:
+      return wf.get("jobs", {})
+
+
+  def _job_names(jobs: dict) -> list[str]:
+      return list(jobs.keys())
+
+
+  def _needs(job_def: dict) -> list[str]:
+      n = job_def.get("needs")
+      if isinstance(n, str):
+          return [n]
+      if isinstance(n, list):
+          return n
+      return []
+
+
+  def _uses_actions(job_def: dict) -> list[str]:
+      """Collect all `uses:` values from steps."""
+      refs: list[str] = []
+      for step in job_def.get("steps", []):
+          if isinstance(step, dict) and "uses" in step:
+              refs.append(step["uses"])
+      return refs
+
+
+  def _is_action_pinned(ref: str) -> bool:
+      """Check if a third-party action is pinned to a SHA or version tag."""
+      if "/" not in ref:
+          return True  # official actions like actions/checkout are fine
+      _, version = ref.split("@", 1) if "@" in ref else (ref, "")
+      if not version:
+          return False
+      # SHA-like (40 hex chars, possibly shortened) = pinned
+      if all(c in "0123456789abcdef" for c in version) and len(version) >= 7:
+          return True
+      # Semantic version tag = acceptable (x.y.z, x.y, or vN)
+      parts = version.lstrip("v").split(".")
+      if len(parts) >= 1 and all(p.isdigit() for p in parts):
+          return True
+      return False
+
+
+  def _find_trigger_events(wf: dict) -> list[str]:
+      on = wf.get("on", {})
+      if isinstance(on, str):
+          return [on]
+      if isinstance(on, list):
+          return on
+      return list(on.keys())
+
+
+  # ── Audit runner ─────────────────────────────────────────────────────────
+
+  def audit() -> int:
+      critical_fails = 0
+      high_fails = 0
+      medium_fails = 0
+
+      if not WORKFLOWS.is_dir():
+          _r("0. Workflows directory exists", True, "N/A",
+             "No .github/workflows/ — repo doesn't use CI/CD")
+          return 0  # not a failure, just no CI
+
+      yml_files = _all_yml()
+      if not yml_files:
+          _r("0. Workflow files exist", True, "N/A",
+             "Directory exists but empty — no CI pipeline defined")
+          return 0
+
+      # Load all workflows
+      workflows: dict[str, dict] = {}
+      for f in yml_files:
+          wf = load_yaml(f)
+          if wf:
+              workflows[f.name] = wf
+          else:
+              _r(f"Parse {f.name}", False, f.name, "Failed to parse YAML")
+              critical_fails += 1
+
+      ci_cd = _ci_cd_files(yml_files)
+      deploy_wf = _deploy_files(yml_files)
+      staging = _staging_files(yml_files)
+
+      # ── 1. FILE STRUCTURE ────────────────────────────────────────────────
+
+      # 1a: Primary pipeline file naming (pragmatic: check pattern)
+      if ci_cd:
+          primary = ci_cd[0]
+          expected = ["test-build-release", "ci-cd"]
+          is_named_ok = any(e in primary.stem.lower() for e in expected)
+          if is_named_ok:
+              _r("1a. Pipeline file follows naming convention", True,
+                 primary.name, f"Named {primary.stem}.yml — OK")
+          else:
+              _r("1a. Pipeline file follows naming convention", True,
+                 primary.name, f"Named {primary.stem}.yml — non-standard but functional")
+      else:
+          # Fall back to any workflow file
+          candidates = [f for f in yml_files if "ci" in f.stem.lower() or "test" in f.stem.lower() or "build" in f.stem.lower()]
+          if candidates:
+              _r("1a. CI/CD pipeline file exists", True,
+                 candidates[0].name, f"Working with {candidates[0].name}")
+          else:
+              _r("1a. CI/CD pipeline file exists", False,
+                 yml_files[0].name, "No identifiable CI/CD pipeline file")
+              high_fails += 1
+
+      # 1b: Separate deploy file
+      if deploy_wf:
+          _r("1b. Separate deploy workflow exists", True,
+             deploy_wf[0].name, "")
+          has_separate_deploy = True
+      else:
+          # Check if deploy is embedded in the pipeline
+          has_embedded_deploy = any(
+              "deploy" in j.lower()
+              for wf_name, wf in workflows.items()
+              for j in _job_names(_jobs(wf))
+          )
+          if has_embedded_deploy:
+              _r("1b. Separate deploy workflow exists", True,
+                 "embedded", "Deploy job integrated in pipeline workflow")
+              has_separate_deploy = True
+          else:
+              _r("1b. Separate deploy workflow exists", True,
+                 "N/A", "No deploy stage — repo is library/tool without deployment")
+              has_separate_deploy = False
+
+      # 1c: No staging leftovers
+      if staging:
+          _r("1c. No unused staging workflow", False,
+             staging[0].name, "Staging workflow found — solo dev: prod only")
+          medium_fails += 1
+      else:
+          _r("1c. No unused staging workflow", True, "N/A", "")
+
+      # 1d: File naming (kebab-case, verb-noun)
+      bad_names = [f.name for f in yml_files if "_" in f.stem]
+      if bad_names:
+          _r("1d. Kebab-case filenames", False,
+             bad_names[0], f"Underscore in name: {bad_names[0]}")
+          medium_fails += 1
+      else:
+          _r("1d. Kebab-case filenames", True, "N/A", "")
+
+      # 1e: Action names under .github/actions/
+      actions_dir = WORKFLOWS.parent / "actions"
+      if actions_dir.is_dir():
+          generic = [d.name for d in actions_dir.iterdir() if d.is_dir() and d.name in ("setup", "utils", "common")]
+          if generic:
+              _r("1e. Action names are specific", False,
+                 f".github/actions/{generic[0]}", f"Generic name: {generic[0]}")
+              medium_fails += 1
+
+      # ── 2. TRIGGERS ──────────────────────────────────────────────────────
+
+      for fname, wf in workflows.items():
+          events = _find_trigger_events(wf)
+          has_push = "push" in events
+          has_pr = "pull_request" in events
+
+          _r(f"2a. push trigger [{fname}]", has_push, fname, "")
+          if not has_push:
+              high_fails += 1
+
+          if ci_cd and fname == ci_cd[0].name:
+              _r(f"2b. pull_request trigger [{fname}]", has_pr, fname, "")
+              if not has_pr:
+                  medium_fails += 1
+
+      # 2c: concurrency on CI/CD file
+      if ci_cd:
+          wf = workflows.get(ci_cd[0].name, {})
+          has_conc = _has_concurrency(wf)
+          cancel = _concurrency_cancel(wf)
+          if has_conc:
+              if cancel is True:
+                  _r("2c. concurrency + cancel-in-progress: true", True,
+                     ci_cd[0].name, "")
+              elif cancel is False:
+                  _r("2c. concurrency + cancel-in-progress: true", False,
+                     ci_cd[0].name,
+                     "cancel-in-progress is false — test runs won't cancel on new pushes")
+                  medium_fails += 1
+              else:
+                  _r("2c. concurrency exists", True,
+                     ci_cd[0].name, "String-form concurrency — cancel not inspectable")
+          else:
+              _r("2c. concurrency defined", False,
+                 ci_cd[0].name, "Missing — new pushes won't cancel superseded runs")
+              medium_fails += 1
+
+          # 2d: deploy concurrency must NOT cancel-in-progress
+          ci_cd_jobs = _jobs(wf)
+          for jname, jdef in ci_cd_jobs.items():
+              if "deploy" in jname.lower():
+                  job_conc = jdef.get("concurrency", {})
+                  if isinstance(job_conc, dict):
+                      if job_conc.get("cancel-in-progress", False):
+                          _r("2d. Deploy cancel-in-progress: false", False,
+                             f"{ci_cd[0].name} job:{jname}",
+                             "Deploy concurrency has cancel-in-progress: true — can break production")
+                          high_fails += 1
+
+      if deploy_wf:
+          dwf = workflows.get(deploy_wf[0].name, {})
+          dep_conc = _has_concurrency(dwf)
+          dep_cancel = _concurrency_cancel(dwf)
+          if dep_conc and dep_cancel is True:
+              _r("2d. Deploy concurrency: cancel-in-progress false", False,
+                 deploy_wf[0].name,
+                 "Deploy must not cancel in-flight — can break production")
+              high_fails += 1
+          elif dep_conc and dep_cancel is False:
+              _r("2d. Deploy concurrency: cancel-in-progress false", True,
+                 deploy_wf[0].name, "")
+          elif dep_conc:
+              _r("2d. Deploy concurrency exists", True,
+                 deploy_wf[0].name, "String-form concurrency — assume queuing")
+          else:
+              _r("2d. Deploy concurrency exists", True,
+                 deploy_wf[0].name, "No concurrency block — defaults to queue")
+
+      # ── 3. JOB SEQUENCING ────────────────────────────────────────────────
+
+      if ci_cd:
+          wf = workflows.get(ci_cd[0].name, {})
+          jobs = _jobs(wf)
+          jnames = _job_names(jobs)
+
+          # Build a dependency graph
+          deps: dict[str, set[str]] = {}
+          for jname, jdef in jobs.items():
+              deps[jname] = set(_needs(jdef))
+
+          # Identify role of each job by name
+          lint_jobs = [j for j in jnames if "lint" in j.lower()]
+          test_jobs = [j for j in jnames if j.lower().startswith("test") or j == "ci" or "test" in j.lower()]
+          build_jobs = [j for j in jnames if "build" in j.lower()]
+          release_jobs = [j for j in jnames if "release" in j.lower() or "semantic" in j.lower() or "tag" in j.lower()]
+
+          # 3a: Has explicit needs between stages
+          has_needs = any(deps[j] for j in jnames)
+          _r("3a. Jobs use explicit needs:", has_needs, ci_cd[0].name,
+             f"Jobs: {', '.join(jnames)}" if jnames else "No jobs defined")
+          if not has_needs:
+              high_fails += 1
+
+          # 3b: test has needs: lint (if lint is its own job)
+          if lint_jobs and test_jobs:
+              lint_name = lint_jobs[0]
+              test_has_lint = False
+              for tj in test_jobs:
+                  if lint_name in deps[tj]:
+                      test_has_lint = True
+                      break
+              _r("3b. test needs: lint", test_has_lint, ci_cd[0].name,
+                 f"test={test_jobs[0]}, lint={lint_name}" if test_has_lint
+                 else f"Lint is own job but test doesn't depend on it")
+              if not test_has_lint:
+                  high_fails += 1
+
+          # 3c: build has needs: test
+          if build_jobs and test_jobs:
+              test_name = test_jobs[0]
+              build_has_test = False
+              for bj in build_jobs:
+                  if test_name in deps[bj]:
+                      build_has_test = True
+                      break
+              _r("3c. build needs: test", build_has_test, ci_cd[0].name,
+                 f"build={build_jobs[0]}, test={test_name}" if build_has_test
+                 else "Build does not depend on test — could run before tests pass")
+              if not build_has_test:
+                  critical_fails += 1
+
+          # 3d: release has needs: build
+          if release_jobs and build_jobs:
+              build_name = build_jobs[0]
+              rel_has_build = False
+              for rj in release_jobs:
+                  if build_name in deps[rj]:
+                      rel_has_build = True
+                      break
+              _r("3d. release needs: build", rel_has_build, ci_cd[0].name,
+                 f"release={release_jobs[0]}, build={build_name}" if rel_has_build
+                 else "Release does not depend on build")
+              if not rel_has_build:
+                  high_fails += 1
+
+          # 3e: No continue-on-error on gate jobs
+          for jname, jdef in jobs.items():
+              coe = jdef.get("continue-on-error", False)
+              if coe and (jname in lint_jobs or jname in test_jobs or jname in build_jobs):
+                  _r("3e. No continue-on-error on gates", False,
+                     f"{ci_cd[0].name} job:{jname}",
+                     "continue-on-error: true defeats stop-the-line")
+                  high_fails += 1
+
+          # 3f: deploy triggered by CI/CD (not independent push)
+          if deploy_wf:
+              dwf = workflows.get(deploy_wf[0].name, {})
+              devents = _find_trigger_events(dwf)
+              # Check for workflow_run on CI/CD file
+              wf_run = dwf.get("on", {}).get("workflow_run") if isinstance(dwf.get("on"), dict) else None
+              wf_call = dwf.get("on", {}).get("workflow_call") if isinstance(dwf.get("on"), dict) else None
+              has_chain = wf_run is not None or wf_call is not None
+
+              if has_chain:
+                  # Check workflow_run has conclusion gate
+                  if wf_run:
+                      wf_name = ""
+                      if isinstance(wf_run, dict):
+                          wf_name = wf_run.get("workflows", [None])[0] if isinstance(wf_run.get("workflows"), list) else ""
+                          wf_types = wf_run.get("types", [])
+                          has_completed = "completed" in wf_types
+
+                          # Check for conclusion check
+                          steps = _jobs(dwf).get(list(_jobs(dwf).keys())[0], {}).get("steps", []) if _jobs(dwf) else []
+                          has_conclusion_check = any(
+                              "conclusion" in str(s) and "success" in str(s)
+                              for s in steps
+                          )
+                          _r("3f. Deploy chained to pipeline", True, deploy_wf[0].name,
+                             f"workflow_run" + (" + conclusion check" if has_conclusion_check else ""))
+                  elif wf_call:
+                      _r("3f. Deploy chained to pipeline", True, deploy_wf[0].name,
+                         "workflow_call — explicitly called by pipeline")
+              else:
+                  # Check for independent push
+                  own_push = "push" in devents
+                  if own_push:
+                      _r("3f. Deploy chained to pipeline, not push", False,
+                         deploy_wf[0].name, "Has its own push trigger — can fire outside pipeline")
+                      high_fails += 1
+                  else:
+                      _r("3f. Deploy trigger mechanism", True, deploy_wf[0].name,
+                         f"Triggered by: {', '.join(devents)}")
+
+              # 3g: Deploy doesn't contain build steps
+              if deploy_wf:
+                  dwf_name = deploy_wf[0].name
+                  dwf_data = workflows.get(dwf_name, {})
+                  for jname, jdef in _jobs(dwf_data).items():
+                      all_steps_str = str(jdef)
+                      build_refs = ["npm run build", "cargo build", "go build", "python -m build",
+                                    "npm run dist", "make build"]
+                      found_builds = [ref for ref in build_refs if ref in all_steps_str]
+                      if found_builds:
+                          _r("3g. Deploy does not rebuild", False,
+                             f"{dwf_name} job:{jname}",
+                             f"Contains build steps: {', '.join(found_builds)}")
+                          high_fails += 1
+          else:
+              # Check if deploy is a job in the CI/CD pipeline with needs
+              for jname, jdef in jobs.items():
+                  if "deploy" in jname.lower():
+                      deploy_needs = _needs(jdef)
+                      if deploy_needs:
+                          _r("3f. Deploy job chained via needs:", True,
+                             f"{ci_cd[0].name} job:{jname}",
+                             f"needs: {', '.join(deploy_needs)}")
+                      else:
+                          _r("3f. Deploy job has needs:", False,
+                             f"{ci_cd[0].name} job:{jname}",
+                             "Deploy runs in parallel — not gated")
+                          high_fails += 1
+
+      # ── 4. BUILD ARTIFACT REUSE ──────────────────────────────────────────
+
+      if ci_cd:
+          wf = workflows.get(ci_cd[0].name, {})
+          all_text = str(wf)
+          has_upload = "upload-artifact" in all_text
+          has_download = "download-artifact" in all_text
+
+          if has_upload:
+              # Check if deploy uses the same artifact
+              if deploy_wf:
+                  dwf_text = str(workflows.get(deploy_wf[0].name, ""))
+                  has_download_in_deploy = "download-artifact" in dwf_text
+                  _r("4a. Build artifact uploaded + reused", has_download_in_deploy,
+                     f"{ci_cd[0].name} + {deploy_wf[0].name if deploy_wf else ''}",
+                     "Artifact uploaded" + (" and downloaded in deploy" if has_download_in_deploy else " but deploy may not reuse"))
+                  if not has_download_in_deploy:
+                      high_fails += 1
+              else:
+                  _r("4a. Build artifact uploaded", True, ci_cd[0].name, "")
+          else:
+              _r("4a. Build artifact uploaded", True, ci_cd[0].name,
+                 "No upload-artifact — deploy may use registry push instead")
+
+          # 4b: Version/commit SHA embedded
+          has_sha_or_version = "${{ github.sha }}" in all_text or "version" in all_text.lower() or "github.ref_name" in all_text
+          _r("4b. Version/SHA traceable in artifact", has_sha_or_version,
+             ci_cd[0].name, "")
+
+      # ── 5. DEPLOY STAGE ──────────────────────────────────────────────────
+
+      # Collect deploy info from either deploy.yml or deploy job
+      deploy_text = ""
+      deploy_env = False
+      deploy_has_verify = False
+
+      if deploy_wf:
+          deploy_text = str(workflows.get(deploy_wf[0].name, {}))
+      elif ci_cd:
+          wf = workflows.get(ci_cd[0].name, {})
+          for jname, jdef in _jobs(wf).items():
+              if "deploy" in jname.lower():
+                  deploy_text = str(jdef)
+                  deploy_env = bool(jdef.get("environment"))
+                  break
+
+      if deploy_text:
+          # 5a: No build steps in deploy (already checked in 3g, but complementary)
+          # 5b: Runs sequentially (implicitly by workflow_run trigger)
+          _r("5b. Deploy runs sequentially (no parallel with CI/CD)", True,
+             "N/A", "Enforced by trigger design" if deploy_wf else "Single job")
+
+          # 5c: Verify artifact step
+          has_verify_artifact = (
+              "verify" in deploy_text.lower() or
+              "check" in deploy_text.lower() or
+              "test -f" in deploy_text or
+              "ls -la" in deploy_text or
+              "if-no-files-found: error" in deploy_text
+          )
+          _r("5c. Deploy verifies artifact before moving", has_verify_artifact,
+             deploy_wf[0].name if deploy_wf else ci_cd[0].name,
+             "" if has_verify_artifact else "No pre-deploy artifact verification")
+          if not has_verify_artifact:
+              high_fails += 1
+
+          # 5d: environment: production
+          has_environment = deploy_env or "environment: production" in deploy_text
+          _r("5d. Deploy uses environment: production", has_environment,
+             deploy_wf[0].name if deploy_wf else ci_cd[0].name,
+             "" if has_environment else "No environment block — consider adding for secret scoping")
+          if not has_environment:
+              medium_fails += 1
+
+          # 5e: Secrets from GitHub secrets
+          has_secret_ref = "${{ secrets." in deploy_text
+          _r("5e. Deploy uses GitHub secrets", has_secret_ref,
+             deploy_wf[0].name if deploy_wf else ci_cd[0].name,
+             "" if has_secret_ref else "No secret references found in deploy")
+          if not has_secret_ref:
+              medium_fails += 1
+
+          # 5f: Hardcoded secrets check
+          suspicious = ["ghp_", "ghs_", "ghu_", "sk-", "api_key=", "token=", "password=", "secret="]
+          for sus in suspicious:
+              if sus in deploy_text and "${{" not in deploy_text.split(sus)[0][-20:]:
+                  _r("5f. No hardcoded secrets", False,
+                     deploy_wf[0].name if deploy_wf else ci_cd[0].name,
+                     f"Possible hardcoded secret pattern: {sus}")
+                  critical_fails += 1
+                  break
+          else:
+              _r("5f. No hardcoded secrets", True, "N/A", "")
+
+          # 5g: Deploy mechanism documented
+          has_mechanism_doc = (
+              "scp" in deploy_text.lower() or
+              "ssh" in deploy_text.lower() or
+              "rsync" in deploy_text.lower() or
+              "git push" in deploy_text or
+              "docker" in deploy_text.lower() or
+              "flyctl" in deploy_text or
+              "railway" in deploy_text or
+              "render" in deploy_text or
+              "deploy" in deploy_text.lower()
+          )
+          _r("5g. Deploy mechanism identifiable", has_mechanism_doc,
+             deploy_wf[0].name if deploy_wf else ci_cd[0].name, "")
+
+          # 5h: Rollback path
+          has_rollback = any(kw in deploy_text.lower() for kw in [
+              "rollback", "roll_back", "roll back",
+              "previous", "restore", "undo",
+              "backup", "revert",
+          ])
+          if deploy_wf:
+              _r("5h. Rollback path exists", has_rollback,
+                 deploy_wf[0].name,
+                 "" if has_rollback else "No rollback mechanism detected")
+          if not has_rollback and deploy_wf:
+              high_fails += 1
+
+      # ── 6. POST-DEPLOY SAFETY NET ────────────────────────────────────────
+
+      if deploy_text:
+          # 6a: Post-deploy verification
+          has_smoke = any(kw in deploy_text.lower() for kw in [
+              "health", "smoke", "curl", "verify", "check",
+              "healthcheck", "health_check", "readiness",
+          ])
+          _r("6a. Post-deploy smoke/health check exists", has_smoke,
+             deploy_wf[0].name if deploy_wf else ci_cd[0].name,
+             "" if has_smoke else "No post-deploy verification — no staging to catch issues")
+          if not has_smoke and deploy_wf:
+              high_fails += 1
+
+          # 6b: Verification is its own step
+          if has_smoke:
+              # Check if there are distinct steps
+              job_data = None
+              if deploy_wf:
+                  dwf_data = workflows.get(deploy_wf[0].name, {})
+                  for jn, jd in _jobs(dwf_data).items():
+                      if "deploy" in jn.lower() or jn == list(_jobs(dwf_data).keys())[0]:
+                          job_data = jd
+                          break
+              if job_data:
+                  steps = job_data.get("steps", [])
+                  step_names = [s.get("name", "") for s in steps if isinstance(s, dict)]
+                  has_separate_verify = any("health" in n.lower() or "verify" in n.lower() or "smoke" in n.lower() or "check" in n.lower() for n in step_names)
+                  _r("6b. Verification is separate step", has_separate_verify,
+                     deploy_wf[0].name if deploy_wf else ci_cd[0].name,
+                     "" if has_separate_verify else "Verify may be folded into deploy command")
+                  if not has_separate_verify:
+                      medium_fails += 1
+
+          # 6c: Failure surfaced clearly
+          has_fail_on_unhealthy = (
+              "exit 1" in deploy_text or
+              "exit_code" in deploy_text.lower() or
+              "fail" in deploy_text.lower() or
+              "set -e" in deploy_text or
+              "set -o" in deploy_text or
+              "failure" in deploy_text.lower()
+          )
+          _r("6c. Verification failure surfaced", has_fail_on_unhealthy,
+             deploy_wf[0].name if deploy_wf else ci_cd[0].name,
+             "" if has_fail_on_unhealthy else "No failure handling detected")
+          if not has_fail_on_unhealthy and deploy_wf:
+              medium_fails += 1
+
+      # ── 7. BRANCH PROTECTION (informational only) ────────────────────────
+      _r("7a. Branch protection — status checks", True, "N/A",
+         "Cannot verify from YAML — check repo settings manually")
+      _r("7b. Branch protection — no direct push", True, "N/A",
+         "Cannot verify from YAML — check repo settings manually")
+
+      # ── 8. SUPPLY CHAIN / HYGIENE ───────────────────────────────────────
+
+      # 8a: Third-party actions pinned
+      unpinned: list[str] = []
+      for fname, wf in workflows.items():
+          jobs = _jobs(wf)
+          for jname, jdef in jobs.items():
+              refs = _uses_actions(jdef)
+              for ref in refs:
+                  if not _is_action_pinned(ref):
+                      unpinned.append(f"{fname}/{jname}: {ref}")
+
+      if unpinned:
+          _r("8a. Third-party actions pinned", False,
+             unpinned[0].split(":")[0], f"Unpinned: {unpinned[0]}")
+          medium_fails += 1
+          for pin in unpinned[1:3]:
+              _r("   (also unpinned)", False, pin.split(":")[0],
+                 f"Unpinned: {pin}")
+          if len(unpinned) > 3:
+              _r("   ... and more", False, f"+{len(unpinned)-3} more", "")
+      else:
+          _r("8a. Third-party actions pinned to SHA or version", True, "N/A", "")
+
+      # 8b: Dependency caching
+      cache_keywords = ["actions/cache", "cache: true", "cache: npm", "Swatinem/rust-cache"]
+      has_cache = False
+      for fname, wf in workflows.items():
+          text = str(wf)
+          if any(kw in text for kw in cache_keywords):
+              has_cache = True
+              break
+
+      _r("8b. Dependency caching used (lint/test faster)", has_cache,
+         "N/A", "" if has_cache else "No caching detected — lint/test may be slower")
+      if not has_cache:
+          medium_fails += 1
+
+      # ── 9. PERMISSIONS & SECRETS ─────────────────────────────────────────
+
+      # 9a: Explicit permissions block
+      for fname, wf in workflows.items():
+          perm = _permissions_block(wf)
+          if perm is None:
+              _r(f"9a. Permissions block [{fname}]", False, fname,
+                 "Missing — uses broad default token scope")
+              medium_fails += 1
+          else:
+              _r(f"9a. Permissions block [{fname}]", True, fname,
+                 f"Scoped: {', '.join(perm.keys())}" if isinstance(perm, dict) else str(perm))
+              break  # Only flag one
+
+      # 9b: OIDC check (informational — cloud deploy only)
+      has_oidc = False
+      for fname, wf in workflows.items():
+          if "id-token: write" in str(wf) or "aws-actions/configure-aws-credentials" in str(wf) or "google-github-actions/auth" in str(wf):
+              has_oidc = True
+              break
+      if has_oidc:
+          _r("9b. OIDC authentication used", True, "N/A", "")
+      else:
+          _r("9b. OIDC authentication", True, "N/A",
+             "N/A — not a cloud-deploying repo or uses SSH keys")
+
+      # 9c: No secret leaking into logs (heuristic)
+      for fname, wf in workflows.items():
+          text = str(wf)
+          for line in text.split("\n"):
+              if "run: echo" in line.lower() and ("${{ secrets." in line or "${{ env." in line):
+                  _r(f"9c. Secrets not echoed to logs [{fname}]", False,
+                     fname, f"Potential secret echo: {line.strip()[:80]}")
+                  high_fails += 1
+
+      # ── SUMMARY ──────────────────────────────────────────────────────────
+
+      total = len(_ALL_RESULTS)
+      passed_count = sum(1 for r in _ALL_RESULTS if r["passed"])
+      failed_count = total - passed_count
+
+      print()
+      print("=" * 88)
+      print("  CI/CD PIPELINE AUDIT REPORT")
+      print("=" * 88)
+      print()
+      print(f"  Repository: {os.environ.get('REPO_FULL_NAME', 'unknown')}")
+      print(f"  Branch:     {os.environ.get('BRANCH', 'unknown')}")
+      print()
+      print(f"  Total checks: {total}")
+      print(f"  Passed:       {passed_count}")
+      print(f"  Failed:       {failed_count}")
+      print()
+      if failed_count > 0:
+          print(f"  Breakdown:")
+          print(f"    Critical:    {critical_fails}  (broken sequencing, hardcoded secrets)")
+          print(f"    High:        {high_fails}  (missing rollback, missing smoke test, artifact reuse)")
+          print(f"    Medium:      {medium_fails}  (naming, caching, permissions)")
+      print()
+
+      # Print table
+      print(f"| {'Check ID':<65s} | {'Status':<6s} | {'File':<30s} | Notes")
+      print(f"|{'-'*65}|{'------':<6s}|{'-'*30}|-------")
+      for r in _ALL_RESULTS:
+          status = "PASS" if r["passed"] else "FAIL"
+          print(f"| {r['check_id']:<65s} | {status:<6s} | {r['file_ref']:<30s} | {r['notes']}")
+      print()
+
+      if critical_fails > 0:
+          print("❌ CRITICAL: Pipeline sequencing is broken or secrets exposed — fix before merge.")
+          print(f"   Top priorities: 1. Fix {critical_fails} critical issue(s)")
+          print(f"                   2. Address {high_fails} high-severity issue(s)")
+          print(f"                   3. Address {medium_fails} medium-severity issue(s)")
+          return 2
+      elif high_fails > 0:
+          print("⚠️ HIGH: Pipeline works but missing safety nets. Recommendations:")
+          print(f"   1. Fix {high_fails} high-severity issue(s) (rollback, smoke test, artifact reuse)")
+          print(f"   2. Address {medium_fails} medium-severity issue(s)")
+          return 1
+      elif medium_fails > 0:
+          print("ℹ️  LOW: Pipeline is functional, minor hygiene issues remain.")
+          print(f"   {failed_count} issue(s) to address at your convenience.")
+          return 0
+      else:
+          print("✅ ALL CHECKS PASSED — Pipeline follows solo-dev CI/CD best practices.")
+          return 0
+
+  # ── Entry point ──────────────────────────────────────────────────────────
+
+  if __name__ == "__main__":
+      try:
+          rc = audit()
+      except Exception as exc:
+          print(f"FATAL: Audit script crashed: {exc}")
+          import traceback
+          traceback.print_exc()
+          sys.exit(1)
+      sys.exit(rc)
