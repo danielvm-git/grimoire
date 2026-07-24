@@ -1,0 +1,12 @@
+id: e09
+title: Fleet Checks
+wsjf: 3.0
+total_bcps: 2
+status: in_progress
+stories:
+  - id: e09s08
+    title: CI/CD migration status check
+    bcps: 2
+    status: done
+    spec: e09s08-ci-cd-migration.md
+    tasks: e09s08-tasks.yaml
