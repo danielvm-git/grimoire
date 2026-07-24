@@ -118,3 +118,13 @@ class TestBundledCheckDefinitions:
         assert "charmcraft fetch-lib" in charm.script
         assert charm.schedule == "0 */8 * * *"
         assert charm.enabled is True
+
+    def test_ci_cd_migration_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        migration = next((c for c in checks if c.slug == "ci-cd-migration"), None)
+        assert migration is not None
+        assert migration.name == "CI/CD Migration Status"
+        assert migration.targets.script == '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+        assert "test-build-release.yml" in migration.script
+        assert "workflow_run" in migration.script
+        assert migration.severity == "warning"
