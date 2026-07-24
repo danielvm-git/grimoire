@@ -1,0 +1,99 @@
+name: "CI/CD Migration Status"
+description: >
+  Verifies repos have migrated to the v3 CI/CD workflow pair:
+  test-build-release.yml plus a separate deploy.yml (or deploy-*.yml)
+  triggered via workflow_run. Fails when primary workflows are still
+  named ci-cd-*.yml or deploy is only embedded in a single file.
+targets:
+  # Default branch only — workflow layout is branch-invariant for this check.
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 9 * * 1"  # Monday 9am UTC
+severity: warning
+script: |
+  #!/usr/bin/env bash
+  # v3 migration detector — NOT the stale issue #2 (ci-cd-*.yml as "new") script.
+  set -euo pipefail
+
+  WF=".github/workflows"
+
+  if [ ! -d "$WF" ]; then
+    echo "WARN: No recognizable workflows (.github/workflows missing)"
+    exit 1
+  fi
+
+  shopt -s nullglob
+
+  tbr=()
+  for f in "$WF"/test-build-release.yml "$WF"/test-build-release.yaml; do
+    [ -f "$f" ] && tbr+=("$f")
+  done
+
+  deploy=()
+  for f in "$WF"/deploy.yml "$WF"/deploy.yaml "$WF"/deploy-*.yml "$WF"/deploy-*.yaml; do
+    [ -f "$f" ] && deploy+=("$f")
+  done
+
+  cicd=()
+  for f in "$WF"/ci-cd-*.yml "$WF"/ci-cd-*.yaml; do
+    [ -f "$f" ] && cicd+=("$f")
+  done
+
+  # Embedded deploy: a non-deploy-named workflow defines a top-level deploy job.
+  embedded=()
+  for f in "$WF"/*.yml "$WF"/*.yaml; do
+    base="$(basename "$f")"
+    case "$base" in
+      deploy.yml|deploy.yaml|deploy-*.yml|deploy-*.yaml) continue ;;
+    esac
+    if grep -Eq '^[[:space:]]{2}deploy:[[:space:]]*$' "$f"; then
+      embedded+=("$f")
+    fi
+  done
+
+  deploy_ok=false
+  if [ "${#tbr[@]}" -gt 0 ] && [ "${#deploy[@]}" -gt 0 ]; then
+    deploy_ok=true
+    for f in "${deploy[@]}"; do
+      if ! grep -Eq '^[[:space:]]*workflow_run:[[:space:]]*$' "$f"; then
+        echo "FAIL: ${f#"$WF"/} missing workflow_run trigger (v3 deploy must follow test-build-release)"
+        deploy_ok=false
+      fi
+      # cancel-in-progress: true is unsafe for production deploys
+      if grep -Eq 'cancel-in-progress:[[:space:]]*true' "$f"; then
+        echo "FAIL: ${f#"$WF"/} sets cancel-in-progress: true on deploy concurrency"
+        deploy_ok=false
+      fi
+    done
+  fi
+
+  if $deploy_ok && [ "${#cicd[@]}" -eq 0 ]; then
+    echo "PASS: v3 CI/CD pair present"
+    echo "  - test-build-release: ${tbr[*]#"$WF"/}"
+    echo "  - deploy: ${deploy[*]#"$WF"/}"
+    exit 0
+  fi
+
+  if [ "${#cicd[@]}" -gt 0 ] || [ "${#embedded[@]}" -gt 0 ] || [ "${#tbr[@]}" -gt 0 ] || [ "${#deploy[@]}" -gt 0 ]; then
+    echo "FAIL: Not fully migrated to v3 (test-build-release.yml + separate deploy.yml)"
+    if [ "${#cicd[@]}" -gt 0 ]; then
+      echo "  - Still using ci-cd-*.yml: ${cicd[*]#"$WF"/}"
+    fi
+    if [ "${#embedded[@]}" -gt 0 ]; then
+      echo "  - Embedded deploy job (no separate deploy workflow): ${embedded[*]#"$WF"/}"
+    fi
+    if [ "${#tbr[@]}" -eq 0 ]; then
+      echo "  - Missing test-build-release.yml"
+    fi
+    if [ "${#deploy[@]}" -eq 0 ]; then
+      echo "  - Missing separate deploy.yml / deploy-*.yml"
+    fi
+    if [ "${#cicd[@]}" -gt 0 ] && [ "${#tbr[@]}" -gt 0 ]; then
+      echo "  - Transitional: v3 files present but ci-cd-*.yml not removed yet"
+    fi
+    exit 1
+  fi
+
+  echo "WARN: No recognizable workflow pattern"
+  echo "  Expected: test-build-release.yml + deploy.yml (or deploy-*.yml)"
+  ls -1 "$WF" 2>/dev/null | sed 's/^/  - /' || true
+  exit 1
