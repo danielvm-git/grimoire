@@ -1,0 +1,113 @@
+# e09 — Fleet Check Portfolio
+# From change-request: checks discussion on 2026-07-08
+# Zero-code epic — YAML check definitions only
+
+title: "Fleet Check Portfolio"
+status: done
+depends_on: [e04]
+source: "change-request from test suite review session"
+
+stories:
+  - id: e09s01
+    title: "ci-green: default-branch CI health check"
+    status: done
+    bcps: 1
+    description: |
+      Check that the latest CI run on the default branch is passing. Targets
+      only repos with `.github/workflows/` via script targeting. Uses `gh run list`
+      to find failed runs. Severity: error — CI failures should block forward work.
+    verify:
+      - "test -f data/checks/ci-green.yaml"
+      - "python -c \"from grimoire.checks.loader import load_checks; checks=[c.slug for c in load_checks('data')]; assert 'ci-green' in checks\""
+
+  - id: e09s02
+    title: "has-readme: README.md presence check"
+    status: done
+    bcps: 1
+    description: |
+      Every repo should have a README. Targets all repos via regex: ".*".
+      Simply tests for the existence of README.md. Severity: warning — informational,
+      doesn't block anything but good to know.
+    verify:
+      - "test -f data/checks/has-readme.yaml"
+      - "python -c \"from grimoire.checks.loader import load_checks; checks=[c.slug for c in load_checks('data')]; assert 'has-readme' in checks\""
+
+  - id: e09s03
+    title: "no-todo-fixme: tech debt marker scan"
+    status: done
+    bcps: 1
+    description: |
+      Grep for TODO, FIXME, HACK markers in source files. Targets all repos via
+      regex: ".*". Skips vendor directories, node_modules, .git. Severity: warning —
+      visibility into tech debt accumulation.
+    verify:
+      - "test -f data/checks/no-todo-fixme.yaml"
+      - "grep -q 'FIXME\|TODO' data/checks/no-todo-fixme.yaml"
+
+  - id: e09s04
+    title: "no-secrets: gitleaks credential scan"
+    status: done
+    bcps: 1
+    description: |
+      Scan for leaked credentials, tokens, and API keys using gitleaks.
+      Targets all repos via regex: ".*". Requires gitleaks in workspace PATH
+      (or installs it via the script). Severity: error — leaked secrets are a
+      critical security issue.
+    verify:
+      - "test -f data/checks/no-secrets.yaml"
+      - "grep -q 'gitleaks' data/checks/no-secrets.yaml"
+
+  - id: e09s05
+    title: "lint-passes: language-aware linter check"
+    status: done
+    bcps: 2
+    description: |
+      One check that auto-detects the project language and runs the appropriate
+      linter. Script targeting via file-existence gates: pyproject.toml → ruff,
+      go.mod → golangci-lint, package.json → eslint, Cargo.toml → cargo clippy,
+      Package.swift → swiftlint. Falls back to shellcheck for shell scripts.
+      Severity: warning — lint is important but shouldn't block the dashboard.
+    verify:
+      - "test -f data/checks/lint-passes.yaml"
+      - "grep -q 'ruff\|golangci-lint\|eslint\|cargo clippy\|swiftlint\|shellcheck' data/checks/lint-passes.yaml"
+
+  - id: e09s06
+    title: "license-exists: LICENSE file presence"
+    status: done
+    bcps: 1
+    description: |
+      Verify every repo has a LICENSE file. Targets all repos via regex: ".*".
+      Severity: warning — licensing matters but isn't an emergency.
+    verify:
+      - "test -f data/checks/license-exists.yaml"
+
+  - id: e09s07
+    title: "uv-lock-fresh: upgrade severity to error"
+    status: done
+    bcps: 1
+    description: |
+      Existing check (uv-lock-fresh.yaml) is severity: warning. Upgrade to
+      severity: error so stale lockfiles show as red on the dashboard and get
+      higher backlog priority. No script changes needed.
+    verify:
+      - "grep -q 'severity: error' data/checks/uv-lock-fresh.yaml"
+
+  - id: e09s08
+    title: "ci-cd-migration: v3 workflow pair status check"
+    status: done
+    bcps: 1
+    description: |
+      Dedicated slim check (does NOT modify ci-cd-pipeline-audit.yaml) that
+      reports whether repos have migrated to the v3 CI/CD pair:
+        PASS — test-build-release.yml + separate deploy.yml/deploy-*.yml
+              (workflow_run trigger; deploy concurrency not cancel-in-progress)
+        FAIL — primary still ci-cd-*.yml, or only embedded deploy in one file
+        WARN — no recognizable workflows
+      Closes the visibility gap called out in issue #2 (detection rewritten for
+      v3; issue body’s “ci-cd-*.yml is new” logic is stale and must not be used).
+      Severity: warning. Targets: default branch of all tracked repos.
+    verify:
+      - "test -f data/checks/ci-cd-migration.yaml"
+      - "python -c \"from grimoire.checks.loader import load_checks; checks=[c.slug for c in load_checks('data')]; assert 'ci-cd-migration' in checks\""
+      - "grep -q 'test-build-release' data/checks/ci-cd-migration.yaml"
+      - "grep -q 'severity: warning' data/checks/ci-cd-migration.yaml"

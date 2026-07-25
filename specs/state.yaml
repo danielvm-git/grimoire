@@ -1,0 +1,46 @@
+# Grimoire — Session State
+# e09 Fleet Check Portfolio
+
+workflow_mode: solo-git
+
+active_flow: build_epic
+active_epic_id: e09
+active_story_id: null
+completed_epic: true
+
+epic_cycle:
+  current_step: 1
+  next_skill: null
+  story_bcps: 1
+  completed_steps: []
+  audit_result: null
+  fast_mode: true
+
+bug_cycle:
+  current_step: null
+  completed_steps: []
+
+release:
+  target_version: null
+  last_tag: null
+  last_publish: null
+  ci_verified: true
+
+metrics:
+  story_start: null
+  story_end: null
+  cycle_minutes: null
+  bcp_per_hour: null
+
+git:
+  branch: main
+  hash: null
+  pushed: false
+
+handoff:
+  last_step_completed: null
+  open_decisions: []
+  required_reading:
+    - specs/epics/e09-fleet-checks/epic.yaml
+    - specs/release-plan.yaml
+  next_skill: null

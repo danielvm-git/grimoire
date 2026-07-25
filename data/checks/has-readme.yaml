@@ -1,0 +1,14 @@
+name: "Has README"
+description: "Checks that every repo has a README.md file"
+schedule: "0 8 * * 1"
+targets:
+  regex: ".*"
+severity: warning
+script: |
+  set -e
+  if [ -f README.md ] || [ -f readme.md ] || [ -f README.rst ] || [ -f README ]; then
+    echo "PASS: README found"
+    exit 0
+  fi
+  echo "FAIL: No README.md found in repository root"
+  exit 1

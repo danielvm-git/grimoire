@@ -128,3 +128,56 @@ class TestBundledCheckDefinitions:
         assert "test-build-release.yml" in migration.script
         assert "workflow_run" in migration.script
         assert migration.severity == "warning"
+
+    def test_ci_green_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "ci-green"), None)
+        assert c is not None
+        assert c.name == "CI Green"
+        assert c.severity == "error"
+        assert "gh run list" in c.script
+
+    def test_has_readme_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "has-readme"), None)
+        assert c is not None
+        assert c.name == "Has README"
+        assert c.targets.regex == ".*"
+        assert c.severity == "warning"
+
+    def test_no_todo_fixme_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "no-todo-fixme"), None)
+        assert c is not None
+        assert c.name == "No TODO/FIXME"
+        assert c.severity == "warning"
+
+    def test_no_secrets_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "no-secrets"), None)
+        assert c is not None
+        assert c.name == "No Secrets"
+        assert c.severity == "error"
+        assert "gitleaks" in c.script
+
+    def test_lint_passes_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "lint-passes"), None)
+        assert c is not None
+        assert c.name == "Lint Passes"
+        assert c.severity == "warning"
+        assert "ruff" in c.script
+
+    def test_license_exists_loads(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "license-exists"), None)
+        assert c is not None
+        assert c.name == "License Exists"
+        assert c.targets.regex == ".*"
+        assert c.severity == "warning"
+
+    def test_uv_lock_fresh_severity_is_error(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "uv-lock-fresh"), None)
+        assert c is not None
+        assert c.severity == "error"

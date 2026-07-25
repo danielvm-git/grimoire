@@ -1,0 +1,14 @@
+name: "License Exists"
+description: "Verifies every repo has a LICENSE file"
+schedule: "0 8 * * 1"
+targets:
+  regex: ".*"
+severity: warning
+script: |
+  set -e
+  if [ -f LICENSE ] || [ -f LICENSE.md ] || [ -f LICENSE.txt ] || [ -f COPYING ]; then
+    echo "PASS: License file found"
+    exit 0
+  fi
+  echo "FAIL: No LICENSE file found in repository root"
+  exit 1

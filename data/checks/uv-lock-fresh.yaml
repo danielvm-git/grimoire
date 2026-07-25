@@ -3,7 +3,7 @@ description: "Checks whether running uv lock would produce any changes to uv.loc
 schedule: "0 */8 * * *"
 targets:
   script: "find . -name 'uv.lock' -print -quit | grep -q ."
-severity: warning
+severity: error
 script: |
   set -e
   unset UV_FROZEN
