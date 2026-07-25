@@ -1,0 +1,79 @@
+# Grimoire — Release Plan
+# Migrated from docs/specs/00–07 on 2026-07-08
+# All epics are done — this is a retrospective release index.
+
+release:
+  codename: "initial"
+  bump_hint: minor
+  version: "0.1.8"  # mirror from pyproject.toml — not authoritative (git tags are)
+
+epics:
+  - id: e01
+    title: "Project Scaffolding & Configuration"
+    file: specs/epics/e01-scaffolding/epic.yaml
+    wsjf: 80
+    bcps: 16
+    status: done
+
+  - id: e02
+    title: "GitHub Data Service"
+    file: specs/epics/e02-github-service/epic.yaml
+    wsjf: 95
+    bcps: 30
+    status: done
+
+  - id: e03
+    title: "Repository Workspace Manager"
+    file: specs/epics/e03-workspace/epic.yaml
+    wsjf: 60
+    bcps: 11
+    status: done
+
+  - id: e04
+    title: "Checks Engine"
+    file: specs/epics/e04-checks-engine/epic.yaml
+    wsjf: 75
+    bcps: 22
+    status: done
+
+  - id: e05
+    title: "Actions Engine"
+    file: specs/epics/e05-actions-engine/epic.yaml
+    wsjf: 70
+    bcps: 16
+    status: done
+
+  - id: e06
+    title: "Web Application"
+    file: specs/epics/e06-web-application/epic.yaml
+    wsjf: 90
+    bcps: 31
+    status: done
+
+  - id: e07
+    title: "Observability & DevOps"
+    file: specs/epics/e07-observability/epic.yaml
+    wsjf: 55
+    bcps: 12
+    status: done
+
+  - id: e09
+    title: "Fleet Check Portfolio"
+    file: specs/epics/e09-fleet-checks/epic.yaml
+    wsjf: 85
+    bcps: 8
+    status: done
+
+  - id: e08
+    title: "Test Hardening"
+    file: specs/epics/e08-test-hardening/epic.yaml
+    wsjf: 60
+    bcps: 14
+    status: done
+
+  - id: e10
+    title: "CI/CD v3 Migration"
+    file: specs/epics/e10-ci-v3-migration/epic.yaml
+    wsjf: 90
+    bcps: 5
+    status: done

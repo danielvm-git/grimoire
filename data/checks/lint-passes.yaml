@@ -1,0 +1,58 @@
+name: "Lint Passes"
+description: >
+  Auto-detects project language and runs the appropriate linter.
+  Supported: Python (ruff), Go (golangci-lint), JavaScript/TypeScript (eslint),
+  Rust (cargo clippy), Swift (swiftlint), Shell (shellcheck).
+  Falls back gracefully if the linter is not installed.
+schedule: "0 */8 * * *"
+targets:
+  regex: ".*"
+severity: warning
+script: |
+  set -e
+  run_lint() {
+    local tool="$1" name="$2" shift 2
+    if ! command -v "$tool" &>/dev/null; then
+      echo "WARN: $name not installed, skipping"
+      return 0
+    fi
+    echo "Running $name ..."
+    "$@" || { echo "FAIL: $name reported errors"; return 1; }
+    echo "PASS: $name clean"
+  }
+
+  rc=0
+
+  if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then
+    run_lint ruff "ruff" ruff check . || rc=1
+  fi
+
+  if [ -f go.mod ]; then
+    run_lint golangci-lint "golangci-lint" golangci-lint run ./... || rc=1
+  fi
+
+  if [ -f package.json ]; then
+    if [ -d node_modules ]; then
+      run_lint eslint "eslint" npx eslint . || rc=1
+    else
+      echo "WARN: node_modules not found, skipping eslint"
+    fi
+  fi
+
+  if [ -f Cargo.toml ]; then
+    run_lint cargo "cargo clippy" cargo clippy -- -D warnings || rc=1
+  fi
+
+  if [ -f Package.swift ]; then
+    run_lint swiftlint "swiftlint" swiftlint lint --strict || rc=1
+  fi
+
+  # Fallback: shellcheck on .sh files
+  if [ -z "$(ls pyproject.toml go.mod package.json Cargo.toml Package.swift 2>/dev/null)" ]; then
+    sh_files="$(find . -name '*.sh' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' 2>/dev/null || true)"
+    if [ -n "$sh_files" ]; then
+      run_lint shellcheck "shellcheck" shellcheck $sh_files || rc=1
+    fi
+  fi
+
+  exit $rc

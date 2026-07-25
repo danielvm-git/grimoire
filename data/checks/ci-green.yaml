@@ -1,0 +1,23 @@
+name: "CI Green"
+description: >
+  Checks that the latest CI run on the default branch is passing.
+  Uses gh run list to find failed workflow runs.
+  Targets only repos with .github/workflows/ via script targeting.
+schedule: "0 */8 * * *"
+targets:
+  script: '[ -d .github/workflows ]'
+severity: error
+script: |
+  set -e
+  if ! command -v gh &>/dev/null; then
+    echo "gh CLI not installed, skipping"
+    exit 0
+  fi
+  failed="$(gh run list --branch "$DEFAULT_BRANCH" --status failure --limit 1 --json databaseId --jq 'length')"
+  if [ "$failed" -gt 0 ]; then
+    echo "FAIL: Latest CI run on $DEFAULT_BRANCH is failing"
+    gh run list --branch "$DEFAULT_BRANCH" --status failure --limit 3 --json name,conclusion,createdAt,url \
+      --jq '.[] | "  - \(.name): \(.conclusion) (\(.createdAt)) \(.url)"'
+    exit 1
+  fi
+  echo "PASS: No failed CI runs on $DEFAULT_BRANCH"
