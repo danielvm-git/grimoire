@@ -20,14 +20,22 @@ from grimoire.config import (
 
 
 def _xdg_expected_config_dir(home: Path) -> Path:
-    """Return the expected XDG config directory for the current platform."""
+    """Return the expected XDG config directory for the current platform.
+
+    On macOS, dataconfy resolves to ``~/Library/Application Support/<app>/``.
+    On Linux, it resolves to ``~/.config/<app>/``.
+    """
     if sys.platform == "darwin":
         return home / "Library" / "Application Support" / "grimoire"
     return home / ".config" / "grimoire"
 
 
 def _xdg_expected_data_dir(home: Path) -> Path:
-    """Return the expected XDG data directory for the current platform."""
+    """Return the expected XDG data directory for the current platform.
+
+    On macOS, dataconfy resolves to ``~/Library/Application Support/<app>/``.
+    On Linux, it resolves to ``~/.local/share/<app>/``.
+    """
     if sys.platform == "darwin":
         return home / "Library" / "Application Support" / "grimoire"
     return home / ".local" / "share" / "grimoire"
