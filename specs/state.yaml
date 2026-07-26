@@ -34,11 +34,11 @@ metrics:
 
 git:
   branch: main
-  hash: null
-  pushed: false
+  hash: 5471b8a
+  pushed: true
 
 handoff:
-  last_step_completed: null
+  last_step_completed: "release-branch: e09 fleet check portfolio merged to main, CI green (test+build+release+deploy)"
   open_decisions: []
   required_reading:
     - specs/epics/e09-fleet-checks/epic.yaml
