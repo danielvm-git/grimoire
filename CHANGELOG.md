@@ -1,3 +1,16 @@
+# [0.5.0](https://github.com/danielvm-git/grimoire/compare/v0.4.0...v0.5.0) (2026-07-26)
+
+
+### Bug Fixes
+
+* add missing greenlet dependency for async SQLite engine ([cb656d0](https://github.com/danielvm-git/grimoire/commit/cb656d0ecae8d32c0d8c6483b4015cc117d5c36e))
+
+
+### Features
+
+* **checks:** add ci-cd-migration v3 pattern detector ([10cc555](https://github.com/danielvm-git/grimoire/commit/10cc5550f096c059ceaeb398bf74dda31a250a5c))
+* **checks:** add fleet check portfolio (e09) ([df86a1f](https://github.com/danielvm-git/grimoire/commit/df86a1f9d994369f66ea7d7960b0daa2f08cb3e2))
+
 # [0.4.0](https://github.com/danielvm-git/grimoire/compare/v0.3.9...v0.4.0) (2026-07-24)
 
 
