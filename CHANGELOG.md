@@ -1,3 +1,10 @@
+## [0.5.4](https://github.com/danielvm-git/grimoire/compare/v0.5.3...v0.5.4) (2026-07-30)
+
+
+### Bug Fixes
+
+* **checks:** run lint on every refresh and install Node for eslint ([03715f0](https://github.com/danielvm-git/grimoire/commit/03715f00477fcc66eee3aa3651928f57a9e1b1d0))
+
 ## [0.5.3](https://github.com/danielvm-git/grimoire/compare/v0.5.2...v0.5.3) (2026-07-30)
 
 
