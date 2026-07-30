@@ -1,0 +1,25 @@
+name: "Composer lock up-to-date"
+description: "Checks whether composer.lock is in sync with composer.json"
+schedule: "0 */8 * * *"
+targets:
+  script: "find . -name 'composer.lock' -print -quit | grep -q ."
+severity: warning
+script: |
+  set -e
+  if ! command -v composer &>/dev/null; then
+    echo "WARN: composer not installed, skipping"
+    exit 0
+  fi
+  for lockfile in $(find . -name 'composer.lock' -type f -not -path '*/vendor/*' -not -path '*/node_modules/*'); do
+    dir="$(dirname "$lockfile")"
+    echo "Checking $lockfile ..."
+    (cd "$dir" && composer validate --no-check-all --no-check-publish 2>&1) || {
+      echo "FAIL: composer.json is not valid in $dir"
+      exit 1
+    }
+    (cd "$dir" && composer install --dry-run --no-interaction --no-progress 2>&1 | grep -q "Lock file is not up to date") && {
+      echo "FAIL: $lockfile is out of sync with composer.json"
+      exit 1
+    }
+  done
+  echo "All composer lockfiles are up-to-date."
