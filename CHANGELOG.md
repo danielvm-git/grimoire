@@ -1,3 +1,11 @@
+## [0.5.2](https://github.com/danielvm-git/grimoire/compare/v0.5.1...v0.5.2) (2026-07-30)
+
+
+### Bug Fixes
+
+* **qa:** resolve 26 bugs across all modules — concurrency, pagination, error handling ([bc8f81d](https://github.com/danielvm-git/grimoire/commit/bc8f81da649bfc71a3ea23bf404b93df4a9ca7a7))
+* **qa:** resolve critical null timestamp, config validation, zombie process, and regex crash bugs ([297e15d](https://github.com/danielvm-git/grimoire/commit/297e15d9ce5ff723f33902ffd4c295212ea2790c))
+
 ## [0.5.1](https://github.com/danielvm-git/grimoire/compare/v0.5.0...v0.5.1) (2026-07-30)
 
 
