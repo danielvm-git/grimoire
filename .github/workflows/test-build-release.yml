@@ -18,7 +18,9 @@ on:
       - ".github/workflows/deploy-docs.yml"
 
 permissions:
-  contents: read
+  contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: pipeline-${{ github.workflow }}-${{ github.ref }}
