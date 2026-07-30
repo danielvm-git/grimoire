@@ -267,6 +267,16 @@ Ensure all API routes have:
 - Proper HTTP status codes and error response models.
 - Tags for grouping (e.g., `tags=["checks"]`, `tags=["actions"]`, `tags=["repositories"]`).
 
+## 7.7 — Centralized CI/CD Architecture (v4.1.0)
+
+Grimoire adopts the organization-wide centralized CI/CD architecture hosted in `danielvm-git/.github`.
+
+Workflows in `.github/workflows/` invoke central reusable workflows:
+- `test-build-release.yml` -> calls `danielvm-git/.github/.github/workflows/test-build-release-python.yml@main` with `type_checker: "pyright"` and `site_url: "https://grimoire.bigbase.click"`.
+- `deploy.yml` -> calls `danielvm-git/.github/.github/workflows/deploy-python.yml@main`.
+- `test-build-release-docs.yml` -> calls `danielvm-git/.github/.github/workflows/test-build-release-pages-mkdocs.yml@main` with `mkdocs_config: "docs/user/mkdocs.yml"`.
+- `deploy-docs.yml` -> calls `danielvm-git/.github/.github/workflows/deploy-pages-mkdocs.yml@main`.
+
 ## Acceptance Criteria
 
 - [ ] `GET /health` returns status, cache age, and rate limit info
@@ -285,3 +295,5 @@ Ensure all API routes have:
 - [ ] `just docker-build` and `just docker-run` work correctly
 - [ ] `/docs` shows complete API documentation with descriptions and examples
 - [ ] `/redoc` renders correctly as an alternative docs view
+- [ ] CI/CD workflows invoke central reusable workflows from `danielvm-git/.github` (v4.1.0)
+
