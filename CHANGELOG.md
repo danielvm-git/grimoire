@@ -1,3 +1,10 @@
+# [0.7.0](https://github.com/danielvm-git/grimoire/compare/v0.6.0...v0.7.0) (2026-07-30)
+
+
+### Features
+
+* **checks:** add composer.lock freshness check for PHP projects ([fbb01a6](https://github.com/danielvm-git/grimoire/commit/fbb01a61e437ca7f702d36f66108379731e57ccc))
+
 # [0.6.0](https://github.com/danielvm-git/grimoire/compare/v0.5.4...v0.6.0) (2026-07-30)
 
 
