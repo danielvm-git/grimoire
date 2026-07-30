@@ -245,8 +245,10 @@ def _sort_repos(
 # ---------------------------------------------------------------------------
 
 
-def _time_ago(dt: datetime | str) -> str:
+def _time_ago(dt: datetime | str | None) -> str:
     """Return a human-readable 'X ago' string."""
+    if dt is None:
+        return "never"
     if isinstance(dt, str):
         dt = datetime.fromisoformat(dt)
     now = datetime.now(tz=timezone.utc)
@@ -1557,13 +1559,21 @@ async def backlog_save_weights(request: Request) -> dict[str, str]:
     if "repository_weights" in body:
         raw["backlog"]["repository_weights"] = body["repository_weights"]
 
+    from fastapi import HTTPException
+    from pydantic import ValidationError
+
+    from grimoire.config import BacklogConfig
+
+    try:
+        new_backlog = BacklogConfig.model_validate(raw.get("backlog", {}))
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid backlog weights payload: {e}"
+        ) from e
+
     with open(_config_path, "w") as f:
         yaml.dump(raw, f, default_flow_style=False, sort_keys=False)
 
-    # Reload in-memory config
-    from grimoire.config import BacklogConfig
-
-    new_backlog = BacklogConfig.model_validate(raw.get("backlog", {}))
     global _backlog_config  # noqa: PLW0603
     _backlog_config = new_backlog
 

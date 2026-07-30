@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from httpx import AsyncClient
 
 
@@ -762,3 +764,31 @@ class TestLoadingState:
             assert resp.status_code == 200
             assert "3 of 7" in resp.text
             assert "HX-Redirect" not in resp.headers
+
+
+class TestTimeAgoHelper:
+    def test_time_ago_handles_none(self) -> None:
+        """_time_ago returns 'never' when timestamp is None."""
+        from grimoire.web.router import _time_ago
+
+        assert _time_ago(None) == "never"
+
+
+class TestBacklogSaveWeightsValidation:
+    async def test_save_weights_invalid_payload_returns_400(
+        self, web_client: AsyncClient, tmp_path: Path
+    ) -> None:
+        """Posting invalid category weights returns 400 and preserves config file."""
+        from grimoire.web import router
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("github:\n  token: test\n")
+        router.set_backlog_config(None, config_file)
+
+        resp = await web_client.post(
+            "/api/backlog/save-weights",
+            json={"category_weights": "not_a_dict"},
+        )
+        assert resp.status_code == 400
+        # Verify file on disk was not corrupted
+        assert "not_a_dict" not in config_file.read_text()

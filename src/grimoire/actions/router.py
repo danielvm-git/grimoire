@@ -114,8 +114,12 @@ async def list_actions() -> list[ActionListItem]:
         elif a.targets.list is not None:
             count = len(a.targets.list)
         elif a.targets.regex is not None:
-            pattern = re.compile(a.targets.regex)
-            count = sum(1 for r in _repos if pattern.search(r.full_name))
+            try:
+                pattern = re.compile(a.targets.regex)
+                count = sum(1 for r in _repos if pattern.search(r.full_name))
+            except re.error:
+                count = 0
+
         # script-based targeting: count stays 0 (requires workspace execution)
         items.append(
             ActionListItem(

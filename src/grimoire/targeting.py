@@ -136,7 +136,9 @@ async def _script_matches(
     except (asyncio.TimeoutError, OSError):
         if proc is not None and proc.returncode is None:
             proc.kill()
+            await proc.wait()
         return False
+
     finally:
         if tmp_script is not None:
             tmp_script.unlink(missing_ok=True)
