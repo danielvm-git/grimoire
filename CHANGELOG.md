@@ -1,3 +1,10 @@
+## [0.5.3](https://github.com/danielvm-git/grimoire/compare/v0.5.2...v0.5.3) (2026-07-30)
+
+
+### Bug Fixes
+
+* **config:** add 39 missing repos and remove 3 stale entries ([94dd8c4](https://github.com/danielvm-git/grimoire/commit/94dd8c4d10f8e03267b46d384d0d2f1e19b11563))
+
 ## [0.5.2](https://github.com/danielvm-git/grimoire/compare/v0.5.1...v0.5.2) (2026-07-30)
 
 
