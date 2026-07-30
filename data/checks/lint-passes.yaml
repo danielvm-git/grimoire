@@ -4,7 +4,6 @@ description: >
   Supported: Python (ruff), Go (golangci-lint), JavaScript/TypeScript (eslint),
   Rust (cargo clippy), Swift (swiftlint), Shell (shellcheck).
   Falls back gracefully if the linter is not installed.
-schedule: "0 */8 * * *"
 targets:
   regex: ".*"
 severity: warning
@@ -34,6 +33,10 @@ script: |
   fi
 
   if [ -f package.json ]; then
+    if ! [ -d node_modules ] && command -v npm &>/dev/null; then
+      echo "Installing node_modules ..."
+      npm install --ignore-scripts --no-audit --no-fund 2>&1 || echo "WARN: npm install failed"
+    fi
     if [ -d node_modules ]; then
       run_lint eslint "eslint" npx eslint . || rc=1
     else
