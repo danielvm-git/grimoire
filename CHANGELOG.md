@@ -1,3 +1,10 @@
+## [0.5.1](https://github.com/danielvm-git/grimoire/compare/v0.5.0...v0.5.1) (2026-07-30)
+
+
+### Bug Fixes
+
+* **checks:** fix check script syntax errors, exclusions, and version bump automation ([6e5734e](https://github.com/danielvm-git/grimoire/commit/6e5734ebc25b4ad9551b093d6155b8c6476059c7))
+
 # [0.5.0](https://github.com/danielvm-git/grimoire/compare/v0.4.0...v0.5.0) (2026-07-26)
 
 
