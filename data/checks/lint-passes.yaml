@@ -2,7 +2,7 @@ name: "Lint Passes"
 description: >
   Auto-detects project language and runs the appropriate linter.
   Supported: Python (ruff), Go (golangci-lint), JavaScript/TypeScript (eslint),
-  Rust (cargo clippy), Swift (swiftlint), Shell (shellcheck).
+  Rust (cargo clippy), Swift (swiftlint), PHP (php -l), Shell (shellcheck).
   Falls back gracefully if the linter is not installed.
 targets:
   regex: ".*"
@@ -52,8 +52,19 @@ script: |
     run_lint swiftlint "swiftlint" swiftlint lint --strict || rc=1
   fi
 
+  if [ -f composer.json ]; then
+    if command -v php &>/dev/null; then
+      php_files="$(find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' -not -path './node_modules/*' 2>/dev/null || true)"
+      if [ -n "$php_files" ]; then
+        run_lint php "php -l" sh -c 'for f in '"$php_files"'; do php -l "$f" || exit 1; done' || rc=1
+      fi
+    else
+      echo "WARN: php not installed, skipping"
+    fi
+  fi
+
   # Fallback: shellcheck on .sh files
-  if [ -z "$(ls pyproject.toml go.mod package.json Cargo.toml Package.swift 2>/dev/null)" ]; then
+  if [ -z "$(ls pyproject.toml go.mod package.json Cargo.toml Package.swift composer.json 2>/dev/null)" ]; then
     sh_files="$(find . -name '*.sh' -not -path './.git/*' -not -path './node_modules/*' -not -path './vendor/*' 2>/dev/null || true)"
     if [ -n "$sh_files" ]; then
       run_lint shellcheck "shellcheck" shellcheck $sh_files || rc=1
