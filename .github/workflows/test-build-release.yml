@@ -40,8 +40,17 @@ jobs:
           fetch-depth: 0
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - uses: extractions/setup-just@v3
+
+      - name: Cache uv virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
 
       - name: Install dependencies
         run: uv sync --group dev
@@ -93,6 +102,15 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Cache uv virtualenv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
 
       - name: Install dependencies
         run: uv sync --group dev
