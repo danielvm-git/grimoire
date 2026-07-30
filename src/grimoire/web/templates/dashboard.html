@@ -206,10 +206,12 @@
     // On page load, apply saved view preference
     document.addEventListener('DOMContentLoaded', function() {
         updateViewButtons();
+        const grid = document.getElementById('repo-grid');
+        if (!grid) return;
         if (currentView === 'matrix') {
-            document.getElementById('repo-grid').classList.remove('hidden');
+            grid.classList.remove('hidden');
         } else {
-            fetchView().then(() => document.getElementById('repo-grid').classList.remove('hidden'));
+            fetchView().then(() => grid.classList.remove('hidden'));
         }
     });
 

@@ -38,6 +38,7 @@ class ActionProgress:
 
 # In-memory tracking of currently-running action slugs and their progress
 _running_actions: dict[str, ActionProgress] = {}
+_action_locks: dict[str, asyncio.Lock] = {}
 
 
 def is_action_running(slug: str) -> bool:
@@ -54,6 +55,13 @@ class ActionConflictError(Exception):
     """Raised when an action is already running."""
 
 
+def _action_lock(slug: str) -> asyncio.Lock:
+    """Return a per-action lock, creating it on first access."""
+    if slug not in _action_locks:
+        _action_locks[slug] = asyncio.Lock()
+    return _action_locks[slug]
+
+
 async def run_action(
     action: ActionDefinition,
     repos: list[TrackedRepository],
@@ -68,30 +76,35 @@ async def run_action(
     """
     now = datetime.now(timezone.utc)
 
-    # 1. Check concurrent run guard
-    async with AsyncSession(engine) as session:
-        stmt = select(ActionRunRecord).where(
-            ActionRunRecord.action_slug == action.slug,
-            ActionRunRecord.status == "running",
-        )
-        existing = (await session.exec(stmt)).first()
-        if existing is not None:
-            raise ActionConflictError(
-                f"Action '{action.slug}' is already running (run ID: {existing.id})"
-            )
+    # 1. Acquire per-action lock to make guard check + record creation atomic
+    async with _action_lock(action.slug):
+        # Check concurrent run guard (in-memory + DB)
+        if action.slug in _running_actions:
+            raise ActionConflictError(f"Action '{action.slug}' is already running")
 
-    # 2. Create run record
-    run_record = ActionRunRecord(
-        action_slug=action.slug,
-        action_name=action.name,
-        triggered_by=triggered_by,
-        status="running",
-        started_at=now,
-    )
-    async with AsyncSession(engine) as session:
-        session.add(run_record)
-        await session.commit()
-        await session.refresh(run_record)
+        async with AsyncSession(engine) as session:
+            stmt = select(ActionRunRecord).where(
+                ActionRunRecord.action_slug == action.slug,
+                ActionRunRecord.status == "running",
+            )
+            existing = (await session.exec(stmt)).first()
+            if existing is not None:
+                raise ActionConflictError(
+                    f"Action '{action.slug}' is already running (run ID: {existing.id})"
+                )
+
+        # 2. Create run record and register in-memory tracking
+        run_record = ActionRunRecord(
+            action_slug=action.slug,
+            action_name=action.name,
+            triggered_by=triggered_by,
+            status="running",
+            started_at=now,
+        )
+        async with AsyncSession(engine) as session:
+            session.add(run_record)
+            await session.commit()
+            await session.refresh(run_record)
 
     run_id: int = run_record.id  # type: ignore[assignment]
 
@@ -158,15 +171,25 @@ async def run_action(
                         session.add(repo_record)
                         await session.commit()
 
-        # Mark run as completed (inside try so finally always cleans up in-memory state)
+        # Mark run as completed
         finished_at = datetime.now(timezone.utc)
         async with AsyncSession(engine) as session:
             record = await session.get(ActionRunRecord, run_id)
-            assert record is not None
-            record.status = "completed"
-            record.finished_at = finished_at
-            session.add(record)
-            await session.commit()
+            if record is not None:
+                record.status = "completed"
+                record.finished_at = finished_at
+                session.add(record)
+                await session.commit()
+    except Exception:
+        # Mark run as failed so it doesn't permanently block future runs
+        async with AsyncSession(engine) as session:
+            record = await session.get(ActionRunRecord, run_id)
+            if record is not None:
+                record.status = "failed"
+                record.finished_at = datetime.now(timezone.utc)
+                session.add(record)
+                await session.commit()
+        raise
     finally:
         _running_actions.pop(action.slug, None)
 

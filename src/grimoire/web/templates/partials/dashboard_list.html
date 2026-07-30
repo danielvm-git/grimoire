@@ -31,7 +31,7 @@
 
             <div class="flex items-center gap-2 flex-shrink-0">
                 {% if repo.last_commit_at %}
-                <span class="opacity-60 text-sm whitespace-nowrap" title="{{ repo.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}">Last activity: <span class="font-mono-nums inline-block text-right" style="min-width: 8ch">{{ time_ago(repo.last_commit_at) }}</span></span>
+                <span class="opacity-60 text-sm whitespace-nowrap" title="{{ fmt_date(repo.last_commit_at, '%Y-%m-%d %H:%M UTC') }}">Last activity: <span class="font-mono-nums inline-block text-right" style="min-width: 8ch">{{ time_ago(repo.last_commit_at) }}</span></span>
                 {% endif %}
                 {% if repo.warnings %}
                 <div class="tooltip tooltip-left" data-tip="{{ repo.warnings | join('; ') }}">
@@ -107,5 +107,7 @@
 
     </div>
 </div>
+{% else %}
+<div class="text-center py-8 opacity-50">No repositories configured</div>
 {% endfor %}
 </div>

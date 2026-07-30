@@ -77,6 +77,7 @@ class GitHubClient:
         self._rate_limit_remaining: int | None = None
         self._rate_limit_limit: int | None = None
         self._rate_limit_reset: float | None = None
+        self._pagination_lock = asyncio.Lock()
 
     # -- public properties ---------------------------------------------------
 
@@ -202,6 +203,17 @@ class GitHubClient:
         params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]] | None:
         """Follow ``Link: rel="next"`` headers to collect all pages."""
+        # Serialize pagination to prevent concurrent calls from corrupting
+        # the shared _last_next_link instance state.
+        async with self._pagination_lock:
+            return await self._paginated_get_locked(path, params)
+
+    async def _paginated_get_locked(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]] | None:
+        """Internal pagination implementation (called under _pagination_lock)."""
         params = dict(params) if params else {}
         params.setdefault("per_page", 100)
 
@@ -210,7 +222,10 @@ class GitHubClient:
         current_params: dict[str, Any] | None = params
 
         while current_path is not None:
-            data = await self._request("GET", current_path, params=current_params)
+            next_link_out: dict[str, str | None] = {}
+            data = await self._request(
+                "GET", current_path, params=current_params, _next_link_out=next_link_out
+            )
             if data is None:
                 # 304 on the *first* page → return None (cache hit)
                 if not all_items:
@@ -223,8 +238,8 @@ class GitHubClient:
                 # Some endpoints wrap in an object
                 all_items.extend(data.get("items", data.get("workflow_runs", [])))
 
-            # Parse Link header for next page URL
-            next_url = self._last_next_link
+            # Use the next link captured atomically from _request
+            next_url = next_link_out.get("next")
             if next_url:
                 current_path = next_url
                 current_params = None  # params are embedded in the next URL
@@ -240,6 +255,7 @@ class GitHubClient:
         params: dict[str, Any] | None = None,
         *,
         use_etag: bool = True,
+        _next_link_out: dict[str, str | None] | None = None,
     ) -> Any:
         """Execute a single API request with ETag caching, retries, and rate-limit tracking."""
         # Build the URL for ETag keying (path + sorted params)
@@ -271,7 +287,10 @@ class GitHubClient:
                     )
 
                 self._update_rate_limit(response)
-                self._last_next_link = self._parse_next_link(response)
+                next_link = self._parse_next_link(response)
+                self._last_next_link = next_link
+                if _next_link_out is not None:
+                    _next_link_out["next"] = next_link
                 self._record_api_request(path, response.status_code)
 
                 if response.status_code == 304:
@@ -281,7 +300,7 @@ class GitHubClient:
                     raise NotFoundError(f"Not found: {path}", status_code=404)
 
                 if response.status_code == 403:
-                    if self.is_rate_limited:
+                    if self.is_rate_limited or "retry-after" in response.headers:
                         raise RateLimitError(
                             "GitHub API rate limit exceeded", status_code=403
                         )

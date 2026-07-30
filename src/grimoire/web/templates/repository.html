@@ -71,7 +71,7 @@
         <span class="flex-1"></span>
         <span class="opacity-70">
             {% if stats.last_commit_at %}
-            <span title="{{ stats.last_commit_at.strftime('%Y-%m-%d %H:%M UTC') }}"><i class="fa-regular fa-clock" style="font-size:12px"></i> Last activity: <span class="inline-block text-right" style="min-width: 8ch">{{ time_ago(stats.last_commit_at) }}</span></span>
+            <span title="{{ fmt_date(stats.last_commit_at, '%Y-%m-%d %H:%M UTC') }}"><i class="fa-regular fa-clock" style="font-size:12px"></i> Last activity: <span class="inline-block text-right" style="min-width: 8ch">{{ time_ago(stats.last_commit_at) }}</span></span>
             {% else %}
             <i class="fa-regular fa-clock" style="font-size:12px"></i> Last activity: <span class="opacity-50">—</span>
             {% endif %}
@@ -109,7 +109,7 @@
                     </td>
                     <td class="text-sm opacity-60">{{ issue.author }}</td>
                     <td class="text-sm opacity-60">
-                        {% if issue.last_activity_at %}{{ issue.last_activity_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+                        {{ fmt_date(issue.last_activity_at, '%Y-%m-%d') }}
                     </td>
                 </tr>
                 {% endfor %}
@@ -150,7 +150,7 @@
                     </td>
                     <td class="text-sm opacity-60">{{ pr.author }}</td>
                     <td class="text-sm opacity-60">
-                        {% if pr.last_activity_at %}{{ pr.last_activity_at.strftime('%Y-%m-%d') }}{% else %}—{% endif %}
+                        {{ fmt_date(pr.last_activity_at, '%Y-%m-%d') }}
                     </td>
                 </tr>
                 {% endfor %}
@@ -242,9 +242,9 @@
                                 hx-on::before-request="var t = document.getElementById('check-output-{{ chk.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
                             Output
                         </button>
-                        <div id="check-output-{{ chk.id }}"></div>
                         {% endif %}
                     </div>
+                    {% if chk.id %}<div id="check-output-{{ chk.id }}" class="w-full"></div>{% endif %}
                     {% endfor %}
                 {% endfor %}
                 {% endif %}

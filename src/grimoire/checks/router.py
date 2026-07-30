@@ -12,7 +12,11 @@ from sqlalchemy import text
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.checks.engine import is_check_running, run_check_for_all_targets
+from grimoire.checks.engine import (
+    is_check_running,
+    run_check_for_all_targets,
+    try_start_check,
+)
 from grimoire.database import CheckResultRecord, CheckRunRecord, CheckToggleRecord
 
 logger = logging.getLogger(__name__)
@@ -155,7 +159,7 @@ async def get_check_results(slug: str) -> list[CheckResultResponse]:
     )
 
     async with AsyncSession(_engine) as session:
-        rows = (await session.exec(query, params={"slug": slug})).all()  # type: ignore[call-arg]
+        rows = (await session.execute(query, params={"slug": slug})).all()
 
     return [
         CheckResultResponse(
@@ -266,16 +270,24 @@ async def run_check_endpoint(
     assert _workspace is not None
     assert _engine is not None
 
-    if is_check_running(slug):
+    if not try_start_check(slug):
         raise HTTPException(status_code=409, detail="Check is already running")
 
     workspace = _workspace
     engine = _engine
 
     async def _run_in_background() -> None:
-        await run_check_for_all_targets(
-            check, _repos, workspace, engine, specific_repo=repo, triggered_by="manual"
-        )
+        try:
+            await run_check_for_all_targets(
+                check,
+                _repos,
+                workspace,
+                engine,
+                specific_repo=repo,
+                triggered_by="manual",
+            )
+        except Exception:
+            logger.exception("Check '%s' background run failed", slug)
 
     background_tasks.add_task(_run_in_background)
 

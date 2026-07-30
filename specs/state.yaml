@@ -1,24 +1,34 @@
 # Grimoire — Session State
-# e09 Fleet Check Portfolio
+# QA Audit — Full codebase bug sweep
 
 workflow_mode: solo-git
 
-active_flow: build_epic
-active_epic_id: e09
+active_flow: fix_bug
+active_epic_id: null
 active_story_id: null
-completed_epic: true
+completed_epic: false
 
 epic_cycle:
-  current_step: 1
+  current_step: null
   next_skill: null
-  story_bcps: 1
+  story_bcps: null
   completed_steps: []
   audit_result: null
-  fast_mode: true
+  fast_mode: false
 
 bug_cycle:
-  current_step: null
-  completed_steps: []
+  current_step: 8
+  completed_steps:
+    - survey-context
+    - map-codebase
+    - tracker-recon
+    - history-recon
+    - bind-n-frozen
+    - seed-registry
+    - qa-report
+    - module-audit
+    - fix-bugs
+    - verify-work
 
 release:
   target_version: null
@@ -27,7 +37,7 @@ release:
   ci_verified: true
 
 metrics:
-  story_start: null
+  story_start: "2026-07-30T12:00:00Z"
   story_end: null
   cycle_minutes: null
   bcp_per_hour: null
@@ -35,12 +45,14 @@ metrics:
 git:
   branch: main
   hash: 5471b8a
-  pushed: true
+  pushed: false
 
 handoff:
-  last_step_completed: "release-branch: e09 fleet check portfolio merged to main, CI green (test+build+release+deploy)"
-  open_decisions: []
+  last_step_completed: "QA audit: 30 bugs fixed (4 previous + 26 this session), 38 total found, preflight green"
+  open_decisions:
+    - "Should remaining 8 open bugs (medium/low) be fixed in this session or deferred?"
+    - "Should the 170 deprecation warnings (session.execute) be addressed?"
   required_reading:
-    - specs/epics/e09-fleet-checks/epic.yaml
-    - specs/release-plan.yaml
-  next_skill: null
+    - specs/QA_REPORT_LATEST.md
+    - specs/bugs/registry.yaml
+  next_skill: verify-work

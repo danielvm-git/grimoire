@@ -108,6 +108,8 @@
                 {% endif %}
             </td>
         </tr>
+        {% else %}
+        <tr><td colspan="7" class="text-center py-8 opacity-50">No repositories configured</td></tr>
         {% endfor %}
     </tbody>
 </table>

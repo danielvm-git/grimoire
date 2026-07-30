@@ -578,20 +578,20 @@ async def save_stats_to_db(
 
             # Delete old cached data for this repo
             fn = stats.full_name
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedIssue).where(CachedIssue.repo_full_name == fn)  # type: ignore[arg-type]
             )
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedPullRequest).where(
                     CachedPullRequest.repo_full_name == fn  # type: ignore[arg-type]
                 )
             )
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedWorkflowStatus).where(
                     CachedWorkflowStatus.repo_full_name == fn  # type: ignore[arg-type]
                 )
             )
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedRepository).where(
                     CachedRepository.full_name == fn  # type: ignore[arg-type]
                 )
@@ -843,21 +843,21 @@ async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> i
         stale_names = [name for name in cached if name not in active_names]
 
         for fn in stale_names:
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedIssue).where(CachedIssue.repo_full_name == fn)  # type: ignore[arg-type]
             )
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn)  # type: ignore[arg-type]
             )
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedWorkflowStatus).where(
                     CachedWorkflowStatus.repo_full_name == fn  # type: ignore[arg-type]
                 )
             )
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn)  # type: ignore[arg-type]
             )
-            await session.exec(  # type: ignore[call-overload]
+            await session.execute(
                 delete(CachedRepository).where(CachedRepository.full_name == fn)  # type: ignore[arg-type]
             )
             pruned += 1

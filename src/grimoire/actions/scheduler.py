@@ -5,12 +5,12 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from grimoire.actions.engine import run_action
 
 if TYPE_CHECKING:
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.schedulers.background import BackgroundScheduler
     from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -45,7 +45,7 @@ def register_actions(
             async def _job() -> None:
                 await run_action(a, repos, workspace, engine, triggered_by="cron")
 
-            if hasattr(scheduler, "_eventloop"):
+            if isinstance(scheduler, AsyncIOScheduler):
                 return _job  # AsyncIOScheduler
 
             def _sync_job() -> None:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -53,7 +53,7 @@ class ActionRepoResultResponse(BaseModel):
 
 
 class ActionRunDetail(BaseModel):
-    id: int
+    id: int | None = None
     action_slug: str
     action_name: str
     triggered_by: str
@@ -256,12 +256,11 @@ async def run_action_endpoint(
     background_tasks.add_task(_run_in_background)
 
     return ActionRunDetail(
-        id=0,
         action_slug=slug,
         action_name=action.name,
         triggered_by="manual",
         status="running",
-        started_at=datetime.now(),
+        started_at=datetime.now(timezone.utc),
         finished_at=None,
         results=[],
     )

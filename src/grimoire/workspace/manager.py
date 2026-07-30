@@ -69,22 +69,28 @@ class WorkspaceManager:
         if not bare_dir.exists():
             logger.warning("bare repo missing for %s — skipping sync", repo.full_name)
             return
-        await self._run_git("fetch", "origin", cwd=bare_dir)
 
-        # Reset each existing worktree to the latest remote state.
-        branches = repo.branches or [repo.default_branch]
-        for branch in branches:
-            workdir = self.get_workdir(repo.full_name, branch)
-            if not workdir.exists():
-                continue
-            try:
-                await self._run_git("checkout", branch, cwd=workdir)
-                await self._run_git("reset", "--hard", f"origin/{branch}", cwd=workdir)
-                await self._run_git("clean", "-fdx", cwd=workdir)
-            except WorkspaceError:
-                logger.warning(
-                    "Failed to reset worktree %s/%s after fetch", repo.full_name, branch
-                )
+        async with self._repo_lock(repo.full_name):
+            await self._run_git("fetch", "origin", cwd=bare_dir)
+
+            # Reset each existing worktree to the latest remote state.
+            branches = repo.branches or [repo.default_branch]
+            for branch in branches:
+                workdir = self.get_workdir(repo.full_name, branch)
+                if not workdir.exists():
+                    continue
+                try:
+                    await self._run_git("checkout", branch, cwd=workdir)
+                    await self._run_git(
+                        "reset", "--hard", f"origin/{branch}", cwd=workdir
+                    )
+                    await self._run_git("clean", "-fdx", cwd=workdir)
+                except WorkspaceError:
+                    logger.warning(
+                        "Failed to reset worktree %s/%s after fetch",
+                        repo.full_name,
+                        branch,
+                    )
 
     async def sync_all(self, repos: list[TrackedRepository]) -> None:
         """Fetch latest from remote for all repos with bounded concurrency."""
@@ -107,8 +113,8 @@ class WorkspaceManager:
         workdir = self.get_workdir(full_name, branch)
         bare_dir = self._bare_dir(full_name)
 
-        # Serialize clone + worktree creation per repo to prevent races when
-        # multiple branches of the same repo are set up concurrently.
+        # Serialize all worktree operations per repo to prevent races with
+        # sync_repo or concurrent reset_workdir calls.
         async with self._repo_lock(full_name):
             if not bare_dir.exists():
                 await self._clone_bare(full_name)
@@ -117,9 +123,9 @@ class WorkspaceManager:
             if not workdir.exists():
                 await self._ensure_worktree(full_name, branch, bare_dir)
 
-        await self._run_git("checkout", branch, cwd=workdir)
-        await self._run_git("reset", "--hard", f"origin/{branch}", cwd=workdir)
-        await self._run_git("clean", "-fdx", cwd=workdir)
+            await self._run_git("checkout", branch, cwd=workdir)
+            await self._run_git("reset", "--hard", f"origin/{branch}", cwd=workdir)
+            await self._run_git("clean", "-fdx", cwd=workdir)
         return workdir
 
     def get_workdir(self, full_name: str, branch: str) -> Path:
@@ -228,9 +234,17 @@ class WorkspaceManager:
         self, full_name: str, branch: str, bare_dir: Path
     ) -> None:
         workdir = self.get_workdir(full_name, branch)
-        if workdir.exists():
+        git_pointer = workdir / ".git"
+        if workdir.exists() and git_pointer.is_file():
             logger.debug("worktree already exists: %s", workdir)
             return
+
+        # Clean up incomplete worktree directory from a prior failed creation
+        if workdir.exists():
+            import shutil
+
+            logger.warning("removing incomplete worktree directory: %s", workdir)
+            shutil.rmtree(workdir, ignore_errors=True)
 
         try:
             await self._run_git("worktree", "add", str(workdir), branch, cwd=bare_dir)

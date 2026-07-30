@@ -245,6 +245,18 @@ def _sort_repos(
 # ---------------------------------------------------------------------------
 
 
+def _fmt_date(dt: datetime | str | None, fmt: str = "%Y-%m-%d") -> str:
+    """Safely format a datetime, handling None and string inputs."""
+    if dt is None:
+        return "—"
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt)
+        except ValueError:
+            return dt
+    return dt.strftime(fmt)
+
+
 def _time_ago(dt: datetime | str | None) -> str:
     """Return a human-readable 'X ago' string."""
     if dt is None:
@@ -309,7 +321,10 @@ def _resolve_targets_sync(
             for branch in (r.branches or [r.default_branch])
         }
     if targets.regex is not None:
-        pattern = re.compile(targets.regex)
+        try:
+            pattern = re.compile(targets.regex)
+        except re.error:
+            return set()
         return {
             (r.full_name, branch)
             for r in repos.values()
@@ -535,6 +550,7 @@ async def dashboard(
             "sort_labels": SORT_LABELS,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
             "running": refresh_running,
             "progress_completed": refresh_progress.completed if refresh_progress else 0,
             "progress_total": refresh_progress.total if refresh_progress else 0,
@@ -590,6 +606,7 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
             "check_warnings": check_warnings,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 
@@ -668,6 +685,7 @@ async def actions_page(request: Request) -> HTMLResponse:
         context={
             "actions": action_vms,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 
@@ -733,6 +751,7 @@ async def checks_page(request: Request) -> HTMLResponse:
         context={
             "checks": check_vms,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 
@@ -763,6 +782,7 @@ async def dashboard_matrix_partial(
             "dir": dir,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 
@@ -780,6 +800,7 @@ async def dashboard_list_partial(
             "repos": repos,
             "staleness": _staleness_config,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 
@@ -895,6 +916,7 @@ async def action_results_partial(
             "sort": sort,
             "dir": dir,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 
@@ -1080,6 +1102,7 @@ async def check_results_partial(
             "sort": sort,
             "dir": dir,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 
@@ -1236,8 +1259,8 @@ async def check_run_trigger(
     if is_check_running(slug):
         raise HTTPException(status_code=409, detail="Check is already running")
 
-    assert checks_workspace is not None
-    assert checks_engine is not None
+    if checks_workspace is None or checks_engine is None:
+        raise HTTPException(status_code=500, detail="Checks engine not configured")
 
     async def _run_in_background() -> None:
         await run_check_for_all_targets(
@@ -1289,8 +1312,8 @@ async def action_run_trigger(
     if is_action_running(slug):
         raise HTTPException(status_code=409, detail="Action is already running")
 
-    assert actions_workspace is not None
-    assert actions_engine is not None
+    if actions_workspace is None or actions_engine is None:
+        raise HTTPException(status_code=500, detail="Actions engine not configured")
 
     async def _run_in_background() -> None:
         try:
@@ -1446,6 +1469,7 @@ async def backlog_page(request: Request) -> HTMLResponse:
             "repos_with_items": repos_with_items,
             "backlog_config": _backlog_config,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
             "last_refresh": _last_refresh,
         },
     )
@@ -1466,7 +1490,11 @@ async def backlog_items_partial(
     w_stale_issue: float = -1,
 ) -> HTMLResponse:
     """Return filtered backlog items as an HTMX partial."""
-    cat_list = [c for c in categories.split(",") if c] or None
+    # Distinguish "param absent" (no filter) from "param empty" (nothing matches)
+    if "categories" in request.query_params:
+        cat_list = [c for c in categories.split(",") if c]
+    else:
+        cat_list = None
     repo_list = [r for r in repos.split(",") if r] or None
 
     # Build a temporary config override if any weight params were provided
@@ -1513,6 +1541,7 @@ async def backlog_items_partial(
             "groups": groups,
             "type_groups": type_groups,
             "time_ago": _time_ago,
+            "fmt_date": _fmt_date,
         },
     )
 

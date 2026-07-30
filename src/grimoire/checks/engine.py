@@ -40,11 +40,27 @@ class CheckProgress:
 
 # In-memory tracking of currently-running check slugs and their progress
 _running_checks: dict[str, CheckProgress] = {}
+_check_locks: dict[str, asyncio.Lock] = {}
+
+
+def _check_lock(slug: str) -> asyncio.Lock:
+    """Return a per-check lock, creating it on first access."""
+    if slug not in _check_locks:
+        _check_locks[slug] = asyncio.Lock()
+    return _check_locks[slug]
 
 
 def is_check_running(slug: str) -> bool:
     """Return True if the check is currently executing."""
     return slug in _running_checks
+
+
+def try_start_check(slug: str) -> bool:
+    """Atomically check and mark a check as running. Returns True if acquired."""
+    if slug in _running_checks:
+        return False
+    _running_checks[slug] = CheckProgress()
+    return True
 
 
 def get_check_progress(slug: str) -> CheckProgress | None:
@@ -197,8 +213,10 @@ async def run_check_for_all_targets(
 
     run_id: int = run_record.id  # type: ignore[assignment]
 
-    progress = CheckProgress()
-    _running_checks[check.slug] = progress
+    # Register in-memory tracking (may already be set by try_start_check)
+    if check.slug not in _running_checks:
+        _running_checks[check.slug] = CheckProgress()
+    progress = _running_checks[check.slug]
     try:
         resolved = await resolve_targets(check.targets, repos, workspace)
 
@@ -233,12 +251,22 @@ async def run_check_for_all_targets(
         # Mark run as completed
         async with AsyncSession(engine) as session:
             record = await session.get(CheckRunRecord, run_id)
-            assert record is not None
-            record.status = "completed"
-            record.finished_at = datetime.now(timezone.utc)
-            session.add(record)
-            await session.commit()
+            if record is not None:
+                record.status = "completed"
+                record.finished_at = datetime.now(timezone.utc)
+                session.add(record)
+                await session.commit()
 
         return results
+    except Exception:
+        # Mark run as failed so it doesn't leave ghost "running" records
+        async with AsyncSession(engine) as session:
+            record = await session.get(CheckRunRecord, run_id)
+            if record is not None:
+                record.status = "failed"
+                record.finished_at = datetime.now(timezone.utc)
+                session.add(record)
+                await session.commit()
+        raise
     finally:
         _running_checks.pop(check.slug, None)
