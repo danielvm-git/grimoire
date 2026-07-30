@@ -1,3 +1,10 @@
+# [0.6.0](https://github.com/danielvm-git/grimoire/compare/v0.5.4...v0.6.0) (2026-07-30)
+
+
+### Features
+
+* **checks:** add PHP support to lint-passes check ([536e473](https://github.com/danielvm-git/grimoire/commit/536e4739e0a385a14bb4afa68e02ea921bbf3e3d))
+
 ## [0.5.4](https://github.com/danielvm-git/grimoire/compare/v0.5.3...v0.5.4) (2026-07-30)
 
 
