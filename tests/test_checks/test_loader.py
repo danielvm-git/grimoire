@@ -181,3 +181,18 @@ class TestBundledCheckDefinitions:
         c = next((ch for ch in checks if ch.slug == "uv-lock-fresh"), None)
         assert c is not None
         assert c.severity == "error"
+        assert "uv lock --check" in c.script
+        assert "command -v uv" in c.script
+
+    def test_ci_cd_pipeline_audit_has_future_annotations(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "ci-cd-pipeline-audit"), None)
+        assert c is not None
+        assert "from __future__ import annotations" in c.script
+
+    def test_lint_passes_valid_shell_syntax(self) -> None:
+        checks = load_checks(self._data_dir())
+        c = next((ch for ch in checks if ch.slug == "lint-passes"), None)
+        assert c is not None
+        assert 'local tool="$1" name="$2"' in c.script
+        assert "shift 2" in c.script

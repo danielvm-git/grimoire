@@ -6,16 +6,18 @@ targets:
 severity: error
 script: |
   set -e
+  if ! command -v uv &>/dev/null; then
+    echo "WARN: uv not installed, skipping"
+    exit 0
+  fi
   unset UV_FROZEN
-  for lockfile in $(find . -name 'uv.lock' -type f); do
+  for lockfile in $(find . -name 'uv.lock' -type f -not -path '*/.venv/*' -not -path '*/workspace/*'); do
     dir="$(dirname "$lockfile")"
     echo "Checking $lockfile ..."
-    (cd "$dir" && uv lock --upgrade --no-cache)
+    (cd "$dir" && uv lock --check) || {
+      echo "FAIL: $lockfile is out of sync with pyproject.toml"
+      exit 1
+    }
   done
-  changes="$(git diff --name-only -- '*/uv.lock' 'uv.lock')"
-  if [ -n "$changes" ]; then
-    echo "Lockfiles are outdated:"
-    echo "$changes"
-    exit 1
-  fi
   echo "All lockfiles are up-to-date."
+

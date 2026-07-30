@@ -12,7 +12,7 @@ script: |
     echo "Neither rg nor grep available, skipping"
     exit 0
   fi
-  exclude_dirs="--glob=!node_modules --glob=!vendor --glob=!.git --glob=!dist --glob=!build --glob=!__pycache__ --glob=!*.lock"
+  exclude_dirs="--glob=!node_modules --glob=!vendor --glob=!.git --glob=!dist --glob=!build --glob=!__pycache__ --glob=!*.lock --glob=!.venv --glob=!venv --glob=!workspace --glob=!.pytest_cache --glob=!.mypy_cache --glob=!.ruff_cache --glob=!.mimocode --glob=!site"
   if command -v rg &>/dev/null; then
     count="$(rg -c 'TODO|FIXME|HACK' --type-not=lock $exclude_dirs . 2>/dev/null | wc -l || true)"
     if [ "$count" -gt 0 ]; then
@@ -22,14 +22,15 @@ script: |
     fi
   else
     count="$(grep -r --include='*.py' --include='*.ts' --include='*.js' --include='*.go' --include='*.rs' --include='*.yaml' --include='*.yml' \
-      --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.git --exclude-dir=dist --exclude-dir=build \
+      --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.git --exclude-dir=dist --exclude-dir=build --exclude-dir=.venv --exclude-dir=venv --exclude-dir=workspace --exclude-dir=.pytest_cache --exclude-dir=.mimocode \
       -l 'TODO\|FIXME\|HACK' . 2>/dev/null | wc -l || true)"
     if [ "$count" -gt 0 ]; then
       echo "WARN: Found $count files with TODO/FIXME/HACK markers:"
       grep -r --include='*.py' --include='*.ts' --include='*.js' --include='*.go' --include='*.rs' \
-        --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.git \
+        --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.git --exclude-dir=.venv --exclude-dir=venv --exclude-dir=workspace \
         -l 'TODO\|FIXME\|HACK' . 2>/dev/null | head -20
       exit 1
     fi
   fi
+
   echo "PASS: No TODO/FIXME/HACK markers found"

@@ -6,7 +6,12 @@ targets:
 severity: warning
 script: |
   set -e
+  if ! command -v charmcraft &>/dev/null; then
+    echo "WARN: charmcraft not installed, skipping"
+    exit 0
+  fi
   export CRAFT_VERBOSITY=verbose
+
   charmcraft fetch-lib
   changes="$(git status --porcelain)"
   if [ -n "$changes" ]; then

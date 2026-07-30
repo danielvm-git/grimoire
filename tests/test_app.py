@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from grimoire.app import create_app
+from grimoire.app import VERSION, create_app
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ class TestLifespanFreshness:
             assert resp.status_code == 200
             data = resp.json()
             assert data["status"] in ("ok", "degraded")
-            assert data["version"] == "0.1.8"
+            assert data["version"] == VERSION
 
 
 class TestAppFactory:
@@ -146,7 +146,7 @@ class TestLifespanShutdown:
                 resp = await client.get("/health")
                 assert resp.status_code == 200
                 data = resp.json()
-                assert data["version"] == "0.1.8"
+                assert data["version"] == VERSION
 
 
 class TestLifespanResilience:

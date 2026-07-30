@@ -31,7 +31,11 @@ from grimoire.web.backlog import (
 router = APIRouter(tags=["web"])
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-templates.env.globals["VERSION"] = version("grimoire-dashboard")
+try:
+    templates.env.globals["VERSION"] = version("grimoire-dashboard")
+except Exception:
+    templates.env.globals["VERSION"] = "0.5.0"
+
 
 # Module-level staleness config — set from app lifespan
 _staleness_config: StalenessConfig = StalenessConfig()

@@ -11,8 +11,10 @@ severity: warning
 script: |
   set -e
   run_lint() {
-    local tool="$1" name="$2" shift 2
+    local tool="$1" name="$2"
+    shift 2
     if ! command -v "$tool" &>/dev/null; then
+
       echo "WARN: $name not installed, skipping"
       return 0
     fi

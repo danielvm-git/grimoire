@@ -63,7 +63,10 @@ from grimoire.workspace.manager import WorkspaceManager
 
 logger = logging.getLogger(__name__)
 
-VERSION = version("grimoire-dashboard")
+try:
+    VERSION = version("grimoire-dashboard")
+except Exception:
+    VERSION = "0.5.0"
 
 
 @asynccontextmanager

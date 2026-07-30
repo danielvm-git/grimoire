@@ -9,10 +9,11 @@ targets:
 severity: error
 script: |
   set -e
-  if ! command -v gh &>/dev/null; then
-    echo "gh CLI not installed, skipping"
+  if ! command -v gh &>/dev/null || ! gh auth status &>/dev/null; then
+    echo "gh CLI not installed or not authenticated, skipping"
     exit 0
   fi
+
   failed="$(gh run list --branch "$DEFAULT_BRANCH" --status failure --limit 1 --json databaseId --jq 'length')"
   if [ "$failed" -gt 0 ]; then
     echo "FAIL: Latest CI run on $DEFAULT_BRANCH is failing"

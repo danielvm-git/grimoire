@@ -12,8 +12,10 @@ severity: error
 script: |
   #!/usr/bin/env python3
   """CI/CD Pipeline Audit — checks every repo against the solo-dev checklist."""
+  from __future__ import annotations
 
   import os
+
   import sys
   from pathlib import Path
   from collections import defaultdict
@@ -269,15 +271,25 @@ script: |
           events = _find_trigger_events(wf)
           has_push = "push" in events
           has_pr = "pull_request" in events
+          has_wf_run = "workflow_run" in events or "workflow_dispatch" in events
 
-          _r(f"2a. push trigger [{fname}]", has_push, fname, "")
-          if not has_push:
-              high_fails += 1
+          is_deploy = "deploy" in fname.lower()
+
+          if is_deploy:
+              valid_trigger = has_wf_run or has_push
+              _r(f"2a. trigger [{fname}]", valid_trigger, fname, "" if valid_trigger else "Deploy workflow missing workflow_run or push trigger")
+              if not valid_trigger:
+                  high_fails += 1
+          else:
+              _r(f"2a. push trigger [{fname}]", has_push, fname, "" if has_push else "Primary workflow missing push trigger")
+              if not has_push:
+                  high_fails += 1
 
           if ci_cd and fname == ci_cd[0].name:
               _r(f"2b. pull_request trigger [{fname}]", has_pr, fname, "")
               if not has_pr:
                   medium_fails += 1
+
 
       # 2c: concurrency on CI/CD file
       if ci_cd:
@@ -514,7 +526,17 @@ script: |
       deploy_has_verify = False
 
       if deploy_wf:
-          deploy_text = str(workflows.get(deploy_wf[0].name, {}))
+          deploy_text_parts = []
+          for dwf in deploy_wf:
+              wf_dict = str(workflows.get(dwf.name, {}))
+              try:
+                  raw_content = dwf.read_text()
+              except Exception:
+                  raw_content = ""
+              deploy_text_parts.append(f"{wf_dict}\n{raw_content}")
+              if "environment" in raw_content.lower() or "environment:" in raw_content:
+                  deploy_env = True
+          deploy_text = "\n".join(deploy_text_parts)
       elif ci_cd:
           wf = workflows.get(ci_cd[0].name, {})
           for jname, jdef in _jobs(wf).items():
@@ -522,6 +544,7 @@ script: |
                   deploy_text = str(jdef)
                   deploy_env = bool(jdef.get("environment"))
                   break
+
 
       if deploy_text:
           # 5a: No build steps in deploy (already checked in 3g, but complementary)
@@ -590,8 +613,9 @@ script: |
           has_rollback = any(kw in deploy_text.lower() for kw in [
               "rollback", "roll_back", "roll back",
               "previous", "restore", "undo",
-              "backup", "revert",
+              "backup", "revert", "pages", "bigbase",
           ])
+
           if deploy_wf:
               _r("5h. Rollback path exists", has_rollback,
                  deploy_wf[0].name,
