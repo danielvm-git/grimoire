@@ -3,9 +3,9 @@
 
 workflow_mode: solo-git
 
-active_flow: fix_bug
-active_epic_id: null
-active_story_id: null
+active_flow: build_epic
+active_epic_id: e11
+active_story_id: e11s01
 completed_epic: false
 
 epic_cycle:
@@ -48,11 +48,22 @@ git:
   pushed: false
 
 handoff:
-  last_step_completed: "QA audit: 30 bugs fixed (4 previous + 26 this session), 38 total found, preflight green"
+  last_step_completed: >
+    plan-work: full e11 spine complete (plan-tests -> slice-tasks -> plan-work).
+    10 stories scaffolded in specs/epics/e11-e2e-browser-testing/ (epic.yaml +
+    10x eNNsYY-tasks.yaml + 10x countable-story-format .md specs with Gherkin
+    §17 citing SC-e11 IDs). 53 tasks total, all status:failing (e45s06 ledger),
+    risk-tagged (22 P0 / 18 P1 / 12 P2 / 1 P3), Allure severity/categories set.
+    release-plan.yaml registered e11 (wsjf 82, bcps 37, status planned).
+    Note: scripts/lib/plan-consistency-check.sh is not vendored in this repo
+    (bigpowers-toolkit script) — the plan-work verify gate could not run
+    mechanically; manual YAML + cross-reference validation done instead.
   open_decisions:
-    - "Should remaining 8 open bugs (medium/low) be fixed in this session or deferred?"
-    - "Should the 170 deprecation warnings (session.execute) be addressed?"
+    - "Which story to kickoff first: e11s01 (tracer-bullet harness+icons) is the WSJF-recommended start."
+    - "Should remaining 8 open bugs (medium/low) from the prior QA cycle be fixed before or after e11?"
   required_reading:
-    - specs/QA_REPORT_LATEST.md
-    - specs/bugs/registry.yaml
-  next_skill: verify-work
+    - specs/epics/e11-e2e-browser-testing/epic.yaml
+    - specs/epics/e11-e2e-browser-testing/e11s01-tasks.yaml
+    - specs/epics/e11-e2e-browser-testing/e11s01-e2e-harness-status-icons.md
+    - specs/tech-architecture/e11-TEST_PLAN_LATEST.md
+  next_skill: kickoff-branch
