@@ -1,3 +1,10 @@
+## [0.7.1](https://github.com/danielvm-git/grimoire/compare/v0.7.0...v0.7.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* use --no-banner instead of deprecated --quiet flag for gitleaks ([33f4204](https://github.com/danielvm-git/grimoire/commit/33f4204f8e100a1f80dc84381fdbdf383d063a2e))
+
 # [0.7.0](https://github.com/danielvm-git/grimoire/compare/v0.6.0...v0.7.0) (2026-07-30)
 
 
