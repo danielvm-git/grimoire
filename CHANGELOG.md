@@ -1,3 +1,10 @@
+# [0.8.0](https://github.com/danielvm-git/grimoire/compare/v0.7.1...v0.8.0) (2026-08-02)
+
+
+### Features
+
+* **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
+
 ## [0.7.1](https://github.com/danielvm-git/grimoire/compare/v0.7.0...v0.7.1) (2026-07-31)
 
 
