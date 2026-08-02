@@ -1,0 +1,102 @@
+story_id: e11s05
+title: "Checks page E2E (run, toggle, results, output, deep-link)"
+status: failing
+bcps: 4
+description: |
+  Browser-level coverage of /checks: the run→poll→complete cycle, enable/disable
+  toggle, results aggregate view, output drill-down with truncation, the
+  URL-driven auto-expand deep-link, and the script viewer.
+
+tasks:
+  - id: e11s05-t01
+    description: "SC-e11s04-P0-01: /checks lists all configured check cards."
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_checks.py -m e2e -k lists_check_cards -q"
+    allure:
+      severity: critical
+      categories:
+        - "e2e"
+        - "checks"
+
+  - id: e11s05-t02
+    description: |
+      SC-e11s04-P0-02: Run button (POST /partials/check-run/{slug}) swaps to a
+      running state; the status poller
+      (hx-get .../check-run-status/{slug}?was_running=1) drives it back to
+      idle once the (mocked) check completes.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_checks.py -m e2e -k run_button_full_cycle -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "checks"
+
+  - id: e11s05-t03
+    description: |
+      SC-e11s04-P0-03: Toggle (POST /api/checks/{slug}/toggle) flips the
+      Enable/Disable label and persists across reload.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_checks.py -m e2e -k toggle_persists -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "checks"
+
+  - id: e11s05-t04
+    description: |
+      SC-e11s04-P1-04: Results button loads /partials/check-results/{slug}
+      showing pass/fail/warning aggregate counts.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_checks.py -m e2e -k results_aggregate_counts -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "checks"
+
+  - id: e11s05-t05
+    description: |
+      SC-e11s04-P1-05: clicking a result row loads
+      /partials/check-output/{id} with full stdout; a truncation banner
+      appears when output exceeds the 64KB cap.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_checks.py -m e2e -k 'output_full_text or output_truncation_banner' -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "checks"
+
+  - id: e11s05-t06
+    description: |
+      SC-e11s04-P1-06: navigating to
+      /checks?expand={slug}&result={id}#check-card-{slug} auto-expands the
+      targeted card on page load without a click.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_checks.py -m e2e -k deeplink_auto_expand -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "checks"
+
+  - id: e11s05-t07
+    description: "SC-e11s04-P2-07: Script button reveals the check's bash source."
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_checks.py -m e2e -k script_button_reveals_source -q"
+    allure:
+      severity: normal
+      categories:
+        - "e2e"
+        - "checks"
+
+verify_story: "uv run pytest tests/e2e/test_checks.py -m e2e -q"

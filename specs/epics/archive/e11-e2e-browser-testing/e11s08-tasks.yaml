@@ -1,0 +1,52 @@
+story_id: e11s08
+title: "Refresh & loading flow E2E"
+status: failing
+bcps: 2
+description: |
+  Browser-level coverage of the manual refresh cycle and the cold-start
+  loading page's auto-replace behavior.
+
+tasks:
+  - id: e11s08-t01
+    description: |
+      SC-e11s07-P0-01/02: Refresh button (POST /partials/refresh-trigger)
+      enters a running state; the status poller
+      (/partials/refresh-status?was_running=1) returns to idle and updates
+      "Last updated" once the (mocked) GitHub fetch resolves.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_refresh.py -m e2e -k refresh_full_cycle -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "refresh"
+
+  - id: e11s08-t02
+    description: |
+      SC-e11s07-P1-03: cold-start loading.html polls
+      /partials/loading-status and auto-replaces itself with the dashboard
+      once the initial fetch completes.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_refresh.py -m e2e -k cold_start_auto_replaces -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "refresh"
+
+  - id: e11s08-t03
+    description: |
+      SC-e11s07-P2-04: the configured refresh schedule cron label renders on
+      the dashboard (e.g. "Scheduled: */30 * * * *").
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_refresh.py -m e2e -k schedule_label_renders -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "refresh"
+
+verify_story: "uv run pytest tests/e2e/test_refresh.py -m e2e -q"

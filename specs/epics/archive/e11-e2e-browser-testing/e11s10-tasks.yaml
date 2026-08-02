@@ -1,0 +1,62 @@
+story_id: e11s10
+title: "NFR verification (perf, a11y scan, visual regression)"
+status: failing
+bcps: 3
+description: |
+  Non-functional guardrails on top of the functional E2E suite: load
+  performance, automated accessibility scanning, and visual regression
+  snapshots. Runs last since it depends on the pages built out by earlier
+  stories being stable.
+
+tasks:
+  - id: e11s10-t01
+    description: |
+      SC-e11s10-P1-01: dashboard first-contentful-paint < 1.5s on the seeded
+      Layer-A instance, captured via Playwright tracing.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_nfr.py -m e2e -k dashboard_fcp_under_1500ms -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "nfr"
+          - "perf"
+          - "a11y"
+          - "visual"
+
+  - id: e11s10-t02
+    description: |
+      SC-e11s10-P2-02: axe-core scan on the 5 core pages (Dashboard, Repo
+      Detail, Checks, Actions, Backlog) reports 0 serious/critical
+      violations.
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_nfr.py -m e2e -k axe_scan_zero_critical -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "nfr"
+          - "perf"
+          - "a11y"
+          - "visual"
+
+  - id: e11s10-t03
+    description: |
+      SC-e11s10-P2-03: visual regression snapshots of the dashboard
+      (light+dark) and one repo detail page, blessed as baseline and diffed
+      on subsequent runs.
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_nfr.py -m e2e -k visual_regression_snapshots -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "nfr"
+          - "perf"
+          - "a11y"
+          - "visual"
+
+verify_story: "uv run pytest tests/e2e/test_nfr.py -m e2e -q"

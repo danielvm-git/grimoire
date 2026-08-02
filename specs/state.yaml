@@ -5,15 +5,24 @@ workflow_mode: solo-git
 
 active_flow: build_epic
 active_epic_id: e11
-active_story_id: e11s01
-completed_epic: false
+active_story_id: null
+completed_epic: true
 
 epic_cycle:
-  current_step: null
-  next_skill: null
-  story_bcps: null
-  completed_steps: []
-  audit_result: null
+  current_step: 8
+  next_skill: survey-context
+  story_bcps: 37
+  completed_steps:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+  audit_result: PASS
   fast_mode: false
 
 bug_cycle:
@@ -38,7 +47,7 @@ release:
 
 metrics:
   story_start: "2026-07-30T12:00:00Z"
-  story_end: null
+  story_end: "2026-08-02T12:34:00Z"
   cycle_minutes: null
   bcp_per_hour: null
 
@@ -49,21 +58,11 @@ git:
 
 handoff:
   last_step_completed: >
-    plan-work: full e11 spine complete (plan-tests -> slice-tasks -> plan-work).
-    10 stories scaffolded in specs/epics/e11-e2e-browser-testing/ (epic.yaml +
-    10x eNNsYY-tasks.yaml + 10x countable-story-format .md specs with Gherkin
-    §17 citing SC-e11 IDs). 53 tasks total, all status:failing (e45s06 ledger),
-    risk-tagged (22 P0 / 18 P1 / 12 P2 / 1 P3), Allure severity/categories set.
-    release-plan.yaml registered e11 (wsjf 82, bcps 37, status planned).
-    Note: scripts/lib/plan-consistency-check.sh is not vendored in this repo
-    (bigpowers-toolkit script) — the plan-work verify gate could not run
-    mechanically; manual YAML + cross-reference validation done instead.
-  open_decisions:
-    - "Which story to kickoff first: e11s01 (tracer-bullet harness+icons) is the WSJF-recommended start."
-    - "Should remaining 8 open bugs (medium/low) from the prior QA cycle be fixed before or after e11?"
+    release-branch: finalized e11 epic. Verified test suite (417 passed), overall coverage (85%),
+    security review gate (specs/security/REVIEW.md), and archived epic capsule to specs/epics/archive/e11-e2e-browser-testing.
+  open_decisions: []
   required_reading:
-    - specs/epics/e11-e2e-browser-testing/epic.yaml
-    - specs/epics/e11-e2e-browser-testing/e11s01-tasks.yaml
-    - specs/epics/e11-e2e-browser-testing/e11s01-e2e-harness-status-icons.md
-    - specs/tech-architecture/e11-TEST_PLAN_LATEST.md
-  next_skill: kickoff-branch
+    - specs/epics/archive/e11-e2e-browser-testing/epic.yaml
+    - specs/security/REVIEW.md
+  next_skill: survey-context
+

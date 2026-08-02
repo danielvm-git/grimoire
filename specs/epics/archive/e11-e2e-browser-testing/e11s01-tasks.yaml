@@ -1,0 +1,161 @@
+story_id: e11s01
+title: "E2E harness + status-icon semantics (tracer bullet)"
+status: failing
+bcps: 8
+description: |
+  Stands up the entire Layer-A E2E harness (Playwright, live uvicorn fixture, seeded
+  data factories) AND proves it against the single highest business-risk assertion:
+  the repo/workflow/check status-icon taxonomy discovered this session
+  (fa-check / fa-xmark / fa-triangle-exclamation / fa-minus) and the non-obvious rule
+  that warning-severity check failures do NOT flip repo health to "error"
+  (src/grimoire/web/router.py:105 health_status). This is the tracer bullet: if the
+  harness is wrong, every later story inherits the bug, so it ships first and alone.
+
+tasks:
+  - id: e11s01-t01
+    description: |
+      Add pytest-playwright, pytest-base-url, axe-playwright-python, pytest-repeat
+      as dev dependencies. Install Chromium. Register `e2e` and `smoke` pytest
+      markers in pyproject.toml `[tool.pytest.ini_options]` so `just test` (no
+      markers) stays fast and excludes both by default.
+    status: failing
+    risk: P0
+    verify: "grep -q 'pytest-playwright' pyproject.toml && uv run python -c \"import playwright\" && grep -q 'e2e:' pyproject.toml && grep -q 'smoke:' pyproject.toml"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t02
+    description: |
+      Add tests/e2e/conftest.py: session-scoped fixture that spawns
+      `uvicorn grimoire.app:create_app` on an ephemeral localhost port, tears it
+      down at session end, and exposes it as Playwright's `base_url`. Add a
+      per-test `page` fixture. All GitHub network calls intercepted via `respx`
+      (never hit the real API — repo rule).
+    status: failing
+    risk: P0
+    verify: "test -f tests/e2e/conftest.py && grep -q 'respx' tests/e2e/conftest.py && grep -q 'uvicorn' tests/e2e/conftest.py"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t03
+    description: |
+      Add tests/e2e/factories.py promoting tests/test_web/conftest.py's
+      `_populate_cache()` shape into reusable factories: make_repo(), make_stats(),
+      make_check_result(), make_action_run(), make_backlog_item(). Reuse the
+      canonical acme/api (healthy+stale mix) and acme/frontend (failing workflow)
+      fixtures so Layer-A assertions mirror tests/test_web/test_router.py's
+      existing expected outputs rather than inventing new ground truth. Add one
+      new fixture: acme/warn-only (single warning-severity check fail, zero
+      error-severity fails) — the linchpin for e11s01-t07.
+    status: failing
+    risk: P0
+    verify: "test -f tests/e2e/factories.py && grep -qE 'warn.only' tests/e2e/factories.py"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t04
+    description: |
+      SC-e11s02-P0-01: repo with a failing workflow renders health icon
+      `fa-xmark status-icon-failure` with title starting "Error".
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_status_icons.py -m e2e -k health_error_icon -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t05
+    description: |
+      SC-e11s02-P0-02: repo with only stale items (no workflow/check failures)
+      renders health icon `fa-triangle-exclamation status-icon-pending` with
+      title starting "Warning".
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_status_icons.py -m e2e -k health_warning_icon -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t06
+    description: |
+      SC-e11s02-P0-03: fully green repo renders health icon
+      `fa-check status-icon-success` with title "Healthy".
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_status_icons.py -m e2e -k health_ok_icon -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t07
+    description: |
+      SC-e11s02-P0-04 (critical business rule): using the acme/warn-only fixture,
+      assert the repo's health stays "ok"/"warning" and NEVER renders the error
+      icon, even though it has a failing check — because that check's severity is
+      "warning", and router.py:105 explicitly excludes warning-severity failures
+      from health computation. This is the single highest-risk assertion in the
+      whole suite; nothing in the current test_router.py suite guards it in a
+      rendered browser.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_status_icons.py -m e2e -k warning_severity_excluded_from_health -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t08
+    description: |
+      SC-e11s02-P1-05..07: per-branch workflow cell icons (success→check,
+      failure→X, pending→pending icon); per-branch check cell icons
+      (pass→check, fail+severity=warning→triangle, fail→X, else→fa-minus
+      not-run dash); check cell deep-links to
+      /checks?expand={slug}&result={id}#check-card-{slug}.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_status_icons.py -m e2e -k 'workflow_cell_icons or check_cell_icons or check_cell_deeplink' -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+  - id: e11s01-t09
+    description: |
+      SC-e11s02-P2-08: hovering a check cell reveals a tooltip with
+      data-tip="{check_name} ({branch}): {status}".
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_status_icons.py -m e2e -k check_cell_tooltip -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "status-icons"
+          - "harness"
+
+verify_story: "uv run pytest tests/e2e/test_status_icons.py -m e2e -q"

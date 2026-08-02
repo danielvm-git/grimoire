@@ -1,0 +1,105 @@
+story_id: e11s02
+title: "Live post-deploy smoke gate"
+status: failing
+bcps: 5
+description: |
+  Closes the gap found this session: deploy.yml (workflow_run trigger off
+  "Test Build Release") ships straight to grimoire.bigbase.click with zero
+  verification. Read-only Layer-B tests against production, wired as a real
+  blocking step in the deploy workflow. Never trigger check-run/action-run/
+  refresh-trigger/save-weights against production — smoke is read-only only.
+
+tasks:
+  - id: e11s02-t01
+    description: |
+      SC-e11s09-P0-01: tests/smoke/test_live_smoke.py — GET each of
+      /, /checks, /actions, /backlog against SMOKE_BASE_URL (default
+      https://grimoire.bigbase.click) → 200 and non-empty <title>.
+    status: failing
+    risk: P0
+    verify: "test -f tests/smoke/test_live_smoke.py && grep -q 'SMOKE_BASE_URL' tests/smoke/test_live_smoke.py"
+    allure:
+      severity: critical
+      categories:
+          - "smoke"
+          - "deploy-gate"
+          - "live"
+
+  - id: e11s02-t02
+    description: |
+      SC-e11s09-P0-02: resolve the first repo link from the live dashboard and
+      GET its /repo/{owner}/{name} page → 200.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/smoke/test_live_smoke.py -m smoke -k repo_detail_200 -q"
+    allure:
+      severity: critical
+      categories:
+          - "smoke"
+          - "deploy-gate"
+          - "live"
+
+  - id: e11s02-t03
+    description: |
+      SC-e11s09-P0-03: assert the footer version string on the live site equals
+      an expected version passed via GRIMOIRE_EXPECTED_VERSION env var. Closes
+      the version-drift gap found this session (live showed v0.6.0 while local
+      pyproject.toml read 0.5.3).
+    status: failing
+    risk: P0
+    verify: "grep -q 'GRIMOIRE_EXPECTED_VERSION' tests/smoke/test_live_smoke.py"
+    allure:
+      severity: critical
+      categories:
+          - "smoke"
+          - "deploy-gate"
+          - "live"
+
+  - id: e11s02-t04
+    description: |
+      SC-e11s09-P1-04/05/06: dashboard renders at least one icon of each status
+      class (page isn't blank/erroring); one safe read-only hx-get partial
+      (dashboard-list) 200s; no console errors on load across the 5 core pages.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/smoke/test_live_smoke.py -m smoke -k 'icons_present or safe_partial_200 or no_console_errors' -q"
+    allure:
+      severity: high
+      categories:
+          - "smoke"
+          - "deploy-gate"
+          - "live"
+
+  - id: e11s02-t05
+    description: |
+      Add `just smoke` recipe: `SMOKE_BASE_URL={{url}} uv run pytest tests/smoke -m smoke -q`,
+      defaulting url to production. Keep `just test`/`just check` excluding
+      `-m "not e2e and not smoke"` so the pre-commit gate stays fast.
+    status: failing
+    risk: P1
+    verify: "grep -q '^smoke' justfile"
+    allure:
+      severity: high
+      categories:
+          - "smoke"
+          - "deploy-gate"
+          - "live"
+
+  - id: e11s02-t06
+    description: |
+      Append a post-deploy job to .github/workflows/deploy.yml that runs after
+      the "Deploy to BigBase" step succeeds, executes `just smoke`, and fails
+      the workflow (visibly, in the Actions UI) if smoke fails. This is the
+      single highest-value change in the epic — it stops production from
+      shipping blind.
+    status: failing
+    risk: P0
+    verify: "grep -q 'smoke' .github/workflows/deploy.yml"
+    allure:
+      severity: critical
+      categories:
+          - "smoke"
+          - "deploy-gate"
+          - "live"
+
+verify_story: "uv run pytest tests/smoke -m smoke -q && grep -q 'smoke' .github/workflows/deploy.yml"

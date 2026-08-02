@@ -1,0 +1,76 @@
+story_id: e11s06
+title: "Actions page E2E (run, toggle, history, output)"
+status: failing
+bcps: 3
+description: |
+  Browser-level coverage of /actions: run→poll→complete cycle, enable/disable
+  toggle, run history, per-run transcript, and per-repo pass/fail icons within
+  a run.
+
+tasks:
+  - id: e11s06-t01
+    description: "SC-e11s05-P0-01: /actions lists all configured action cards."
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_actions.py -m e2e -k lists_action_cards -q"
+    allure:
+      severity: critical
+      categories:
+        - "e2e"
+        - "actions"
+
+  - id: e11s06-t02
+    description: |
+      SC-e11s05-P0-02: Run button (POST /partials/action-run/{slug}) swaps to
+      a running state, status-polls to completion, and the new run appears in
+      the results history.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_actions.py -m e2e -k run_button_full_cycle -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "actions"
+
+  - id: e11s06-t03
+    description: |
+      SC-e11s05-P0-03: Toggle (POST /api/actions/{slug}/toggle) flips the
+      enabled state and persists.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_actions.py -m e2e -k toggle_persists -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "actions"
+
+  - id: e11s06-t04
+    description: |
+      SC-e11s05-P1-04: Results view (/partials/action-results/{slug}) lists
+      prior runs; clicking a row loads
+      /partials/action-output/{result_id} with the full transcript.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_actions.py -m e2e -k 'results_history or output_transcript' -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "actions"
+
+  - id: e11s06-t05
+    description: |
+      SC-e11s05-P2-05: within an expanded action run, per-repo pass/fail icons
+      match each repo's `passed` boolean.
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_actions.py -m e2e -k per_repo_pass_fail_icons -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "actions"
+
+verify_story: "uv run pytest tests/e2e/test_actions.py -m e2e -q"

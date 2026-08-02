@@ -1,0 +1,62 @@
+story_id: e11s04
+title: "Repository detail page E2E"
+status: failing
+bcps: 2
+description: |
+  Browser-level coverage of /repo/{owner}/{name}: header stats, check output
+  expansion, workflow run links, and the 404 path.
+
+tasks:
+  - id: e11s04-t01
+    description: |
+      SC-e11s03-P0-01: /repo/{owner}/{name} renders header, issue/PR/branch
+      counts, and a "View on GitHub" link pointing at the correct repo URL.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_repo_detail.py -m e2e -k header_and_counts -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "repo-detail"
+
+  - id: e11s04-t02
+    description: |
+      SC-e11s03-P1-02: per-check "Output" button (hx-get
+      /partials/check-output/{id}) expands the full output panel in place.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_repo_detail.py -m e2e -k check_output_expands -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "repo-detail"
+
+  - id: e11s04-t03
+    description: |
+      SC-e11s03-P1-03: workflow run links point at
+      github.com/{owner}/{repo}/actions/runs/{id}.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_repo_detail.py -m e2e -k workflow_run_links -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "repo-detail"
+
+  - id: e11s04-t04
+    description: |
+      SC-e11s03-P2-04: navigating to an unknown repo renders not_found.html
+      (a real 404 page, not a stacktrace or blank response).
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_repo_detail.py -m e2e -k unknown_repo_404 -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "repo-detail"
+
+verify_story: "uv run pytest tests/e2e/test_repo_detail.py -m e2e -q"

@@ -1,0 +1,80 @@
+story_id: e11s03
+title: "Dashboard core E2E (sort, totals, view toggle)"
+status: failing
+bcps: 3
+description: |
+  Browser-level coverage of the dashboard's primary interactions: the 5 summary
+  tiles, the 9-column sort with direction toggle, matrix/list view switching,
+  staleness-threshold coloring, and repo-name navigation.
+
+tasks:
+  - id: e11s03-t01
+    description: |
+      SC-e11s01-P0-01/02: /dashboard renders 5 summary tiles (Repositories, Open
+      Issues, Open PRs, Workflows, Checks) with totals and breakdown counts
+      (N failing · N warning · N healthy) matching the seeded fixture set exactly.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_dashboard.py -m e2e -k summary_tiles -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "dashboard"
+
+  - id: e11s03-t02
+    description: |
+      SC-e11s01-P1-03/04: clicking each of the 9 sort headers (Name, Health,
+      Open Issues, Stale Issues, Open PRs, Stale PRs, Branches, Failing
+      Workflows, Failing Checks, Last Activity) swaps the matrix partial via
+      HTMX, changes row order, moves the ▲/▼ indicator, and toggles direction
+      on re-click of the active column.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_dashboard.py -m e2e -k 'sort_headers or sort_direction_toggle' -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "dashboard"
+
+  - id: e11s03-t03
+    description: |
+      SC-e11s01-P1-05: Matrix ↔ List view toggle swaps the partial and
+      preserves the active sort.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_dashboard.py -m e2e -k view_toggle_preserves_sort -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "dashboard"
+
+  - id: e11s03-t04
+    description: |
+      SC-e11s01-P2-06: stale-count badge `(N)` renders `text-warning` only when
+      stale% >= the configured problematic_stale_*_pct threshold, else
+      `opacity-50`.
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_dashboard.py -m e2e -k stale_coloring_threshold -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "dashboard"
+
+  - id: e11s03-t05
+    description: |
+      SC-e11s01-P2-07: repo name link navigates to /repo/{owner}/{name}.
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_dashboard.py -m e2e -k repo_name_navigates -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "dashboard"
+
+verify_story: "uv run pytest tests/e2e/test_dashboard.py -m e2e -q"

@@ -1,0 +1,108 @@
+# e11 — End-to-End Browser Testing
+# From: specs/tech-architecture/e11-TEST_PLAN_LATEST.md (plan-tests, 2026-07-30)
+# Source: live tour of grimoire.bigbase.click (v0.6.0) + code read of src/grimoire/web/**
+# Closes: zero browser-level coverage today (existing suite is HTTP-fragment only via
+# httpx.ASGITransport — no DOM, no JS, no HTMX swap execution) and "deploy ships blind"
+# (deploy.yml has no post-deploy verification step).
+
+title: "End-to-End Browser Testing"
+status: done
+depends_on: [e06]
+source: "specs/tech-architecture/e11-TEST_PLAN_LATEST.md"
+
+tooling:
+  framework: pytest-playwright
+  browsers: [chromium]
+  markers: ["e2e (Layer A — hermetic, seeded, CI-blocking)", "smoke (Layer B — live, read-only, post-deploy)"]
+  new_dev_deps: [pytest-playwright, pytest-base-url, axe-playwright-python, pytest-repeat]
+
+stories:
+  - id: e11s01
+    title: "E2E harness + status-icon semantics (tracer bullet)"
+    status: planned
+    bcps: 8
+    wsjf: 95
+    delta: ADDED
+    scenario_ids: [SC-e11s02-P0-01, SC-e11s02-P0-02, SC-e11s02-P0-03, SC-e11s02-P0-04, SC-e11s02-P1-05, SC-e11s02-P1-06, SC-e11s02-P1-07, SC-e11s02-P2-08]
+    file: e11s01-tasks.yaml
+
+  - id: e11s02
+    title: "Live post-deploy smoke gate"
+    status: planned
+    bcps: 5
+    wsjf: 90
+    delta: MODIFIED
+    scenario_ids: [SC-e11s09-P0-01, SC-e11s09-P0-02, SC-e11s09-P0-03, SC-e11s09-P1-04, SC-e11s09-P1-05, SC-e11s09-P2-06]
+    file: e11s02-tasks.yaml
+
+  - id: e11s03
+    title: "Dashboard core E2E (sort, totals, view toggle)"
+    status: planned
+    bcps: 3
+    wsjf: 65
+    delta: ADDED
+    scenario_ids: [SC-e11s01-P0-01, SC-e11s01-P0-02, SC-e11s01-P1-03, SC-e11s01-P1-04, SC-e11s01-P1-05, SC-e11s01-P2-06, SC-e11s01-P2-07]
+    file: e11s03-tasks.yaml
+
+  - id: e11s04
+    title: "Repository detail page E2E"
+    status: planned
+    bcps: 2
+    wsjf: 45
+    delta: ADDED
+    scenario_ids: [SC-e11s03-P0-01, SC-e11s03-P1-02, SC-e11s03-P1-03, SC-e11s03-P2-04]
+    file: e11s04-tasks.yaml
+
+  - id: e11s05
+    title: "Checks page E2E (run, toggle, results, output, deep-link)"
+    status: planned
+    bcps: 4
+    wsjf: 75
+    delta: ADDED
+    scenario_ids: [SC-e11s04-P0-01, SC-e11s04-P0-02, SC-e11s04-P0-03, SC-e11s04-P1-04, SC-e11s04-P1-05, SC-e11s04-P1-06, SC-e11s04-P2-07]
+    file: e11s05-tasks.yaml
+
+  - id: e11s06
+    title: "Actions page E2E (run, toggle, history, output)"
+    status: planned
+    bcps: 3
+    wsjf: 68
+    delta: ADDED
+    scenario_ids: [SC-e11s05-P0-01, SC-e11s05-P0-02, SC-e11s05-P0-03, SC-e11s05-P1-04, SC-e11s05-P2-05]
+    file: e11s06-tasks.yaml
+
+  - id: e11s07
+    title: "Backlog E2E (scoring, filters, export, save-weights)"
+    status: planned
+    bcps: 4
+    wsjf: 70
+    delta: ADDED
+    scenario_ids: [SC-e11s06-P0-01, SC-e11s06-P0-02, SC-e11s06-P1-03, SC-e11s06-P1-04, SC-e11s06-P1-05, SC-e11s06-P2-06]
+    file: e11s07-tasks.yaml
+
+  - id: e11s08
+    title: "Refresh & loading flow E2E"
+    status: planned
+    bcps: 2
+    wsjf: 55
+    delta: ADDED
+    scenario_ids: [SC-e11s07-P0-01, SC-e11s07-P0-02, SC-e11s07-P1-03, SC-e11s07-P2-04]
+    file: e11s08-tasks.yaml
+
+  - id: e11s09
+    title: "Cross-cutting E2E (nav, theme, responsive, a11y basics)"
+    status: planned
+    bcps: 3
+    wsjf: 50
+    delta: ADDED
+    scenario_ids: [SC-e11s08-P1-01, SC-e11s08-P1-02, SC-e11s08-P2-03, SC-e11s08-P2-04, SC-e11s08-P3-05]
+    file: e11s09-tasks.yaml
+
+  - id: e11s10
+    title: "NFR verification (perf, a11y scan, visual regression)"
+    status: planned
+    bcps: 3
+    wsjf: 40
+    delta: ADDED
+    scenario_ids: [SC-e11s10-P1-01, SC-e11s10-P2-02, SC-e11s10-P2-03]
+    file: e11s10-tasks.yaml

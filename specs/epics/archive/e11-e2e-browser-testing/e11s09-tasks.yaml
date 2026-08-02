@@ -1,0 +1,79 @@
+story_id: e11s09
+title: "Cross-cutting E2E (nav, theme, responsive, a11y basics)"
+status: failing
+bcps: 3
+description: |
+  Browser-level coverage of behaviors shared across every page: navigation,
+  theme persistence, small-viewport layout, and non-color-only status
+  semantics.
+
+tasks:
+  - id: e11s09-t01
+    description: |
+      SC-e11s08-P1-01: nav bar links (Dashboard/Backlog/Checks/Actions) route
+      to the correct page and the active link is visually indicated.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_cross_cutting.py -m e2e -k nav_links_and_active_state -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "cross-cutting"
+          - "a11y"
+
+  - id: e11s09-t02
+    description: |
+      SC-e11s08-P1-02: theme toggle (moon/sun) flips dark↔light and the
+      choice persists across navigation (localStorage).
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_cross_cutting.py -m e2e -k theme_toggle_persists -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "cross-cutting"
+          - "a11y"
+
+  - id: e11s09-t03
+    description: |
+      SC-e11s08-P2-03: at a 375px mobile viewport, the nav remains usable and
+      the page body has no horizontal scroll.
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_cross_cutting.py -m e2e -k mobile_viewport_no_hscroll -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "cross-cutting"
+          - "a11y"
+
+  - id: e11s09-t04
+    description: |
+      SC-e11s08-P2-04: status icons expose title/aria text conveying
+      pass/fail/warning semantics, not color alone.
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_cross_cutting.py -m e2e -k icons_have_text_semantics -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "cross-cutting"
+          - "a11y"
+
+  - id: e11s09-t05
+    description: "SC-e11s08-P3-05: clicking the logo returns to /."
+    status: failing
+    risk: P3
+    verify: "uv run pytest tests/e2e/test_cross_cutting.py -m e2e -k logo_returns_home -q"
+    allure:
+      severity: minor
+      categories:
+        - "e2e"
+        - "cross-cutting"
+        - "a11y"
+
+verify_story: "uv run pytest tests/e2e/test_cross_cutting.py -m e2e -q"

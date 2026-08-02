@@ -80,7 +80,7 @@ epics:
 
   - id: e11
     title: "End-to-End Browser Testing"
-    file: specs/epics/e11-e2e-browser-testing/epic.yaml
+    file: specs/epics/archive/e11-e2e-browser-testing/epic.yaml
     wsjf: 82  # weighted avg of story WSJFs (95,90,65,45,75,68,70,55,50,40); harness+smoke lead
     bcps: 37
-    status: planned
+    status: done

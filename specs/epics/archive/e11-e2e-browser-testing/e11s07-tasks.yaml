@@ -1,0 +1,94 @@
+story_id: e11s07
+title: "Backlog E2E (scoring, filters, export, save-weights)"
+status: failing
+bcps: 4
+description: |
+  Browser-level coverage of /backlog: summary header accuracy, score-ordered
+  rendering, weight persistence with invalid-payload rejection, export
+  download, live filtering, and score-tier ordering.
+
+tasks:
+  - id: e11s07-t01
+    description: |
+      SC-e11s06-P0-01: /backlog header summary
+      ("N items across M repos — X critical · Y other") matches the seeded
+      item count exactly.
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_backlog.py -m e2e -k header_summary_matches_seed -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "backlog"
+
+  - id: e11s07-t02
+    description: |
+      SC-e11s06-P0-02: items render sorted by score descending; each row
+      shows a score badge, repo, and the failing-reason text (workflow / PR /
+      check).
+    status: failing
+    risk: P0
+    verify: "uv run pytest tests/e2e/test_backlog.py -m e2e -k items_score_ordered -q"
+    allure:
+      severity: critical
+      categories:
+          - "e2e"
+          - "backlog"
+
+  - id: e11s07-t03
+    description: |
+      SC-e11s06-P1-03: POST /api/backlog/save-weights persists a reordered
+      weight set — reload reflects new scoring; an invalid payload returns 4xx
+      (mirrors the existing TestBacklogSaveWeightsValidation guard from
+      tests/test_web/test_router.py, now exercised through a real form/JS
+      interaction).
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_backlog.py -m e2e -k 'save_weights_persists or save_weights_rejects_invalid' -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "backlog"
+
+  - id: e11s07-t04
+    description: |
+      SC-e11s06-P1-04: Export (GET /api/backlog/export) triggers a file
+      download containing scores, statuses, and links.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_backlog.py -m e2e -k export_downloads_file -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "backlog"
+
+  - id: e11s07-t05
+    description: |
+      SC-e11s06-P1-05: Filters panel narrows the list via
+      /partials/backlog-items without a full page reload.
+    status: failing
+    risk: P1
+    verify: "uv run pytest tests/e2e/test_backlog.py -m e2e -k filters_narrow_without_reload -q"
+    allure:
+      severity: high
+      categories:
+          - "e2e"
+          - "backlog"
+
+  - id: e11s07-t06
+    description: |
+      SC-e11s06-P2-06: score-tier grouping renders in correct order
+      (100 workflow-fail > 80 check-fail-critical > 30 check-fail-minor).
+    status: failing
+    risk: P2
+    verify: "uv run pytest tests/e2e/test_backlog.py -m e2e -k score_tier_ordering -q"
+    allure:
+      severity: normal
+      categories:
+          - "e2e"
+          - "backlog"
+
+verify_story: "uv run pytest tests/e2e/test_backlog.py -m e2e -q"
