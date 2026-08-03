@@ -1,3 +1,10 @@
+## [0.8.1](https://github.com/danielvm-git/grimoire/compare/v0.8.0...v0.8.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* **checks:** pin master default branch for master-default repos ([021b964](https://github.com/danielvm-git/grimoire/commit/021b9649d61e9b0c37d98c714f4996d3221ffd3d))
+
 # [0.8.0](https://github.com/danielvm-git/grimoire/compare/v0.7.1...v0.8.0) (2026-08-02)
 
 
