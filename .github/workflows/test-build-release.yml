@@ -152,10 +152,26 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install semantic-release
-        run: npm install --no-save semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/exec
+      - name: Install big-release
+        run: |
+          curl -sL https://github.com/danielvm-git/big-release/releases/latest/download/big-release-linux-amd64 -o big-release && chmod +x big-release && sudo mv big-release /usr/local/bin/ && big-release --version
 
-      - name: Run semantic-release
-        run: npx semantic-release
+      - name: Run big-release
+        id: big-release
+        run: big-release release --verbose
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: big-release-bot
+          GIT_AUTHOR_EMAIL: big-release-bot@danielvm-git.github.io
+          GIT_COMMITTER_NAME: big-release-bot
+          GIT_COMMITTER_EMAIL: big-release-bot@danielvm-git.github.io
+
+      - name: Sync pyproject version and CHANGELOG
+        if: steps.big-release.outputs.published == 'true'
+        run: |
+          VER="${{ steps.big-release.outputs.version }}"
+          sed -i.bak -E "s/^version = \".*\"/version = \"${VER}\"/" pyproject.toml && rm pyproject.toml.bak
+          git add pyproject.toml CHANGELOG.md
+          git -c user.name="big-release-bot" -c user.email="big-release-bot@danielvm-git.github.io" \
+            commit -m "chore(release): update version files to ${VER} [skip ci]"
+          git push origin main
