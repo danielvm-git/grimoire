@@ -10,6 +10,7 @@ git:
 repositories:
   - repo: "danielvm-git/.github"
   - repo: "danielvm-git/Ctxo"
+    branches: [master]
   - repo: "danielvm-git/PineScriptStrategies"
   - repo: "danielvm-git/add-tutorial-requests-site"
   - repo: "danielvm-git/astro-wiki"
@@ -70,10 +71,12 @@ repositories:
   - repo: "danielvm-git/sdd-cockpit"
   - repo: "danielvm-git/sdd-ui-plugin"
   - repo: "danielvm-git/semantic-release-baby"
+    branches: [master]
   - repo: "danielvm-git/skill-method-manager"
   - repo: "danielvm-git/sqz"
   - repo: "danielvm-git/udacity"
   - repo: "danielvm-git/wordpress-cervejariafurquilha"
+    branches: [master]
 
 staleness:
   pull_requests_days: 30
