@@ -1,6 +1,6 @@
 name: "Has README"
 description: "Checks that every repo has a README.md file"
-schedule: "0 8 * * 1"
+schedule: "0 * * * *"
 targets:
   regex: ".*"
 severity: warning

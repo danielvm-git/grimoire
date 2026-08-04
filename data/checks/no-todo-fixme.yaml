@@ -2,7 +2,7 @@ name: "No TODO/FIXME"
 description: >
   Scans source files for TODO, FIXME, and HACK markers to surface tech debt.
   Skips vendor directories, node_modules, .git, and build artifacts.
-schedule: "0 8 * * 1"
+schedule: "0 * * * *"
 targets:
   regex: ".*"
 severity: warning

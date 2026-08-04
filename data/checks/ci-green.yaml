@@ -3,7 +3,7 @@ description: >
   Checks that the latest CI run on the default branch is passing.
   Uses gh run list to find failed workflow runs.
   Targets only repos with .github/workflows/ via script targeting.
-schedule: "0 */8 * * *"
+schedule: "0 * * * *"
 targets:
   script: '[ -d .github/workflows ]'
 severity: error

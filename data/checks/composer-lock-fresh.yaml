@@ -1,6 +1,6 @@
 name: "Composer lock up-to-date"
 description: "Checks whether composer.lock is in sync with composer.json"
-schedule: "0 */8 * * *"
+schedule: "0 * * * *"
 targets:
   script: "find . -name 'composer.lock' -print -quit | grep -q ."
 severity: warning

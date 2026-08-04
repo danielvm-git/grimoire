@@ -106,7 +106,7 @@ class TestBundledCheckDefinitions:
         assert watchdog is not None
         assert watchdog.name == "Watchdog"
         assert watchdog.targets.regex == ".*"
-        assert watchdog.schedule == "0 */8 * * *"
+        assert watchdog.schedule == "0 * * * *"
         assert watchdog.enabled is True
 
     def test_charmcraft_fetch_lib_loads(self) -> None:
@@ -116,7 +116,7 @@ class TestBundledCheckDefinitions:
         assert charm.name == "Charm Libraries up-to-date"
         assert charm.targets.regex == "-operator$"
         assert "charmcraft fetch-lib" in charm.script
-        assert charm.schedule == "0 */8 * * *"
+        assert charm.schedule == "0 * * * *"
         assert charm.enabled is True
 
     def test_ci_cd_migration_loads(self) -> None:

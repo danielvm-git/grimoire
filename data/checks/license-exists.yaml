@@ -1,6 +1,6 @@
 name: "License Exists"
 description: "Verifies every repo has a LICENSE file"
-schedule: "0 8 * * 1"
+schedule: "0 * * * *"
 targets:
   regex: ".*"
 severity: warning

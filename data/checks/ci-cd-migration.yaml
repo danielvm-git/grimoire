@@ -7,7 +7,7 @@ description: >
 targets:
   # Default branch only — workflow layout is branch-invariant for this check.
   script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
-schedule: "0 9 * * 1"  # Monday 9am UTC
+schedule: "0 * * * *"
 enabled: true
 severity: warning
 script: |

@@ -84,7 +84,7 @@ staleness:
   problematic_stale_issues_pct: 20
   problematic_stale_prs_pct: 20
 
-refresh_schedule: "*/30 * * * *"
+refresh_schedule: "0 * * * *"
 
 data_dir: "./data"
 workspace_dir: "./workspace"
