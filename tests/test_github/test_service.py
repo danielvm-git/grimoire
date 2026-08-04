@@ -203,7 +203,7 @@ async def test_resolve_304_uses_cached_default_branch(
 
 @respx.mock
 async def test_resolve_304_no_cache_falls_back_to_defaults(
-    client: GitHubClient
+    client: GitHubClient,
 ) -> None:
     """With no cached row, a 304 falls back to conservative defaults (bug #7).
 
