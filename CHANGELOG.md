@@ -212,4 +212,3 @@
 ### Features
 
 * add BigBase entrypoints with PORT env var support ([31d5746](https://github.com/danielvm-git/grimoire/commit/31d5746b60d7ec807596f1677229fdc21d834416))
-
