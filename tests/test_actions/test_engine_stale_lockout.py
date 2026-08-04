@@ -12,10 +12,8 @@ These tests pin down both halves of the contract.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -168,9 +166,7 @@ class TestRouterSilentSwallow:
                     "Action '%s' not run: %s", "test-action", exc, exc_info=True
                 )
 
-        with caplog.at_level(
-            logging.WARNING, logger="grimoire.actions.router"
-        ):
+        with caplog.at_level(logging.WARNING, logger="grimoire.actions.router"):
             await _run_in_background()
 
         assert any(

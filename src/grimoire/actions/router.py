@@ -258,9 +258,7 @@ async def run_action_endpoint(
             # blocking execution (bug #1). The deadlock itself is resolved at
             # startup by cleanup_stale_runs, but log here so a silently-dropped
             # action is observable instead of invisible.
-            logger.warning(
-                "Action '%s' not run: %s", action.slug, exc, exc_info=True
-            )
+            logger.warning("Action '%s' not run: %s", action.slug, exc, exc_info=True)
 
     background_tasks.add_task(_run_in_background)
 
