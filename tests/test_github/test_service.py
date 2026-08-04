@@ -137,6 +137,93 @@ async def test_resolve_skips_archived(client: GitHubClient) -> None:
 
 
 # ---------------------------------------------------------------------------
+# resolve_repositories — 304 cache hit (bug #7)
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_resolve_304_uses_cached_archived_flag(
+    client: GitHubClient, engine: AsyncEngine
+) -> None:
+    """A 304 cache hit must consult the DB cache for archived status (bug #7).
+
+    Seed a CachedRepository row with archived=True. Mock get_repo to return
+    304 (None). The repo should still be skipped as archived — not tracked
+    with a blind archived=False default.
+    """
+    async with AsyncSession(engine) as session:
+        session.add(
+            CachedRepository(
+                full_name="owner/was-archived",
+                default_branch="main",
+                archived=True,
+            )
+        )
+        await session.commit()
+
+    respx.get("https://api.github.com/repos/owner/was-archived").mock(
+        return_value=httpx.Response(
+            304,
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    config = _make_config(repos=[StaticRepoSource(repo="owner/was-archived")])
+    repos = await resolve_repositories(config, client)
+    assert len(repos) == 0  # archived repo skipped despite 304
+
+
+@respx.mock
+async def test_resolve_304_uses_cached_default_branch(
+    client: GitHubClient, engine: AsyncEngine
+) -> None:
+    """A 304 cache hit must use the cached default_branch, not blindly 'main'."""
+    async with AsyncSession(engine) as session:
+        session.add(
+            CachedRepository(
+                full_name="owner/repo",
+                default_branch="develop",
+                archived=False,
+            )
+        )
+        await session.commit()
+
+    respx.get("https://api.github.com/repos/owner/repo").mock(
+        return_value=httpx.Response(
+            304,
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    config = _make_config(repos=[StaticRepoSource(repo="owner/repo")])
+    repos = await resolve_repositories(config, client)
+    assert len(repos) == 1
+    # Cached default_branch used, and used as the branch when none specified
+    assert repos[0].default_branch == "develop"
+    assert repos[0].branches == ["develop"]
+
+
+@respx.mock
+async def test_resolve_304_no_cache_falls_back_to_defaults(
+    client: GitHubClient
+) -> None:
+    """With no cached row, a 304 falls back to conservative defaults (bug #7).
+
+    This documents the pre-existing behavior for the no-cache case so the fix
+    doesn't accidentally change it.
+    """
+    respx.get("https://api.github.com/repos/owner/newrepo").mock(
+        return_value=httpx.Response(
+            304,
+            headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+        )
+    )
+    config = _make_config(repos=[StaticRepoSource(repo="owner/newrepo")])
+    repos = await resolve_repositories(config, client)
+    # No cache → conservative default (not archived, default main), still tracked
+    assert len(repos) == 1
+    assert repos[0].default_branch == "main"
+
+
+# ---------------------------------------------------------------------------
 # resolve_repositories — team
 # ---------------------------------------------------------------------------
 
