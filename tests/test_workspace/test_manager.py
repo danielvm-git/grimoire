@@ -154,18 +154,14 @@ class TestGetWorkdir:
 
     # -- path traversal protection (bug #6) -------------------------------
 
-    def test_branch_with_parent_dir_traversal_rejected(
-        self, tmp_path: Path
-    ) -> None:
+    def test_branch_with_parent_dir_traversal_rejected(self, tmp_path: Path) -> None:
         """A branch name with '..' must not escape the workspace (bug #6)."""
         cfg = _minimal_config(tmp_path)
         mgr = WorkspaceManager(cfg)
         with pytest.raises(WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid"):
             mgr.get_workdir("acme/widgets", "../../etc/passwd")
 
-    def test_owner_with_parent_dir_traversal_rejected(
-        self, tmp_path: Path
-    ) -> None:
+    def test_owner_with_parent_dir_traversal_rejected(self, tmp_path: Path) -> None:
         """A full_name with '..' in the owner must not escape (bug #6)."""
         cfg = _minimal_config(tmp_path)
         mgr = WorkspaceManager(cfg)
@@ -176,7 +172,9 @@ class TestGetWorkdir:
         """An absolute branch path must not escape the workspace (bug #6)."""
         cfg = _minimal_config(tmp_path)
         mgr = WorkspaceManager(cfg)
-        with pytest.raises(WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid"):
+        with pytest.raises(
+            WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid|[Aa]bsolute"
+        ):
             mgr.get_workdir("acme/widgets", "/etc/passwd")
 
     def test_branch_with_null_byte_rejected(self, tmp_path: Path) -> None:
