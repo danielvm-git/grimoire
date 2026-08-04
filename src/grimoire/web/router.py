@@ -360,7 +360,7 @@ _SESSION_EXEC_NAG = re.compile(
 
 
 async def _exec_text(
-    session: AsyncSession, statement: Any, **params: Any
+    session: AsyncSession, statement: Any, *, params: dict[str, Any] | None = None
 ) -> Any:
     """Run a raw ``text()`` SQL statement, suppressing SQLModel's deprecation nag.
 
