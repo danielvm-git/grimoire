@@ -86,6 +86,11 @@ staleness:
 
 refresh_schedule: "0 * * * *"
 
+mcp:
+  enabled: true
+  token: "${GRIMOIRE_MCP_TOKEN}"
+  endpoint_path: "/mcp"
+
 data_dir: "./data"
 workspace_dir: "./workspace"
 database_path: "./grimoire.db"
