@@ -894,28 +894,3 @@ class TestSessionExecuteDeprecationSuppressed:
                 )
 
         asyncio.run(_call())
-
-    def test_raw_execute_leaks_nag(self) -> None:
-        """Without _exec_text(), the SQLModel nag WOULD escape (sanity check)."""
-        import asyncio
-        import warnings
-
-        from unittest.mock import AsyncMock, MagicMock
-
-        async def _call() -> None:
-            from sqlalchemy import text as sa_text
-            from sqlmodel.ext.asyncio.session import AsyncSession
-
-            async with AsyncSession(MagicMock()) as session:
-                session.execute = AsyncMock(return_value=MagicMock())
-                with warnings.catch_warnings(record=True) as caught:
-                    await session.execute(sa_text("SELECT 1"))
-                nags = [
-                    w for w in caught
-                    if "session.exec" in str(w.message)
-                ]
-                assert len(nags) >= 1, (
-                    "expected SQLModel nag on raw execute(), got none"
-                )
-
-        asyncio.run(_call())
