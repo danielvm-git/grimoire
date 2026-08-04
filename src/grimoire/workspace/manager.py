@@ -17,6 +17,36 @@ class WorkspaceError(Exception):
     """Raised when a git operation in the workspace fails."""
 
 
+def _validate_path_component(value: str, label: str) -> None:
+    """Reject path components that could escape the workspace (bug #6).
+
+    Blocks parent-directory sequences (``..``), absolute paths, null bytes, and
+    empty values — all of which could let a config-supplied branch/owner/repo
+    resolve outside ``workspace_dir``.
+    """
+    if not value or "\x00" in value:
+        raise WorkspaceError(f"Invalid {label}: {value!r}")
+    # Reject any component that is or contains '..' (parent traversal).
+    parts = value.replace("\\", "/").split("/")
+    if any(part == ".." for part in parts):
+        raise WorkspaceError(f"Path traversal in {label}: {value!r}")
+    # Reject absolute paths.
+    if value.startswith("/") or value.startswith("\\"):
+        raise WorkspaceError(f"Absolute path in {label}: {value!r}")
+
+
+def _assert_within_workspace(path: Path, base: Path) -> Path:
+    """Resolve *path* and ensure it remains within *base* (bug #6)."""
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(base.resolve())
+    except ValueError as exc:
+        raise WorkspaceError(
+            f"Resolved path {resolved} escapes workspace {base}"
+        ) from exc
+    return resolved
+
+
 class WorkspaceManager:
     """Clone, sync, and manage working directories for tracked repositories.
 
@@ -129,8 +159,15 @@ class WorkspaceManager:
         return workdir
 
     def get_workdir(self, full_name: str, branch: str) -> Path:
-        """Return the worktree path for *full_name*/*branch*."""
+        """Return the worktree path for *full_name*/*branch*.
+
+        Validates that the resolved path stays within the workspace directory
+        (bug #6: path-traversal-branch-names).
+        """
         owner, repo = full_name.split("/", 1)
+        _validate_path_component(owner, "owner")
+        _validate_path_component(repo, "repo")
+        _validate_path_component(branch, "branch")
         return self._workspace_dir / owner / repo / branch
 
     def get_env(self) -> dict[str, str]:
@@ -160,6 +197,8 @@ class WorkspaceManager:
 
     def _bare_dir(self, full_name: str) -> Path:
         owner, repo = full_name.split("/", 1)
+        _validate_path_component(owner, "owner")
+        _validate_path_component(repo, "repo")
         return self._workspace_dir / owner / repo / ".bare"
 
     def _clone_url(self, full_name: str) -> str:

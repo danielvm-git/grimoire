@@ -6,6 +6,8 @@ import asyncio
 import os
 from pathlib import Path
 
+import pytest
+
 from grimoire.config import (
     GitConfig,
     GitHubConfig,
@@ -14,7 +16,7 @@ from grimoire.config import (
     StaticRepoSource,
 )
 from grimoire.models import TrackedRepository
-from grimoire.workspace.manager import WorkspaceManager
+from grimoire.workspace.manager import WorkspaceError, WorkspaceManager
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -149,6 +151,45 @@ class TestGetWorkdir:
         result = mgr.get_workdir("acme/widgets", "feature/foo")
 
         assert result == tmp_path / "acme" / "widgets" / "feature/foo"
+
+    # -- path traversal protection (bug #6) -------------------------------
+
+    def test_branch_with_parent_dir_traversal_rejected(self, tmp_path: Path) -> None:
+        """A branch name with '..' must not escape the workspace (bug #6)."""
+        cfg = _minimal_config(tmp_path)
+        mgr = WorkspaceManager(cfg)
+        with pytest.raises(WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid"):
+            mgr.get_workdir("acme/widgets", "../../etc/passwd")
+
+    def test_owner_with_parent_dir_traversal_rejected(self, tmp_path: Path) -> None:
+        """A full_name with '..' in the owner must not escape (bug #6)."""
+        cfg = _minimal_config(tmp_path)
+        mgr = WorkspaceManager(cfg)
+        with pytest.raises(WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid"):
+            mgr.get_workdir("../etc", "main")
+
+    def test_absolute_branch_rejected(self, tmp_path: Path) -> None:
+        """An absolute branch path must not escape the workspace (bug #6)."""
+        cfg = _minimal_config(tmp_path)
+        mgr = WorkspaceManager(cfg)
+        with pytest.raises(
+            WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid|[Aa]bsolute"
+        ):
+            mgr.get_workdir("acme/widgets", "/etc/passwd")
+
+    def test_branch_with_null_byte_rejected(self, tmp_path: Path) -> None:
+        """A null byte in the branch must be rejected (bug #6)."""
+        cfg = _minimal_config(tmp_path)
+        mgr = WorkspaceManager(cfg)
+        with pytest.raises(WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid"):
+            mgr.get_workdir("acme/widgets", "main\x00evil")
+
+    def test_bare_dir_traversal_rejected(self, tmp_path: Path) -> None:
+        """_bare_dir must also reject path traversal (bug #6)."""
+        cfg = _minimal_config(tmp_path)
+        mgr = WorkspaceManager(cfg)
+        with pytest.raises(WorkspaceError, match="[Pp]ath traversal|[Ii]nvalid"):
+            mgr._bare_dir("../../etc")
 
 
 # ---------------------------------------------------------------------------
