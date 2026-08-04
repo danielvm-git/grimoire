@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from importlib.metadata import version
@@ -268,6 +271,8 @@ def _time_ago(dt: datetime | str | None) -> str:
         dt = dt.replace(tzinfo=timezone.utc)
     delta = now - dt
     seconds = int(delta.total_seconds())
+    # Clamp to zero so future timestamps (clock skew) don't yield '-Ns ago' (bug #10).
+    seconds = max(0, seconds)
     if seconds < 60:
         return f"{seconds}s ago"
     minutes = seconds // 60
@@ -348,6 +353,33 @@ _LATEST_RESULTS_SQL = text(
     "AND cr.timestamp = latest.max_ts"
 )
 
+# Regex matching SQLModel's misleading session.execute() deprecation nag (bug #8).
+_SESSION_EXEC_NAG = re.compile(
+    r"You probably want to use `session\.exec\(\)` instead of `session\.execute\(\)`"
+)
+
+
+async def _exec_text(
+    session: AsyncSession, statement: Any, **params: Any
+) -> Any:
+    """Run a raw ``text()`` SQL statement, suppressing SQLModel's deprecation nag.
+
+    Bug #8 (deprecated-session-execute-usage): SQLModel emits a DeprecationWarning
+    on every ``session.execute()`` call urging ``session.exec()``. That advice only
+    applies to ORM ``select()`` queries; the call sites here run raw ``text()`` SQL,
+    for which ``session.execute()`` is the CORRECT API (see the already-fixed bugs
+    ``checks-router-improper-session-exec`` and ``github-service-improper-delete-exec``).
+    This helper suppresses the misleading nag at the call site so it is robust under
+    pytest (which resets module-level warning filters).
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message=str(_SESSION_EXEC_NAG), category=DeprecationWarning
+        )
+        if params:
+            return await session.execute(statement, params=params)
+        return await session.execute(statement)
+
 
 async def _load_check_context(
     repos: dict[str, TrackedRepository],
@@ -370,7 +402,7 @@ async def _load_check_context(
     results_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
     if _checks_engine is not None and _checks:
         async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(_LATEST_RESULTS_SQL)
+            result = await _exec_text(session, _LATEST_RESULTS_SQL)
             rows = result.all()
         for row in rows:
             key = (row[2], row[3], row[4])  # check_slug, repo_full_name, branch
@@ -623,7 +655,8 @@ async def actions_page(request: Request) -> HTMLResponse:
         async with AsyncSession(_actions_engine) as session:
             # For each action, find the latest completed run and aggregate its repo results
             run_rows = (
-                await session.execute(
+                await _exec_text(
+                    session,
                     text(
                         "SELECT ar.id, ar.action_slug, ar.started_at, arrr.passed "
                         "FROM action_run ar "
@@ -633,7 +666,7 @@ async def actions_page(request: Request) -> HTMLResponse:
                         "  WHERE sub.action_slug = ar.action_slug "
                         "  ORDER BY sub.started_at DESC LIMIT 1"
                         ")"
-                    )
+                    ),
                 )
             ).all()
 
@@ -700,7 +733,7 @@ async def checks_page(request: Request) -> HTMLResponse:
     check_stats: dict[str, dict[str, Any]] = {}
     if _checks_engine is not None and _checks:
         async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(_LATEST_RESULTS_SQL)
+            result = await _exec_text(session, _LATEST_RESULTS_SQL)
             rows = result.all()
         for row in rows:
             slug = row[2]
@@ -814,7 +847,8 @@ async def action_run_partial(request: Request, run_id: int) -> HTMLResponse:
     if _actions_engine is not None:
         async with AsyncSession(_actions_engine) as session:
             rows = (
-                await session.execute(
+                await _exec_text(
+                    session,
                     text(
                         "SELECT id, repo_full_name, branch, passed, output "
                         "FROM action_run_repo WHERE run_id = :run_id"
@@ -929,7 +963,8 @@ async def action_output_partial(request: Request, result_id: int) -> HTMLRespons
     output = ""
     if _actions_engine is not None:
         async with AsyncSession(_actions_engine) as session:
-            result = await session.execute(
+            result = await _exec_text(
+                session,
                 text("SELECT output FROM action_run_repo WHERE id = :id"),
                 params={"id": result_id},
             )
@@ -955,7 +990,8 @@ async def check_output_partial(request: Request, result_id: int) -> HTMLResponse
     output = ""
     if _checks_engine is not None:
         async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(
+            result = await _exec_text(
+                session,
                 text("SELECT output FROM check_result WHERE id = :id"),
                 params={"id": result_id},
             )
@@ -1600,8 +1636,26 @@ async def backlog_save_weights(request: Request) -> dict[str, str]:
             status_code=400, detail=f"Invalid backlog weights payload: {e}"
         ) from e
 
-    with open(_config_path, "w") as f:
-        yaml.dump(raw, f, default_flow_style=False, sort_keys=False)
+    # Persist the VALIDATED backlog model (bug #2), not the raw merged JSON, so the
+    # file on disk reflects the coerced/normalized shape rather than arbitrary input.
+    raw["backlog"] = new_backlog.model_dump(mode="json")
+
+    # Atomic write: serialize to a temp file in the same directory, then rename
+    # (bug #12). A crash mid-write leaves the original config intact.
+    config_dir = _config_path.parent
+    config_dir.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(prefix=".grimoire-config-", dir=str(config_dir))
+    try:
+        with os.fdopen(fd, "w") as f:
+            yaml.dump(raw, f, default_flow_style=False, sort_keys=False)
+        os.replace(tmp_path, _config_path)
+    except BaseException:
+        # Clean up the temp file on any failure; never leave a partial write.
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
     global _backlog_config  # noqa: PLW0603
     _backlog_config = new_backlog

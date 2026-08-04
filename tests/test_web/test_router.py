@@ -773,6 +773,19 @@ class TestTimeAgoHelper:
 
         assert _time_ago(None) == "never"
 
+    def test_time_ago_future_date_not_negative(self) -> None:
+        """A future timestamp must not yield a negative '-Ns ago' (bug #10)."""
+        from datetime import datetime, timedelta, timezone
+
+        from grimoire.web.router import _time_ago
+
+        now = datetime.now(timezone.utc)
+        future = now + timedelta(seconds=30)
+        result = _time_ago(future)
+        # Must not contain a minus sign
+        assert "-" not in result
+        assert result in {"0s ago", "just now"}
+
 
 class TestBacklogSaveWeightsValidation:
     async def test_save_weights_invalid_payload_returns_400(
@@ -792,3 +805,92 @@ class TestBacklogSaveWeightsValidation:
         assert resp.status_code == 400
         # Verify file on disk was not corrupted
         assert "not_a_dict" not in config_file.read_text()
+
+    async def test_save_weights_writes_atomically(
+        self, web_client: AsyncClient, tmp_path: Path
+    ) -> None:
+        """A successful write leaves no stray temp files in the config dir (bug #12)."""
+        from grimoire.web import router
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            "github:\n  token: test\nrepositories:\n  - repo: o/r\n"
+        )
+        router.set_backlog_config(None, config_file)
+
+        resp = await web_client.post(
+            "/api/backlog/save-weights",
+            json={"category_weights": {"bug": 5}},
+        )
+        assert resp.status_code == 200
+        # Config file written with the new weights
+        assert "category_weights" in config_file.read_text()
+        # No leftover temp files in the config directory (atomic rename cleans up)
+        leftover = [p for p in tmp_path.iterdir() if p.name != config_file.name]
+        assert leftover == [], f"unexpected leftover files: {leftover}"
+
+    async def test_save_weights_writes_validated_model(
+        self, web_client: AsyncClient, tmp_path: Path
+    ) -> None:
+        """The persisted config reflects the validated backlog, not raw merged JSON (bug #2)."""
+        from grimoire.web import router
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            "github:\n  token: test\nrepositories:\n  - repo: o/r\n"
+        )
+        router.set_backlog_config(None, config_file)
+
+        resp = await web_client.post(
+            "/api/backlog/save-weights",
+            json={"category_weights": {"failing_workflow": 5}},
+        )
+        assert resp.status_code == 200
+        import yaml
+
+        written = yaml.safe_load(config_file.read_text())
+        # The backlog section is well-formed (validated shape), not arbitrary JSON
+        assert isinstance(written["backlog"], dict)
+        # The user's weight overrides the default; the model fills the rest
+        cw = written["backlog"]["category_weights"]
+        assert isinstance(cw, dict)
+        assert cw["failing_workflow"] == 5
+        # Non-user-supplied categories retain their defaults
+        assert cw["failing_check_error"] == 80.0
+
+
+class TestSessionExecuteDeprecationSuppressed:
+    """Bug #8 — the SQLModel session.execute() deprecation nag is silenced.
+
+    All ``session.execute()`` call sites in router.py run raw ``text()`` SQL,
+    for which ``session.execute()`` is the *correct* API (``session.exec()`` is for
+    ORM ``select()`` — see the already-fixed bugs ``checks-router-improper-session-exec``
+    and ``github-service-improper-delete-exec``). The fix uses ``_exec_text()``, a
+    wrapper that suppresses the misleading SQLModel DeprecationWarning via a
+    ``warnings.catch_warnings()`` context manager at each call site.
+    """
+
+    def test_exec_text_suppresses_nag(self) -> None:
+        """_exec_text() prevents the SQLModel deprecation nag from escaping."""
+        import asyncio
+        import warnings
+        from unittest.mock import AsyncMock, MagicMock
+
+        from grimoire.web.router import _exec_text, _LATEST_RESULTS_SQL
+
+        async def _call() -> None:
+            from sqlmodel.ext.asyncio.session import AsyncSession
+
+            async with AsyncSession(MagicMock()) as session:
+                session.execute = AsyncMock(return_value=MagicMock())
+                with warnings.catch_warnings(record=True) as caught:
+                    await _exec_text(session, _LATEST_RESULTS_SQL)
+                nags = [
+                    w for w in caught
+                    if "session.exec" in str(w.message)
+                ]
+                assert nags == [], (
+                    f"SQLModel session.execute() nag leaked: {len(nags)} nags"
+                )
+
+        asyncio.run(_call())
