@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -12,6 +13,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.actions.engine import ActionConflictError, run_action
 from grimoire.database import ActionRunRecord, ActionRunRepoRecord, ActionToggleRecord
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -250,8 +253,12 @@ async def run_action_endpoint(
                 triggered_by="manual",
                 specific_repo=repo,
             )
-        except ActionConflictError:
-            pass  # Another trigger won the race
+        except ActionConflictError as exc:
+            # Another trigger won the race, OR a stale 'running' DB row is
+            # blocking execution (bug #1). The deadlock itself is resolved at
+            # startup by cleanup_stale_runs, but log here so a silently-dropped
+            # action is observable instead of invisible.
+            logger.warning("Action '%s' not run: %s", action.slug, exc, exc_info=True)
 
     background_tasks.add_task(_run_in_background)
 
