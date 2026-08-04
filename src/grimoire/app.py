@@ -49,6 +49,7 @@ from grimoire.github.service import (
     prune_stale_data,
     refresh_all_stats,
 )
+from grimoire.mcp import create_mcp_server, mount_mcp_server
 from grimoire.models import TrackedRepository
 from grimoire.observability.logging import setup_logging
 from grimoire.observability.metrics import DATA_REFRESH_DURATION, update_repo_metrics
@@ -213,6 +214,20 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     set_checks_state(checks, repos, workspace, engine)
     set_actions_state(actions, repos, workspace, engine)
+
+    if config.mcp.enabled:
+        mcp_server = create_mcp_server(engine, checks, repos, workspace)
+        mount_mcp_server(
+            app=_app,
+            mcp=mcp_server,
+            endpoint_path=config.mcp.endpoint_path,
+            token=config.mcp.token,
+        )
+        logger.info(
+            "MCP server mounted at %s (token auth: %s)",
+            config.mcp.endpoint_path,
+            "enabled" if config.mcp.token else "disabled",
+        )
 
     # Refresh callback for POST /api/refresh
     async def _do_refresh() -> list[TrackedRepository]:

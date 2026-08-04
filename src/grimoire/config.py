@@ -161,6 +161,14 @@ class BacklogConfig(BaseModel):
     repository_weights: list[RepositoryWeightRule] = Field(default_factory=list)
 
 
+class MCPConfig(BaseModel):
+    """Configuration for the MCP (Model Context Protocol) Server."""
+
+    enabled: bool = True
+    token: str | None = None
+    endpoint_path: str = "/mcp"
+
+
 def _default_data_dir() -> Path:
     return _get_data_manager().data_dir / "data"
 
@@ -187,6 +195,7 @@ class GrimoireConfig(BaseModel):
 
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)
     backlog: BacklogConfig = Field(default_factory=BacklogConfig)
+    mcp: MCPConfig = Field(default_factory=MCPConfig)
     refresh_schedule: str = "*/5 * * * *"
 
     data_dir: Path = Field(default_factory=_default_data_dir)

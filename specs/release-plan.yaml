@@ -84,3 +84,11 @@ epics:
     wsjf: 82  # weighted avg of story WSJFs (95,90,65,45,75,68,70,55,50,40); harness+smoke lead
     bcps: 37
     status: done
+
+  - id: e12
+    title: "MCP Server & Query Layer"
+    file: specs/epics/e12-mcp-server/epic.yaml
+    wsjf: 95
+    bcps: 20
+    status: in_progress
+

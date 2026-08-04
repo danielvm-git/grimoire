@@ -96,7 +96,9 @@ Module 1: Scaffolding & Configuration  ──(no deps)
     │
     ├──► Module 6: Web Application  ◄── Modules 2, 4, 5
     │
-    └──► Module 7: Observability & DevOps
+    ├──► Module 7: Observability & DevOps
+    │
+    └──► Module 8: MCP Server  ◄── Modules 1, 2, 4
 ```
 
 ## Configuration File (`config.yaml`)
@@ -147,6 +149,12 @@ staleness:
 # Data refresh interval (also default check/action frequency)
 refresh_schedule: "*/5 * * * *"
 
+# MCP Server configuration
+mcp:
+  enabled: true
+  token: "${GRIMOIRE_MCP_TOKEN}"
+  endpoint_path: "/mcp"
+
 # Paths
 data_dir: "./data"           # Contains checks/ and actions/ subdirectories
 workspace_dir: "./workspace" # Where repos are cloned
@@ -154,7 +162,7 @@ database_path: "./grimoire.db"
 log_file: "./grimoire.log"
 ```
 
-## REST API Summary
+## REST & MCP API Summary
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -170,6 +178,7 @@ log_file: "./grimoire.log"
 | `GET` | `/api/actions/{slug}/runs/{id}` | Get specific run details + logs |
 | `POST` | `/api/actions/{slug}/run` | Trigger action (optional `?repo=`); 409 if running |
 | `GET` | `/health` | Health check (for Docker HEALTHCHECK / k8s probes) |
+| `GET/POST` | `/mcp` | FastMCP SSE protocol endpoint for LLM agents |
 
 Auto-generated OpenAPI docs are available at `/docs` (Swagger UI) and `/redoc`.
 

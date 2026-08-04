@@ -98,6 +98,11 @@ staleness:
   pull_requests_days: 30   # default: 30
   issues_days: 365         # default: 365
   problematic_stale_issues_pct: 20  # highlight when stale/open issues >= 20%
+
+mcp:                            # optional — MCP Server settings
+  enabled: true                 # default: true
+  token: "${GRIMOIRE_MCP_TOKEN}" # optional auth token (default: None)
+  endpoint_path: "/mcp"         # default: "/mcp"
   problematic_stale_prs_pct: 20     # highlight when stale/open PRs >= 20%
 
 refresh_schedule: "*/5 * * * *"  # default: "*/5 * * * *" — cron expression for data refresh
