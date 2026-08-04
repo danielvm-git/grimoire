@@ -773,6 +773,19 @@ class TestTimeAgoHelper:
 
         assert _time_ago(None) == "never"
 
+    def test_time_ago_future_date_not_negative(self) -> None:
+        """A future timestamp must not yield a negative '-Ns ago' (bug #10)."""
+        from datetime import datetime, timedelta, timezone
+
+        from grimoire.web.router import _time_ago
+
+        now = datetime.now(timezone.utc)
+        future = now + timedelta(seconds=30)
+        result = _time_ago(future)
+        # Must not contain a minus sign
+        assert "-" not in result
+        assert result in {"0s ago", "just now"}
+
 
 class TestBacklogSaveWeightsValidation:
     async def test_save_weights_invalid_payload_returns_400(
@@ -792,3 +805,50 @@ class TestBacklogSaveWeightsValidation:
         assert resp.status_code == 400
         # Verify file on disk was not corrupted
         assert "not_a_dict" not in config_file.read_text()
+
+    async def test_save_weights_writes_atomically(
+        self, web_client: AsyncClient, tmp_path: Path
+    ) -> None:
+        """A successful write leaves no stray temp files in the config dir (bug #12)."""
+        from grimoire.web import router
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            "github:\n  token: test\nrepositories:\n  - repo: o/r\n"
+        )
+        router.set_backlog_config(None, config_file)
+
+        resp = await web_client.post(
+            "/api/backlog/save-weights",
+            json={"category_weights": {"bug": 5}},
+        )
+        assert resp.status_code == 200
+        # Config file written with the new weights
+        assert "category_weights" in config_file.read_text()
+        # No leftover temp files in the config directory (atomic rename cleans up)
+        leftover = [p for p in tmp_path.iterdir() if p.name != config_file.name]
+        assert leftover == [], f"unexpected leftover files: {leftover}"
+
+    async def test_save_weights_writes_validated_model(
+        self, web_client: AsyncClient, tmp_path: Path
+    ) -> None:
+        """The persisted config reflects the validated backlog, not raw merged JSON (bug #2)."""
+        from grimoire.web import router
+
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            "github:\n  token: test\nrepositories:\n  - repo: o/r\n"
+        )
+        router.set_backlog_config(None, config_file)
+
+        resp = await web_client.post(
+            "/api/backlog/save-weights",
+            json={"category_weights": {"bug": 5}, "workflow_weights": {"CI": 3}},
+        )
+        assert resp.status_code == 200
+        import yaml
+
+        written = yaml.safe_load(config_file.read_text())
+        # The backlog section is well-formed (validated shape), not arbitrary JSON
+        assert isinstance(written["backlog"], dict)
+        assert written["backlog"]["category_weights"] == {"bug": 5}

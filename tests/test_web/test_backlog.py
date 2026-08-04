@@ -833,6 +833,26 @@ class TestBacklogRoute:
         assert "# Grimoire Backlog" in resp.text
         assert "- [ ]" in resp.text
 
+    async def test_backlog_export_respects_filter_params(
+        self, web_client: AsyncClient
+    ) -> None:
+        """Export honors category/min_score filters (bug #9).
+
+        The endpoint must apply the same filtering as the list partial — passing a
+        high min_score should yield fewer (or zero) items than the unfiltered export.
+        """
+        full = await web_client.get("/api/backlog/export")
+        assert full.status_code == 200
+        full_count = full.text.count("- [ ]")
+
+        # An impossibly-high min_score should filter everything out
+        filtered = await web_client.get("/api/backlog/export?min_score=999999")
+        assert filtered.status_code == 200
+        filtered_count = filtered.text.count("- [ ]")
+        assert filtered_count < full_count, (
+            f"export ignored filter: full={full_count} filtered={filtered_count}"
+        )
+
     async def test_backlog_page_with_checks(
         self,
         web_client_with_checks: AsyncClient,
