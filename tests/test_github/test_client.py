@@ -571,8 +571,7 @@ async def test_paginated_304_on_page2_does_not_truncate(
     page 2 unconditionally (no ETag) to get the actual data.
     """
     page2_url = (
-        "https://api.github.com/repos/owner/repo/issues?state=open"
-        "&per_page=100&page=2"
+        "https://api.github.com/repos/owner/repo/issues?state=open&per_page=100&page=2"
     )
     route = respx.get("https://api.github.com/repos/owner/repo/issues")
     # page1 200 (with next link) -> page2 304 -> page2-retry 200
