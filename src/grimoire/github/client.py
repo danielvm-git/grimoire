@@ -46,6 +46,10 @@ _BASE_URL = "https://api.github.com"
 _MAX_RETRIES = 3
 _DEFAULT_BACKOFF_FACTORS = (1.0, 2.0, 4.0)
 _TRANSIENT_STATUS_CODES = frozenset(range(500, 600))
+# Rate-limiting status codes that should be retried with backoff (bug #5).
+# 429 = explicit secondary rate limit; 403 is added when classified as a
+# RateLimitError (see _request), not unconditionally.
+_RATE_LIMIT_STATUS_CODES = frozenset({429})
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +231,29 @@ class GitHubClient:
                 "GET", current_path, params=current_params, _next_link_out=next_link_out
             )
             if data is None:
-                # 304 on the *first* page → return None (cache hit)
+                # 304 Not Modified.
                 if not all_items:
+                    # First page → whole-endpoint cache hit.
                     return None
-                break
+                # Mid-pagination 304 (bug #4): a per-page ETag said 'unchanged',
+                # but that does NOT mean there are no items on this page — it
+                # means the page content matches the cached ETag for that URL.
+                # Re-request this page unconditionally (no conditional headers)
+                # to fetch the actual data instead of silently truncating.
+                retry_next: dict[str, str | None] = {}
+                data = await self._request(
+                    "GET",
+                    current_path,
+                    params=current_params,
+                    use_etag=False,
+                    _next_link_out=retry_next,
+                )
+                # Preserve the next-link from whichever response succeeded.
+                if not next_link_out.get("next") and retry_next.get("next"):
+                    next_link_out["next"] = retry_next["next"]
+                if data is None:
+                    # Genuinely empty after unconditional fetch — stop.
+                    break
 
             if isinstance(data, list):
                 all_items.extend(data)
@@ -299,6 +322,14 @@ class GitHubClient:
                 if response.status_code == 404:
                     raise NotFoundError(f"Not found: {path}", status_code=404)
 
+                if response.status_code == 429:
+                    # Secondary rate limit (bug #5): retryable. Honor Retry-After
+                    # if GitHub provides it, otherwise use standard backoff.
+                    raise RateLimitError(
+                        "GitHub API secondary rate limit exceeded (429)",
+                        status_code=429,
+                    )
+
                 if response.status_code == 403:
                     if self.is_rate_limited or "retry-after" in response.headers:
                         raise RateLimitError(
@@ -336,10 +367,14 @@ class GitHubClient:
                 ) from exc
 
             except GitHubAPIError as exc:
-                if (
-                    exc.status_code in _TRANSIENT_STATUS_CODES
-                    and attempt < _MAX_RETRIES - 1
-                ):
+                # Retry transient (5xx) and rate-limit (429 / rate-limited 403)
+                # errors with backoff (bug #5). RateLimitError is always retried
+                # since it signals a temporary condition.
+                is_retryable = (
+                    isinstance(exc, RateLimitError)
+                    or exc.status_code in _TRANSIENT_STATUS_CODES
+                )
+                if is_retryable and attempt < _MAX_RETRIES - 1:
                     last_exc = exc
                     await asyncio.sleep(self._backoff_factors[attempt])
                     continue
