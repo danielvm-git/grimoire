@@ -14,7 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from grimoire.database import ActionRunRecord, ActionRunRepoRecord
 from grimoire.models import ActionRepoResult, ActionRun
 from grimoire.observability.metrics import update_action_metrics
-from grimoire.script import create_script_process
+from grimoire.script import create_script_process, read_output_capped
 from grimoire.targeting import resolve_targets, target_env
 
 if TYPE_CHECKING:
@@ -229,10 +229,9 @@ async def _execute_global_action(
             stderr=asyncio.subprocess.STDOUT,
             env=env,
         )
-        stdout_bytes, _ = await asyncio.wait_for(
-            proc.communicate(), timeout=_DEFAULT_TIMEOUT
+        output = await asyncio.wait_for(
+            read_output_capped(proc, cap=OUTPUT_SIZE_CAP), timeout=_DEFAULT_TIMEOUT
         )
-        output = stdout_bytes.decode(errors="replace")
         passed = proc.returncode == 0
     except asyncio.TimeoutError:
         output = f"Timed out after {_DEFAULT_TIMEOUT}s"
@@ -246,10 +245,6 @@ async def _execute_global_action(
     finally:
         if tmp_script is not None:
             tmp_script.unlink(missing_ok=True)
-
-    # Cap output
-    if len(output) > OUTPUT_SIZE_CAP:
-        output = "[output truncated — showing last 64KB]\n" + output[-OUTPUT_SIZE_CAP:]
 
     return passed, output
 
@@ -279,10 +274,9 @@ async def _execute_action(
             stderr=asyncio.subprocess.STDOUT,
             env=env,
         )
-        stdout_bytes, _ = await asyncio.wait_for(
-            proc.communicate(), timeout=_DEFAULT_TIMEOUT
+        output = await asyncio.wait_for(
+            read_output_capped(proc, cap=OUTPUT_SIZE_CAP), timeout=_DEFAULT_TIMEOUT
         )
-        output = stdout_bytes.decode(errors="replace")
         passed = proc.returncode == 0
     except asyncio.TimeoutError:
         output = f"Timed out after {_DEFAULT_TIMEOUT}s"
@@ -296,9 +290,5 @@ async def _execute_action(
     finally:
         if tmp_script is not None:
             tmp_script.unlink(missing_ok=True)
-
-    # Cap output
-    if len(output) > OUTPUT_SIZE_CAP:
-        output = "[output truncated — showing last 64KB]\n" + output[-OUTPUT_SIZE_CAP:]
 
     return passed, output

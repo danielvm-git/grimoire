@@ -14,6 +14,14 @@ import stat
 import tempfile
 from pathlib import Path
 
+# Maximum output bytes retained per stream. Reads beyond this are drained and
+# discarded so a runaway subprocess cannot exhaust memory (bug #3).
+OUTPUT_SIZE_CAP = 64 * 1024  # 64 KB
+_TRUNCATION_MARKER = "[output truncated — showing last 64KB]\n"
+
+# Chunk size for incremental stream reads.
+_READ_CHUNK = 64 * 1024
+
 
 async def create_script_process(
     script: str,
@@ -55,3 +63,70 @@ async def create_script_process(
         stderr=stderr,
     )
     return proc, None
+
+
+async def _read_stream_capped(
+    stream: asyncio.StreamReader | None, cap: int
+) -> tuple[bytes, bool]:
+    """Drain *stream*, keeping only the last *cap* bytes in a rolling buffer.
+
+    Returns ``(tail_bytes, truncated)``. When *stream* is ``None`` (not piped),
+    returns ``(b"", False)``. This bounds peak memory to ~*cap* regardless of how
+    much the subprocess emits (bug #3), instead of buffering the whole stream.
+    """
+    if stream is None:
+        return b"", False
+
+    tail = bytearray()
+    truncated = False
+    while not stream.at_eof():
+        chunk = await stream.read(_READ_CHUNK)
+        if not chunk:
+            break
+        tail.extend(chunk)
+        if len(tail) > cap:
+            # Keep only the last `cap` bytes; discard the head we've already seen.
+            del tail[: len(tail) - cap]
+            truncated = True
+    return bytes(tail), truncated
+
+
+def _format_capped(tail: bytes, truncated: bool) -> str:
+    """Decode a tail buffer, prepending the truncation marker if it was capped."""
+    text = tail.decode(errors="replace")
+    if truncated:
+        return _TRUNCATION_MARKER + text
+    return text
+
+
+async def read_output_capped(
+    proc: asyncio.subprocess.Process,
+    cap: int = OUTPUT_SIZE_CAP,
+) -> str:
+    """Read a process's combined stdout+stderr, capped to the last *cap* bytes.
+
+    For actions the caller wires ``stderr=STDOUT`` so there is a single stream.
+    For checks the caller keeps stdout and stderr separate; in that case use
+    :func:`read_stdout_stderr_capped` instead. This helper reads the single
+    combined stdout stream (bug #3: bounds memory instead of communicate()).
+    """
+    tail, truncated = await _read_stream_capped(proc.stdout, cap)
+    # Drain stderr if it was separately piped (defensive; normally merged).
+    if proc.stderr is not None and proc.stderr is not proc.stdout:
+        await _read_stream_capped(proc.stderr, cap)
+    return _format_capped(tail, truncated)
+
+
+async def read_stdout_stderr_capped(
+    proc: asyncio.subprocess.Process,
+    cap: int = OUTPUT_SIZE_CAP,
+) -> tuple[str, str]:
+    """Read separate stdout and stderr streams, each capped to the last *cap* bytes.
+
+    Returns ``(stdout_text, stderr_text)``, each independently truncated with the
+    standard marker. Used by the checks engine which keeps the two streams apart
+    (bug #3: bounds memory instead of communicate()).
+    """
+    out_tail, out_trunc = await _read_stream_capped(proc.stdout, cap)
+    err_tail, err_trunc = await _read_stream_capped(proc.stderr, cap)
+    return _format_capped(out_tail, out_trunc), _format_capped(err_tail, err_trunc)

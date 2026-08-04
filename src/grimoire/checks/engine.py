@@ -15,7 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from grimoire.database import CheckResultRecord, CheckRunRecord
 from grimoire.models import CheckResult
 from grimoire.observability.metrics import update_check_metrics
-from grimoire.script import create_script_process
+from grimoire.script import create_script_process, read_stdout_stderr_capped
 from grimoire.targeting import resolve_targets, target_env
 
 if TYPE_CHECKING:
@@ -107,11 +107,16 @@ async def run_check(
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(), timeout=_DEFAULT_TIMEOUT
+        # Read both streams with bounded rolling buffers (bug #3) instead of
+        # communicate(), which buffers the entire output in RAM. Each stream is
+        # capped per-stream to bound memory; the combined output is capped again
+        # below to preserve the 64KB user-facing contract.
+        stdout_text, stderr_text = await asyncio.wait_for(
+            read_stdout_stderr_capped(proc, cap=OUTPUT_SIZE_CAP),
+            timeout=_DEFAULT_TIMEOUT,
         )
-        stdout_text = stdout_bytes.decode(errors="replace").rstrip()
-        stderr_text = stderr_bytes.decode(errors="replace").rstrip()
+        stdout_text = stdout_text.rstrip()
+        stderr_text = stderr_text.rstrip()
         passed = proc.returncode == 0
 
         # Build combined output with clear sections
@@ -139,7 +144,7 @@ async def run_check(
             tmp_script.unlink(missing_ok=True)
         shutil.rmtree(tmpdir, ignore_errors=True)
 
-    # Cap output
+    # Cap the combined output to the last 64KB (preserves user-facing contract).
     if len(output) > OUTPUT_SIZE_CAP:
         output = "[output truncated — showing last 64KB]\n" + output[-OUTPUT_SIZE_CAP:]
 
