@@ -1,561 +1,682 @@
-# Grimoire Bug Registry
-
 bugs:
-  - slug: action-stale-running-lockout
-    title: Stale "running" DB status causes permanent action execution deadlock after restart
-    module: src/grimoire/actions/engine.py
-    severity: high
-    status: open
-    description: >
-      If the application crashes or restarts while an action is executing, its ActionRunRecord
-      remains in status "running" in the SQLite database. Upon restart, is_action_running returns
-      False because in-memory tracking is empty. However, when run_action executes in a background
-      task, it queries the database for any record with status "running" and raises ActionConflictError.
-      The background task in router.py catches ActionConflictError and silently aborts, causing all
-      subsequent manual or scheduled executions of the action to silently fail permanently.
-    reproduction_steps:
-      - Trigger an action containing a long-running script.
-      - Restart or kill the Grimoire process while the action is running.
-      - Send a POST /actions/{slug}/run request or wait for cron execution.
-      - Observe that the action fails silently and never executes because of the stale DB record.
-    root_cause_hypothesis: >
-      run_action checks DB status "running" without verifying if an in-memory task is active,
-      and application initialization does not recover or reset interrupted "running" records upon startup.
+- slug: action-stale-running-lockout
+  title: Stale "running" DB status causes permanent action execution deadlock after
+    restart
+  module: src/grimoire/actions/engine.py
+  severity: high
+  status: fixed
+  description: 'If the application crashes or restarts while an action is executing,
+    its ActionRunRecord remains in status "running" in the SQLite database. Upon restart,
+    is_action_running returns False because in-memory tracking is empty. However,
+    when run_action executes in a background task, it queries the database for any
+    record with status "running" and raises ActionConflictError. The background task
+    in router.py catches ActionConflictError and silently aborts, causing all subsequent
+    manual or scheduled executions of the action to silently fail permanently.
 
-  - slug: workspace-sync-concurrency-race
-    title: Unlocked repository sync races with active worktree execution and workdir reset
-    module: src/grimoire/workspace/manager.py
-    severity: high
-    status: fixed
-    description: >
-      WorkspaceManager.sync_repo executes git fetch on the bare repository and git checkout,
-      git reset --hard, and git clean -fdx on worktrees without acquiring _repo_lock.
-      In addition, reset_workdir executes git reset and git clean outside the _repo_lock block.
-      If sync_repo or concurrent reset_workdir invocations run while an action or check script
-      is executing in the worktree, files in the worktree are mutated or cleaned mid-execution.
-    reproduction_steps:
-      - Trigger an action whose script executes for several seconds in a worktree.
-      - Concurrently invoke sync_repo or sync_all on the target repository.
-      - Observe git reset --hard mutating files in the active worktree while the action script is running.
-    root_cause_hypothesis: >
-      sync_repo and post-creation worktree reset operations in reset_workdir do not acquire
-      self._repo_lock(repo.full_name).
+    '
+  reproduction_steps:
+  - Trigger an action containing a long-running script.
+  - Restart or kill the Grimoire process while the action is running.
+  - Send a POST /actions/{slug}/run request or wait for cron execution.
+  - Observe that the action fails silently and never executes because of the stale
+    DB record.
+  root_cause_hypothesis: 'run_action checks DB status "running" without verifying
+    if an in-memory task is active, and application initialization does not recover
+    or reset interrupted "running" records upon startup.
 
-  - slug: worktree-creation-failure-corruption
-    title: Partial worktree creation leaves invalid directories and causes permanent failure
-    module: src/grimoire/workspace/manager.py
-    severity: high
-    status: fixed
-    description: >
-      If _ensure_worktree fails during git worktree add (e.g. missing remote branch or disk/git error),
-      WorkspaceError is caught and logged, but the directory workdir may exist on disk.
-      _ensure_worktree returns without creating a valid worktree. On subsequent executions,
-      workdir.exists() returns True, preventing retries of git worktree add. Subsequent operations
-      fail with WorkspaceError or FileNotFoundError.
-    reproduction_steps:
-      - Create an empty directory at {workspace_dir}/{owner}/{repo}/{branch} manually or interrupt git worktree add.
-      - Call reset_workdir(full_name, branch).
-      - Observe that _ensure_worktree skips worktree creation because workdir.exists() is True, and checkout fails with "fatal: not a git repository".
-    root_cause_hypothesis: >
-      _ensure_worktree relies solely on directory existence (workdir.exists()) rather than checking for
-      a valid git worktree structure (e.g., .git pointer file), and swallows creation errors without cleaning up incomplete directories.
+    '
+- slug: workspace-sync-concurrency-race
+  title: Unlocked repository sync races with active worktree execution and workdir
+    reset
+  module: src/grimoire/workspace/manager.py
+  severity: high
+  status: fixed
+  description: 'WorkspaceManager.sync_repo executes git fetch on the bare repository
+    and git checkout, git reset --hard, and git clean -fdx on worktrees without acquiring
+    _repo_lock. In addition, reset_workdir executes git reset and git clean outside
+    the _repo_lock block. If sync_repo or concurrent reset_workdir invocations run
+    while an action or check script is executing in the worktree, files in the worktree
+    are mutated or cleaned mid-execution.
 
-  - slug: github-client-pagination-race-condition
-    title: GitHubClient._last_next_link instance variable causes concurrent pagination state corruption
-    module: src/grimoire/github/client.py
-    severity: high
-    status: fixed
-    description: >
-      GitHubClient stores pagination state (_last_next_link) as an instance variable on self.
-      During concurrent operations (such as refresh_all_stats, which fetches up to 10 repositories concurrently
-      via asyncio.gather), one coroutine executing _request() updates self._last_next_link.
-      If another coroutine calls _request() concurrently before the first coroutine reads self._last_next_link in _paginated_get(),
-      the first coroutine will fetch the next page URL belonging to a completely different repository or endpoint.
-    reproduction_steps:
-      - Configure two or more repositories with >100 items requiring pagination.
-      - Call refresh_all_stats(), which executes concurrent requests using asyncio.gather with Semaphore(10).
-      - Observe coroutines interleaving and overwriting self._last_next_link mid-pagination.
-    root_cause_hypothesis: >
-      _last_next_link is stored as mutable instance state (self._last_next_link) instead of being returned directly from _request or extracted locally within _paginated_get.
+    '
+  reproduction_steps:
+  - Trigger an action whose script executes for several seconds in a worktree.
+  - Concurrently invoke sync_repo or sync_all on the target repository.
+  - Observe git reset --hard mutating files in the active worktree while the action
+    script is running.
+  root_cause_hypothesis: 'sync_repo and post-creation worktree reset operations in
+    reset_workdir do not acquire self._repo_lock(repo.full_name).
 
-  - slug: time-ago-attribute-error-none-timestamp
-    title: _time_ago helper raises AttributeError when formatting orphan check results with None timestamp
-    module: src/grimoire/web/router.py & src/grimoire/web/templates/partials/check_results.html
-    severity: high
-    status: fixed
-    description: >
-      When rendering check results fallback for orphan check runs, started_at can be assigned None
-      if timestamp in the database is NULL. partials/check_results.html calls {{ time_ago(run.started_at) }} unconditionally.
-      _time_ago(None) attempts to access None.tzinfo, raising AttributeError and returning HTTP 500.
-    reproduction_steps:
-      - Populate check_result DB table with rows where timestamp = NULL and run_id = NULL.
-      - Send GET request to /partials/check-results/<check-slug>.
-      - Observe HTTP 500 response.
-    root_cause_hypothesis: >
-      check_results_partial does not guard when started_at is None, and _time_ago assumes its argument is always non-null.
+    '
+- slug: worktree-creation-failure-corruption
+  title: Partial worktree creation leaves invalid directories and causes permanent
+    failure
+  module: src/grimoire/workspace/manager.py
+  severity: high
+  status: fixed
+  description: 'If _ensure_worktree fails during git worktree add (e.g. missing remote
+    branch or disk/git error), WorkspaceError is caught and logged, but the directory
+    workdir may exist on disk. _ensure_worktree returns without creating a valid worktree.
+    On subsequent executions, workdir.exists() returns True, preventing retries of
+    git worktree add. Subsequent operations fail with WorkspaceError or FileNotFoundError.
 
-  - slug: dashboard-empty-state-null-pointer
-    title: dashboard.html JavaScript throws TypeError when no repos exist
-    module: src/grimoire/web/templates/dashboard.html
-    severity: high
-    status: fixed
-    description: >
-      In dashboard.html, #repo-grid is rendered inside {% if repos %}. When repos is empty, #repo-grid is excluded from the DOM.
-      However, DOMContentLoaded unconditionally executes document.getElementById('repo-grid').classList.remove('hidden'),
-      throwing TypeError: Cannot read properties of null.
-    reproduction_steps:
-      - Start Grimoire with an empty repository configuration.
-      - Navigate to / in browser.
-      - Inspect browser console for TypeError.
-    root_cause_hypothesis: >
-      The #repo-grid container element is conditionally excluded from the DOM when repos is empty instead of always existing as an outer swap target.
+    '
+  reproduction_steps:
+  - Create an empty directory at {workspace_dir}/{owner}/{repo}/{branch} manually
+    or interrupt git worktree add.
+  - Call reset_workdir(full_name, branch).
+  - Observe that _ensure_worktree skips worktree creation because workdir.exists() is True, and checkout fails with "fatal: not
+      a git repository".
+  root_cause_hypothesis: '_ensure_worktree relies solely on directory existence (workdir.exists())
+    rather than checking for a valid git worktree structure (e.g., .git pointer file),
+    and swallows creation errors without cleaning up incomplete directories.
 
-  - slug: backlog-save-weights-config-corruption
-    title: /api/backlog/save-weights endpoint lacks input payload validation, risking permanent config.yaml corruption
-    module: src/grimoire/web/router.py
-    severity: high
-    status: open
-    description: >
-      The endpoint POST /api/backlog/save-weights accepts arbitrary JSON from request.json() and directly writes it to config.yaml via yaml.dump()
-      before invoking Pydantic validation. If an invalid payload is sent, yaml.dump overwrites config.yaml with invalid data before validation fails,
-      permanently corrupting config.yaml on disk.
-    reproduction_steps:
-      - Send POST request to /api/backlog/save-weights with invalid payload.
-      - Observe HTTP 500 error from Pydantic validation.
-      - Inspect config.yaml to confirm corrupted data was written to disk.
-    root_cause_hypothesis: >
-      File write operation is performed prior to input validation rather than validating payload before disk write.
+    '
+- slug: github-client-pagination-race-condition
+  title: GitHubClient._last_next_link instance variable causes concurrent pagination
+    state corruption
+  module: src/grimoire/github/client.py
+  severity: high
+  status: fixed
+  description: 'GitHubClient stores pagination state (_last_next_link) as an instance
+    variable on self. During concurrent operations (such as refresh_all_stats, which
+    fetches up to 10 repositories concurrently via asyncio.gather), one coroutine
+    executing _request() updates self._last_next_link. If another coroutine calls
+    _request() concurrently before the first coroutine reads self._last_next_link
+    in _paginated_get(), the first coroutine will fetch the next page URL belonging
+    to a completely different repository or endpoint.
 
-  - slug: subprocess-memory-unbounded-buffer
-    title: Unbounded stdout buffering in proc.communicate() causes memory spike before 64KB truncation
-    module: src/grimoire/actions/engine.py
-    severity: medium
-    status: open
-    description: >
-      _execute_action and _execute_global_action await proc.communicate(), which buffers all
-      subprocess stdout and stderr bytes into RAM. If a script outputs hundreds of megabytes of text,
-      Python allocates memory for the full output before applying 64KB truncation.
-    reproduction_steps:
-      - Create an action script outputting MBs of text.
-      - Trigger the action and observe high memory consumption prior to 64KB truncation.
-    root_cause_hypothesis: >
-      Subprocess output stream is read entirely into memory via proc.communicate() before capping is applied.
+    '
+  reproduction_steps:
+  - Configure two or more repositories with >100 items requiring pagination.
+  - Call refresh_all_stats(), which executes concurrent requests using asyncio.gather
+    with Semaphore(10).
+  - Observe coroutines interleaving and overwriting self._last_next_link mid-pagination.
+  root_cause_hypothesis: '_last_next_link is stored as mutable instance state (self._last_next_link)
+    instead of being returned directly from _request or extracted locally within _paginated_get.
 
-  - slug: targeting-zombie-process-leak
-    title: Zombie subprocess leak on script targeting timeout
-    module: src/grimoire/targeting.py
-    severity: medium
-    status: fixed
-    description: >
-      When _script_matches times out after 30 seconds, proc.kill() is called to terminate the subprocess,
-      but await proc.wait() is omitted, leaving zombie (defunct) processes in the OS process table.
-    reproduction_steps:
-      - Configure an action with a script target that runs sleep 60.
-      - Execute resolve_targets and wait 30 seconds for timeout.
-      - Inspect process table for defunct processes.
-    root_cause_hypothesis: >
-      _script_matches exception handler calls proc.kill() without awaiting proc.wait().
+    '
+- slug: time-ago-attribute-error-none-timestamp
+  title: _time_ago helper raises AttributeError when formatting orphan check results
+    with None timestamp
+  module: src/grimoire/web/router.py & src/grimoire/web/templates/partials/check_results.html
+  severity: high
+  status: fixed
+  description: 'When rendering check results fallback for orphan check runs, started_at
+    can be assigned None if timestamp in the database is NULL. partials/check_results.html
+    calls {{ time_ago(run.started_at) }} unconditionally. _time_ago(None) attempts
+    to access None.tzinfo, raising AttributeError and returning HTTP 500.
 
-  - slug: actions-invalid-regex-crash
-    title: Invalid regex in action definition crashes GET /actions/ endpoint
-    module: src/grimoire/actions/router.py
-    severity: medium
-    status: fixed
-    description: >
-      list_actions() in router.py compiles action target regexes via re.compile(a.targets.regex)
-      without exception handling. An action with an invalid regex string causes GET /actions/ to crash with HTTP 500.
-    reproduction_steps:
-      - Create an action YAML file with invalid regex targets.
-      - Send GET /actions/ request.
-      - Observe 500 Internal Server Error.
-    root_cause_hypothesis: >
-      list_actions compiles regex patterns on the fly without catching re.error.
+    '
+  reproduction_steps:
+  - Populate check_result DB table with rows where timestamp = NULL and run_id = NULL.
+  - Send GET request to /partials/check-results/<check-slug>.
+  - Observe HTTP 500 response.
+  root_cause_hypothesis: 'check_results_partial does not guard when started_at is
+    None, and _time_ago assumes its argument is always non-null.
 
-  - slug: scheduler-eventloop-type-detection-bug
-    title: register_actions improperly detects AsyncIOScheduler state leading to RuntimeError
-    module: src/grimoire/actions/scheduler.py
-    severity: medium
-    status: fixed
-    description: >
-      register_actions checks hasattr(scheduler, "_eventloop") to distinguish AsyncIOScheduler from BackgroundScheduler.
-      However, AsyncIOScheduler._eventloop is not set until scheduler.start() is called.
-    reproduction_steps:
-      - Instantiate AsyncIOScheduler() and call register_actions before scheduler.start().
-      - Trigger a scheduled job.
-      - Observe RuntimeError: This event loop is already running.
-    root_cause_hypothesis: >
-      register_actions inspects private attribute _eventloop instead of type checking via isinstance(scheduler, AsyncIOScheduler).
+    '
+- slug: dashboard-empty-state-null-pointer
+  title: dashboard.html JavaScript throws TypeError when no repos exist
+  module: src/grimoire/web/templates/dashboard.html
+  severity: high
+  status: fixed
+  description: 'In dashboard.html, #repo-grid is rendered inside {% if repos %}. When
+    repos is empty, #repo-grid is excluded from the DOM. However, DOMContentLoaded
+    unconditionally executes document.getElementById(''repo-grid'').classList.remove(''hidden''),
+    throwing TypeError: Cannot read properties of null.
 
-  - slug: checks-router-improper-session-exec
-    title: Use of session.exec() with raw sqlalchemy.text() and keyword params in check results query
-    module: src/grimoire/checks/router.py
-    severity: medium
-    status: fixed
-    description: >
-      In get_check_results(), the endpoint executes a raw SQL text() query using await session.exec(query, params={"slug": slug})
-      suppressed with type ignores. session.exec() is typed for Select constructs; session.execute() is the correct method for raw SQL text().
-    reproduction_steps:
-      - Inspect src/grimoire/checks/router.py around line 158.
-    root_cause_hypothesis: >
-      session.exec() was used instead of session.execute() for raw SQL text() query execution.
+    '
+  reproduction_steps:
+  - Start Grimoire with an empty repository configuration.
+  - Navigate to / in browser.
+  - Inspect browser console for TypeError.
+  root_cause_hypothesis: 'The #repo-grid container element is conditionally excluded
+    from the DOM when repos is empty instead of always existing as an outer swap target.
 
-  - slug: checks-router-concurrent-run-race-condition
-    title: Endpoint check-running guard check occurs before background task registers execution state
-    module: src/grimoire/checks/router.py
-    severity: medium
-    status: fixed
-    description: >
-      When POST /checks/{slug}/run is called, run_check_endpoint() checks is_check_running(slug) before queuing _run_in_background.
-      However, _running_checks is only set inside run_check_for_all_targets when the background task executes later.
-      Rapid POST requests trigger duplicate concurrent background tasks.
-    reproduction_steps:
-      - Send two rapid POST /checks/{slug}/run HTTP requests.
-      - Both return HTTP 202 and spawn duplicate background tasks.
-    root_cause_hypothesis: >
-      Running state is registered inside the background task handler rather than synchronously within endpoint handler.
+    '
+- slug: backlog-save-weights-config-corruption
+  title: /api/backlog/save-weights endpoint lacks input payload validation, risking
+    permanent config.yaml corruption
+  module: src/grimoire/web/router.py
+  severity: high
+  status: fixed
+  description: 'The endpoint POST /api/backlog/save-weights accepts arbitrary JSON
+    from request.json() and directly writes it to config.yaml via yaml.dump() before
+    invoking Pydantic validation. If an invalid payload is sent, yaml.dump overwrites
+    config.yaml with invalid data before validation fails, permanently corrupting
+    config.yaml on disk.
 
-  - slug: github-client-paginated-304-data-truncation
-    title: _paginated_get returns truncated result list when page > 1 encounters HTTP 304 Not Modified
-    module: src/grimoire/github/client.py
-    severity: medium
-    status: open
-    description: >
-      In _paginated_get(), if page 1 returns HTTP 200 OK and a subsequent page returns HTTP 304, _paginated_get breaks and returns page 1 items only.
-    reproduction_steps:
-      - Request a paginated endpoint (>100 items). Page 1 returns 200, Page 2 returns 304.
-      - Observe truncated result list.
-    root_cause_hypothesis: >
-      _paginated_get treats a 304 on page N > 1 as an end-of-pagination marker without page-level caching.
+    '
+  reproduction_steps:
+  - Send POST request to /api/backlog/save-weights with invalid payload.
+  - Observe HTTP 500 error from Pydantic validation.
+  - Inspect config.yaml to confirm corrupted data was written to disk.
+  root_cause_hypothesis: 'File write operation is performed prior to input validation
+    rather than validating payload before disk write.
 
-  - slug: repo-detail-check-output-layout-break
-    title: Check output container inside repository.html breaks inline flex row layout when loaded
-    module: src/grimoire/web/templates/repository.html
-    severity: medium
-    status: fixed
-    description: >
-      In repository.html, <div id="check-output-{{ chk.id }}"></div> is placed directly inside an inline flex row.
-      HTMX swapping a multiline <pre> block distorts flex row formatting.
-    reproduction_steps:
-      - Navigate to /repo/<owner>/<name> and click "Output" next to any check.
-      - Observe flex row layout distortion.
-    root_cause_hypothesis: >
-      The output target div is placed inside the flex row container instead of a separate full-width block row below.
+    '
+- slug: subprocess-memory-unbounded-buffer
+  title: Unbounded stdout buffering in proc.communicate() causes memory spike before
+    64KB truncation
+  module: src/grimoire/actions/engine.py
+  severity: medium
+  status: fixed
+  description: '_execute_action and _execute_global_action await proc.communicate(),
+    which buffers all subprocess stdout and stderr bytes into RAM. If a script outputs
+    hundreds of megabytes of text, Python allocates memory for the full output before
+    applying 64KB truncation.
 
-  - slug: backlog-empty-category-filter-bypass
-    title: Unchecking all category checkboxes in Backlog view bypasses filtering and displays all items
-    module: src/grimoire/web/templates/backlog.html & src/grimoire/web/router.py
-    severity: medium
-    status: fixed
-    description: >
-      Unchecking all category checkboxes sends ?categories=. router.py converts empty string to None, which is interpreted as no filter applied.
-    reproduction_steps:
-      - Navigate to /backlog and uncheck all category checkboxes.
-      - Observe all items remain displayed.
-    root_cause_hypothesis: >
-      router.py conflates categories="" with categories=None.
+    '
+  reproduction_steps:
+  - Create an action script outputting MBs of text.
+  - Trigger the action and observe high memory consumption prior to 64KB truncation.
+  root_cause_hypothesis: 'Subprocess output stream is read entirely into memory via
+    proc.communicate() before capping is applied.
 
-  - slug: repo-detail-date-strftime-attribute-error
-    title: Direct .strftime() calls on stats.last_commit_at and issue/PR activity dates crash if dates are strings
-    module: src/grimoire/web/templates/repository.html
-    severity: medium
-    status: fixed
-    description: >
-      In repository.html, date formatting directly calls .strftime() on stats.last_commit_at, issue.last_activity_at, and pr.last_activity_at.
-      If any of these dates are deserialized as strings, Jinja2 raises AttributeError and crashes with HTTP 500.
-    reproduction_steps:
-      - Store an ISO string for last_commit_at in RepositoryStats and navigate to /repo/<owner>/<name>.
-      - Observe AttributeError during template rendering.
-    root_cause_hypothesis: >
-      Template directly calls datetime.strftime methods on object attributes instead of using a defensive filter or helper.
+    '
+- slug: targeting-zombie-process-leak
+  title: Zombie subprocess leak on script targeting timeout
+  module: src/grimoire/targeting.py
+  severity: medium
+  status: fixed
+  description: 'When _script_matches times out after 30 seconds, proc.kill() is called
+    to terminate the subprocess, but await proc.wait() is omitted, leaving zombie
+    (defunct) processes in the OS process table.
 
-  - slug: router-dummy-run-id-response
-    title: POST /actions/{slug}/run returns dummy run ID 0 making run tracking impossible
-    module: src/grimoire/actions/router.py
-    severity: low
-    status: fixed
-    description: >
-      When run_action_endpoint is invoked, it returns ActionRunDetail with id=0 before the background task creates the DB record.
-    reproduction_steps:
-      - Call POST /actions/{slug}/run and receive id=0.
-      - GET /actions/{slug}/runs/0 returns 404.
-    root_cause_hypothesis: >
-      Endpoint returns ActionRunDetail(id=0) before background task creates the database record.
+    '
+  reproduction_steps:
+  - Configure an action with a script target that runs sleep 60.
+  - Execute resolve_targets and wait 30 seconds for timeout.
+  - Inspect process table for defunct processes.
+  root_cause_hypothesis: '_script_matches exception handler calls proc.kill() without
+    awaiting proc.wait().
 
-  - slug: github-service-improper-delete-exec
-    title: Using session.exec() instead of session.execute() for delete() DML statements
-    module: src/grimoire/github/service.py
-    severity: low
-    status: fixed
-    description: >
-      delete() queries in save_stats_to_db and _prune_repos_from_db use session.exec(delete(...)) suppressed with type ignores.
-    reproduction_steps:
-      - Inspect save_stats_to_db and _prune_repos_from_db in src/grimoire/github/service.py.
-    root_cause_hypothesis: >
-      Misuse of session.exec() for delete() DML operations instead of session.execute().
+    '
+- slug: actions-invalid-regex-crash
+  title: Invalid regex in action definition crashes GET /actions/ endpoint
+  module: src/grimoire/actions/router.py
+  severity: medium
+  status: fixed
+  description: 'list_actions() in router.py compiles action target regexes via re.compile(a.targets.regex)
+    without exception handling. An action with an invalid regex string causes GET
+    /actions/ to crash with HTTP 500.
 
-  - slug: github-client-secondary-rate-limit-misclassification
-    title: "HTTP 403 rate limit responses without X-RateLimit-Remaining: 0 header bypass RateLimitError"
-    module: src/grimoire/github/client.py
-    severity: low
-    status: fixed
-    description: >
-      If GitHub sends a 403 secondary rate limit response without X-RateLimit-Remaining: 0, _request raises GitHubAPIError instead of RateLimitError.
-    reproduction_steps:
-      - Trigger secondary rate limit response without X-RateLimit-Remaining header.
-    root_cause_hypothesis: >
-      Rate limit classification strictly checks self._rate_limit_remaining == 0.
+    '
+  reproduction_steps:
+  - Create an action YAML file with invalid regex targets.
+  - Send GET /actions/ request.
+  - Observe 500 Internal Server Error.
+  root_cause_hypothesis: 'list_actions compiles regex patterns on the fly without
+    catching re.error.
 
-  - slug: deprecated-session-execute-usage
-    title: Deprecated session.execute called on SQLModel AsyncSession across multiple web router queries
-    module: src/grimoire/web/router.py
-    severity: low
-    status: open
-    description: >
-      Multiple call sites in router.py use await session.execute(...) instead of await session.exec(...), triggering deprecation warnings.
-    reproduction_steps:
-      - Trigger web routes querying database and inspect warning logs.
-    root_cause_hypothesis: >
-      Queries were written using standard SQLAlchemy session.execute() syntax rather than SQLModel's session.exec().
+    '
+- slug: scheduler-eventloop-type-detection-bug
+  title: register_actions improperly detects AsyncIOScheduler state leading to RuntimeError
+  module: src/grimoire/actions/scheduler.py
+  severity: medium
+  status: fixed
+  description: 'register_actions checks hasattr(scheduler, "_eventloop") to distinguish
+    AsyncIOScheduler from BackgroundScheduler. However, AsyncIOScheduler._eventloop
+    is not set until scheduler.start() is called.
 
-  - slug: dashboard-partials-missing-empty-state
-    title: Matrix and list dashboard partial templates render empty table/div without user feedback
-    module: src/grimoire/web/templates/partials/dashboard_matrix.html & partials/dashboard_list.html
-    severity: low
-    status: fixed
-    description: >
-      Dashboard partial templates render empty table header/div when repos is empty without displaying an empty state message.
-    reproduction_steps:
-      - GET /partials/dashboard-matrix when no repositories match.
-    root_cause_hypothesis: >
-      Partial templates lack {% else %} fallback empty state blocks.
+    '
+  reproduction_steps:
+  - Instantiate AsyncIOScheduler() and call register_actions before scheduler.start().
+  - Trigger a scheduled job.
+  - Observe RuntimeError: This event loop is already running.
+  root_cause_hypothesis: 'register_actions inspects private attribute _eventloop instead
+    of type checking via isinstance(scheduler, AsyncIOScheduler).
 
-  - slug: check-results-global-repo-broken-link
-    title: check_results.html does not handle global target repo names, generating broken /repo/(global) links
-    module: src/grimoire/web/templates/partials/check_results.html
-    severity: low
-    status: fixed
-    description: >
-      check_results.html renders <a href="/repo/{{ r.repo_full_name }}"> for global checks, causing broken /repo/(global) 404 links.
-    reproduction_steps:
-      - Run a check with target: global and view results on /checks.
-    root_cause_hypothesis: >
-      check_results.html omitted the (global) repository name check present in action result partials.
+    '
+- slug: checks-router-improper-session-exec
+  title: Use of session.exec() with raw sqlalchemy.text() and keyword params in check
+    results query
+  module: src/grimoire/checks/router.py
+  severity: medium
+  status: fixed
+  description: 'In get_check_results(), the endpoint executes a raw SQL text() query
+    using await session.exec(query, params={"slug": slug}) suppressed with type ignores.
+    session.exec() is typed for Select constructs; session.execute() is the correct
+    method for raw SQL text().
 
-  - slug: action-run-record-stuck-on-failure
-    title: Action run DB record permanently stuck as "running" on exception
-    module: src/grimoire/actions/engine.py
-    severity: critical
-    status: fixed
-    description: >
-      When run_action raises any exception, the finally block cleans up in-memory tracking but the
-      DB ActionRunRecord is never updated from status "running" to a terminal state. This permanently
-      blocks all future runs of that action with ActionConflictError.
-    reproduction_steps:
-      - Trigger an action that raises an exception (e.g., workspace error).
-      - Observe the DB record stays as status "running".
-      - Try to trigger the action again — ActionConflictError.
-    root_cause_hypothesis: >
-      Status update to "completed" is inside the try success path only; no except clause sets "failed".
+    '
+  reproduction_steps:
+  - Inspect src/grimoire/checks/router.py around line 158.
+  root_cause_hypothesis: 'session.exec() was used instead of session.execute() for
+    raw SQL text() query execution.
 
-  - slug: check-run-record-stuck-on-failure
-    title: Check run DB record permanently stuck as "running" on exception
-    module: src/grimoire/checks/engine.py
-    severity: critical
-    status: fixed
-    description: >
-      Same pattern as action engine. When run_check_for_all_targets raises, the CheckRunRecord
-      stays as status "running" permanently.
-    reproduction_steps:
-      - Trigger a check that raises an exception during target resolution.
-      - Observe the DB record stays as status "running".
-    root_cause_hypothesis: >
-      Status update to "completed" is inside the try success path only; no except clause sets "failed".
+    '
+- slug: checks-router-concurrent-run-race-condition
+  title: Endpoint check-running guard check occurs before background task registers
+    execution state
+  module: src/grimoire/checks/router.py
+  severity: medium
+  status: fixed
+  description: 'When POST /checks/{slug}/run is called, run_check_endpoint() checks
+    is_check_running(slug) before queuing _run_in_background. However, _running_checks
+    is only set inside run_check_for_all_targets when the background task executes
+    later. Rapid POST requests trigger duplicate concurrent background tasks.
 
-  - slug: pagination-race-paginated-vs-nonpaginated
-    title: _last_next_link race between paginated and non-paginated requests causes silent data loss
-    module: src/grimoire/github/client.py
-    severity: high
-    status: fixed
-    description: >
-      Non-paginated _request calls overwrite _last_next_link while a paginated call is in progress.
-      This causes pagination to stop after page 1, silently dropping all remaining pages for repos
-      with >100 items.
-    reproduction_steps:
-      - Configure repos with >100 open issues.
-      - Trigger refresh which runs concurrent paginated and non-paginated requests.
-      - Observe truncated issue/PR lists.
-    root_cause_hypothesis: >
-      _last_next_link is stored as instance state shared across all concurrent requests.
+    '
+  reproduction_steps:
+  - Send two rapid POST /checks/{slug}/run HTTP requests.
+  - Both return HTTP 202 and spawn duplicate background tasks.
+  root_cause_hypothesis: 'Running state is registered inside the background task handler
+    rather than synchronously within endpoint handler.
 
-  - slug: stale-scheduler-repos-closure
-    title: Scheduler jobs capture stale repos list via closure, missing newly added repos
-    module: src/grimoire/app.py
-    severity: high
-    status: fixed
-    description: >
-      register_checks and register_actions capture the startup-time repos list. After refresh updates
-      the list, scheduler closures still reference the original. Newly added repos are never checked
-      by cron; removed repos are still checked.
-    reproduction_steps:
-      - Start Grimoire with repos A, B.
-      - Add repo C to config and trigger refresh.
-      - Wait for cron schedule — repo C is never checked.
-    root_cause_hypothesis: >
-      Scheduler closures capture the repos parameter by reference; the list is replaced
-      (not mutated) during refresh.
+    '
+- slug: github-client-paginated-304-data-truncation
+  title: _paginated_get returns truncated result list when page > 1 encounters HTTP
+    304 Not Modified
+  module: src/grimoire/github/client.py
+  severity: medium
+  status: fixed
+  description: 'In _paginated_get(), if page 1 returns HTTP 200 OK and a subsequent
+    page returns HTTP 304, _paginated_get breaks and returns page 1 items only.
 
-  - slug: invalid-check-regex-crashes-dashboard
-    title: Invalid regex in check config crashes the entire dashboard with 500
-    module: src/grimoire/web/router.py
-    severity: medium
-    status: fixed
-    description: >
-      _resolve_targets_sync calls re.compile(targets.regex) without exception handling. An invalid
-      regex in check YAML crashes all pages that build repo viewmodels.
-    reproduction_steps:
-      - Create a check YAML with invalid regex targets.
-      - Load the dashboard.
-      - 500 Internal Server Error.
-    root_cause_hypothesis: >
-      re.compile() on user-supplied regex is not wrapped in try/except.
+    '
+  reproduction_steps:
+  - Request a paginated endpoint (>100 items). Page 1 returns 200, Page 2 returns
+    304.
+  - Observe truncated result list.
+  root_cause_hypothesis: '_paginated_get treats a 304 on page N > 1 as an end-of-pagination
+    marker without page-level caching.
 
-  - slug: assert-in-endpoint-error-handling
-    title: assert statements used for runtime validation in web endpoints
-    module: src/grimoire/web/router.py
-    severity: medium
-    status: fixed
-    description: >
-      check_run_trigger and action_run_trigger use assert for None checks on workspace/engine.
-      With Python -O flag, asserts are stripped and None values propagate. Without -O, users get
-      raw AssertionError with no actionable message.
-    reproduction_steps:
-      - Start Grimoire without checks configured.
-      - POST to /partials/check-run/{slug}.
-      - 500 AssertionError.
-    root_cause_hypothesis: >
-      assert used instead of HTTPException for user-facing error responses.
+    '
+- slug: repo-detail-check-output-layout-break
+  title: Check output container inside repository.html breaks inline flex row layout
+    when loaded
+  module: src/grimoire/web/templates/repository.html
+  severity: medium
+  status: fixed
+  description: 'In repository.html, <div id="check-output-{{ chk.id }}"></div> is
+    placed directly inside an inline flex row. HTMX swapping a multiline <pre> block
+    distorts flex row formatting.
 
-  - slug: checks-background-task-no-error-handler
-    title: Checks router background task has no exception handler unlike actions router
-    module: src/grimoire/checks/router.py
-    severity: medium
-    status: fixed
-    description: >
-      The checks router background task has no try/except, unlike the actions router which catches
-      ActionConflictError. Unhandled exceptions in background tasks are silently swallowed by FastAPI.
-    reproduction_steps:
-      - Trigger a check that raises an exception in the background task.
-      - Observe no error is logged or surfaced.
-    root_cause_hypothesis: >
-      Missing try/except in _run_in_background closure.
+    '
+  reproduction_steps:
+  - Navigate to /repo/<owner>/<name> and click "Output" next to any check.
+  - Observe flex row layout distortion.
+  root_cause_hypothesis: 'The output target div is placed inside the flex row container
+    instead of a separate full-width block row below.
 
-  - slug: datetime-now-naive-in-actions-router
-    title: datetime.now() without timezone in actions router response
-    module: src/grimoire/actions/router.py
-    severity: low
-    status: fixed
-    description: >
-      The run_action_endpoint returns started_at=datetime.now() (naive, no timezone). The engine
-      uses datetime.now(timezone.utc). Comparing these causes TypeError.
-    reproduction_steps:
-      - Trigger an action and inspect the response started_at field.
-      - Compare with the DB stored finished_at (timezone-aware).
-    root_cause_hypothesis: >
-      datetime.now() used instead of datetime.now(timezone.utc).
+    '
+- slug: backlog-empty-category-filter-bypass
+  title: Unchecking all category checkboxes in Backlog view bypasses filtering and
+    displays all items
+  module: src/grimoire/web/templates/backlog.html & src/grimoire/web/router.py
+  severity: medium
+  status: fixed
+  description: 'Unchecking all category checkboxes sends ?categories=. router.py converts
+    empty string to None, which is interpreted as no filter applied.
 
-  - slug: 429-not-retried
-    title: GitHub 429 secondary rate limit responses not retried
-    module: src/grimoire/github/client.py
-    severity: medium
-    status: open
-    description: >
-      GitHub returns 429 for secondary rate limits. The client's status handling falls through to
-      raise_for_status(), which raises httpx.HTTPStatusError not caught by the retry handler.
-    reproduction_steps:
-      - Trigger a secondary rate limit (too many concurrent requests).
-      - Observe the entire refresh aborts instead of retrying.
-    root_cause_hypothesis: >
-      429 not handled explicitly; falls through to raise_for_status().
+    '
+  reproduction_steps:
+  - Navigate to /backlog and uncheck all category checkboxes.
+  - Observe all items remain displayed.
+  root_cause_hypothesis: 'router.py conflates categories="" with categories=None.
 
-  - slug: stale-repo-304-defaults
-    title: Archived repos bypass detection on 304 cache hit
-    module: src/grimoire/github/service.py
-    severity: low
-    status: open
-    description: >
-      When get_repo returns None (304 cache hit), archived defaults to False and default_branch
-      to "main". Archived repos continue consuming API quota.
-    reproduction_steps:
-      - Archive a repo on GitHub.
-      - Trigger refresh — the repo is still tracked.
-    root_cause_hypothesis: >
-      304 fallback doesn't use cached repository metadata.
+    '
+- slug: repo-detail-date-strftime-attribute-error
+  title: Direct .strftime() calls on stats.last_commit_at and issue/PR activity dates
+    crash if dates are strings
+  module: src/grimoire/web/templates/repository.html
+  severity: medium
+  status: fixed
+  description: 'In repository.html, date formatting directly calls .strftime() on
+    stats.last_commit_at, issue.last_activity_at, and pr.last_activity_at. If any
+    of these dates are deserialized as strings, Jinja2 raises AttributeError and crashes
+    with HTTP 500.
 
-  - slug: backlog-export-ignores-filter-state
-    title: Backlog export ignores current filter state
-    module: src/grimoire/web/router.py
-    severity: low
-    status: open
-    description: >
-      The export endpoint is called without passing the user's current filter parameters. Exported
-      content includes all items regardless of active filters.
-    reproduction_steps:
-      - Open backlog, set category filters.
-      - Click "Copy as Markdown".
-      - Observe exported content includes all items.
-    root_cause_hypothesis: >
-      Export button doesn't propagate current filter state to the API endpoint.
+    '
+  reproduction_steps:
+  - Store an ISO string for last_commit_at in RepositoryStats and navigate to /repo/<owner>/<name>.
+  - Observe AttributeError during template rendering.
+  root_cause_hypothesis: 'Template directly calls datetime.strftime methods on object
+    attributes instead of using a defensive filter or helper.
 
-  - slug: time-ago-future-dates
-    title: _time_ago returns negative strings for future dates
-    module: src/grimoire/web/router.py
-    severity: low
-    status: open
-    description: >
-      If dt is in the future (clock skew), _time_ago returns strings like "-3s ago".
-    reproduction_steps:
-      - Pass a future datetime to _time_ago().
-      - Returns "-3s ago" instead of "just now".
-    root_cause_hypothesis: >
-      No guard against negative seconds in the time delta.
+    '
+- slug: router-dummy-run-id-response
+  title: POST /actions/{slug}/run returns dummy run ID 0 making run tracking impossible
+  module: src/grimoire/actions/router.py
+  severity: low
+  status: fixed
+  description: 'When run_action_endpoint is invoked, it returns ActionRunDetail with
+    id=0 before the background task creates the DB record.
 
-  - slug: path-traversal-branch-names
-    title: No path traversal protection on branch names in workspace manager
-    module: src/grimoire/workspace/manager.py
-    severity: medium
-    status: open
-    description: >
-      Branch names from config are used unsanitized in filesystem paths. A branch like "../../etc"
-      resolves outside the workspace directory.
-    reproduction_steps:
-      - Configure a branch name with "../" sequences.
-      - Observe git operations on paths outside workspace.
-    root_cause_hypothesis: >
-      get_workdir doesn't validate that the resolved path is within workspace_dir.
+    '
+  reproduction_steps:
+  - Call POST /actions/{slug}/run and receive id=0.
+  - GET /actions/{slug}/runs/0 returns 404.
+  root_cause_hypothesis: 'Endpoint returns ActionRunDetail(id=0) before background
+    task creates the database record.
 
-  - slug: config-cron-not-validated
-    title: refresh_schedule cron expression not validated at config load time
-    module: src/grimoire/config.py
-    severity: low
-    status: open
-    description: >
-      Invalid cron expressions pass config loading and fail at runtime with unhelpful errors.
-    reproduction_steps:
-      - Set refresh_schedule to "not-a-cron" in config.yaml.
-      - Start Grimoire — unclear error at scheduler startup.
-    root_cause_hypothesis: >
-      No @model_validator for cron expression format.
+    '
+- slug: github-service-improper-delete-exec
+  title: Using session.exec() instead of session.execute() for delete() DML statements
+  module: src/grimoire/github/service.py
+  severity: low
+  status: fixed
+  description: 'delete() queries in save_stats_to_db and _prune_repos_from_db use
+    session.exec(delete(...)) suppressed with type ignores.
 
-  - slug: non-atomic-config-write
-    title: backlog_save_weights writes config file non-atomically
-    module: src/grimoire/web/router.py
-    severity: low
-    status: open
-    description: >
-      Config file is opened with "w" mode and written directly. Process kill mid-write corrupts config.
-    reproduction_steps:
-      - Click "Save to config" on backlog page.
-      - Kill server during yaml.dump write.
-      - Config file is empty or corrupted.
-    root_cause_hypothesis: >
-      Direct file write instead of write-to-temp-then-rename pattern.
+    '
+  reproduction_steps:
+  - Inspect save_stats_to_db and _prune_repos_from_db in src/grimoire/github/service.py.
+  root_cause_hypothesis: 'Misuse of session.exec() for delete() DML operations instead
+    of session.execute().
+
+    '
+- slug: github-client-secondary-rate-limit-misclassification
+  title: 'HTTP 403 rate limit responses without X-RateLimit-Remaining: 0 header bypass
+    RateLimitError'
+  module: src/grimoire/github/client.py
+  severity: low
+  status: fixed
+  description: 'If GitHub sends a 403 secondary rate limit response without X-RateLimit-Remaining:
+    0, _request raises GitHubAPIError instead of RateLimitError.
+
+    '
+  reproduction_steps:
+  - Trigger secondary rate limit response without X-RateLimit-Remaining header.
+  root_cause_hypothesis: 'Rate limit classification strictly checks self._rate_limit_remaining
+    == 0.
+
+    '
+- slug: deprecated-session-execute-usage
+  title: Deprecated session.execute called on SQLModel AsyncSession across multiple
+    web router queries
+  module: src/grimoire/web/router.py
+  severity: low
+  status: fixed
+  description: 'Multiple call sites in router.py use await session.execute(...) instead
+    of await session.exec(...), triggering deprecation warnings.
+
+    '
+  reproduction_steps:
+  - Trigger web routes querying database and inspect warning logs.
+  root_cause_hypothesis: 'Queries were written using standard SQLAlchemy session.execute()
+    syntax rather than SQLModel''s session.exec().
+
+    '
+- slug: dashboard-partials-missing-empty-state
+  title: Matrix and list dashboard partial templates render empty table/div without
+    user feedback
+  module: src/grimoire/web/templates/partials/dashboard_matrix.html & partials/dashboard_list.html
+  severity: low
+  status: fixed
+  description: 'Dashboard partial templates render empty table header/div when repos
+    is empty without displaying an empty state message.
+
+    '
+  reproduction_steps:
+  - GET /partials/dashboard-matrix when no repositories match.
+  root_cause_hypothesis: 'Partial templates lack {% else %} fallback empty state blocks.
+
+    '
+- slug: check-results-global-repo-broken-link
+  title: check_results.html does not handle global target repo names, generating broken
+    /repo/(global) links
+  module: src/grimoire/web/templates/partials/check_results.html
+  severity: low
+  status: fixed
+  description: 'check_results.html renders <a href="/repo/{{ r.repo_full_name }}">
+    for global checks, causing broken /repo/(global) 404 links.
+
+    '
+  reproduction_steps:
+  - Run a check with target: global and view results on /checks.
+  root_cause_hypothesis: 'check_results.html omitted the (global) repository name
+    check present in action result partials.
+
+    '
+- slug: action-run-record-stuck-on-failure
+  title: Action run DB record permanently stuck as "running" on exception
+  module: src/grimoire/actions/engine.py
+  severity: critical
+  status: fixed
+  description: 'When run_action raises any exception, the finally block cleans up
+    in-memory tracking but the DB ActionRunRecord is never updated from status "running"
+    to a terminal state. This permanently blocks all future runs of that action with
+    ActionConflictError.
+
+    '
+  reproduction_steps:
+  - Trigger an action that raises an exception (e.g., workspace error).
+  - Observe the DB record stays as status "running".
+  - Try to trigger the action again — ActionConflictError.
+  root_cause_hypothesis: 'Status update to "completed" is inside the try success path
+    only; no except clause sets "failed".
+
+    '
+- slug: check-run-record-stuck-on-failure
+  title: Check run DB record permanently stuck as "running" on exception
+  module: src/grimoire/checks/engine.py
+  severity: critical
+  status: fixed
+  description: 'Same pattern as action engine. When run_check_for_all_targets raises,
+    the CheckRunRecord stays as status "running" permanently.
+
+    '
+  reproduction_steps:
+  - Trigger a check that raises an exception during target resolution.
+  - Observe the DB record stays as status "running".
+  root_cause_hypothesis: 'Status update to "completed" is inside the try success path
+    only; no except clause sets "failed".
+
+    '
+- slug: pagination-race-paginated-vs-nonpaginated
+  title: _last_next_link race between paginated and non-paginated requests causes
+    silent data loss
+  module: src/grimoire/github/client.py
+  severity: high
+  status: fixed
+  description: 'Non-paginated _request calls overwrite _last_next_link while a paginated
+    call is in progress. This causes pagination to stop after page 1, silently dropping
+    all remaining pages for repos with >100 items.
+
+    '
+  reproduction_steps:
+  - Configure repos with >100 open issues.
+  - Trigger refresh which runs concurrent paginated and non-paginated requests.
+  - Observe truncated issue/PR lists.
+  root_cause_hypothesis: '_last_next_link is stored as instance state shared across
+    all concurrent requests.
+
+    '
+- slug: stale-scheduler-repos-closure
+  title: Scheduler jobs capture stale repos list via closure, missing newly added
+    repos
+  module: src/grimoire/app.py
+  severity: high
+  status: fixed
+  description: 'register_checks and register_actions capture the startup-time repos
+    list. After refresh updates the list, scheduler closures still reference the original.
+    Newly added repos are never checked by cron; removed repos are still checked.
+
+    '
+  reproduction_steps:
+  - Start Grimoire with repos A, B.
+  - Add repo C to config and trigger refresh.
+  - Wait for cron schedule — repo C is never checked.
+  root_cause_hypothesis: 'Scheduler closures capture the repos parameter by reference;
+    the list is replaced (not mutated) during refresh.
+
+    '
+- slug: invalid-check-regex-crashes-dashboard
+  title: Invalid regex in check config crashes the entire dashboard with 500
+  module: src/grimoire/web/router.py
+  severity: medium
+  status: fixed
+  description: '_resolve_targets_sync calls re.compile(targets.regex) without exception
+    handling. An invalid regex in check YAML crashes all pages that build repo viewmodels.
+
+    '
+  reproduction_steps:
+  - Create a check YAML with invalid regex targets.
+  - Load the dashboard.
+  - 500 Internal Server Error.
+  root_cause_hypothesis: 're.compile() on user-supplied regex is not wrapped in try/except.
+
+    '
+- slug: assert-in-endpoint-error-handling
+  title: assert statements used for runtime validation in web endpoints
+  module: src/grimoire/web/router.py
+  severity: medium
+  status: fixed
+  description: 'check_run_trigger and action_run_trigger use assert for None checks
+    on workspace/engine. With Python -O flag, asserts are stripped and None values
+    propagate. Without -O, users get raw AssertionError with no actionable message.
+
+    '
+  reproduction_steps:
+  - Start Grimoire without checks configured.
+  - POST to /partials/check-run/{slug}.
+  - 500 AssertionError.
+  root_cause_hypothesis: 'assert used instead of HTTPException for user-facing error
+    responses.
+
+    '
+- slug: checks-background-task-no-error-handler
+  title: Checks router background task has no exception handler unlike actions router
+  module: src/grimoire/checks/router.py
+  severity: medium
+  status: fixed
+  description: 'The checks router background task has no try/except, unlike the actions
+    router which catches ActionConflictError. Unhandled exceptions in background tasks
+    are silently swallowed by FastAPI.
+
+    '
+  reproduction_steps:
+  - Trigger a check that raises an exception in the background task.
+  - Observe no error is logged or surfaced.
+  root_cause_hypothesis: 'Missing try/except in _run_in_background closure.
+
+    '
+- slug: datetime-now-naive-in-actions-router
+  title: datetime.now() without timezone in actions router response
+  module: src/grimoire/actions/router.py
+  severity: low
+  status: fixed
+  description: 'The run_action_endpoint returns started_at=datetime.now() (naive,
+    no timezone). The engine uses datetime.now(timezone.utc). Comparing these causes
+    TypeError.
+
+    '
+  reproduction_steps:
+  - Trigger an action and inspect the response started_at field.
+  - Compare with the DB stored finished_at (timezone-aware).
+  root_cause_hypothesis: 'datetime.now() used instead of datetime.now(timezone.utc).
+
+    '
+- slug: 429-not-retried
+  title: GitHub 429 secondary rate limit responses not retried
+  module: src/grimoire/github/client.py
+  severity: medium
+  status: fixed
+  description: 'GitHub returns 429 for secondary rate limits. The client''s status
+    handling falls through to raise_for_status(), which raises httpx.HTTPStatusError
+    not caught by the retry handler.
+
+    '
+  reproduction_steps:
+  - Trigger a secondary rate limit (too many concurrent requests).
+  - Observe the entire refresh aborts instead of retrying.
+  root_cause_hypothesis: '429 not handled explicitly; falls through to raise_for_status().
+
+    '
+- slug: stale-repo-304-defaults
+  title: Archived repos bypass detection on 304 cache hit
+  module: src/grimoire/github/service.py
+  severity: low
+  status: fixed
+  description: 'When get_repo returns None (304 cache hit), archived defaults to False
+    and default_branch to "main". Archived repos continue consuming API quota.
+
+    '
+  reproduction_steps:
+  - Archive a repo on GitHub.
+  - Trigger refresh — the repo is still tracked.
+  root_cause_hypothesis: '304 fallback doesn''t use cached repository metadata.
+
+    '
+- slug: backlog-export-ignores-filter-state
+  title: Backlog export ignores current filter state
+  module: src/grimoire/web/router.py
+  severity: low
+  status: fixed
+  description: 'The export endpoint is called without passing the user''s current
+    filter parameters. Exported content includes all items regardless of active filters.
+
+    '
+  reproduction_steps:
+  - Open backlog, set category filters.
+  - Click "Copy as Markdown".
+  - Observe exported content includes all items.
+  root_cause_hypothesis: 'Export button doesn''t propagate current filter state to
+    the API endpoint.
+
+    '
+- slug: time-ago-future-dates
+  title: _time_ago returns negative strings for future dates
+  module: src/grimoire/web/router.py
+  severity: low
+  status: fixed
+  description: 'If dt is in the future (clock skew), _time_ago returns strings like
+    "-3s ago".
+
+    '
+  reproduction_steps:
+  - Pass a future datetime to _time_ago().
+  - Returns "-3s ago" instead of "just now".
+  root_cause_hypothesis: 'No guard against negative seconds in the time delta.
+
+    '
+- slug: path-traversal-branch-names
+  title: No path traversal protection on branch names in workspace manager
+  module: src/grimoire/workspace/manager.py
+  severity: medium
+  status: fixed
+  description: 'Branch names from config are used unsanitized in filesystem paths.
+    A branch like "../../etc" resolves outside the workspace directory.
+
+    '
+  reproduction_steps:
+  - Configure a branch name with "../" sequences.
+  - Observe git operations on paths outside workspace.
+  root_cause_hypothesis: 'get_workdir doesn''t validate that the resolved path is
+    within workspace_dir.
+
+    '
+- slug: config-cron-not-validated
+  title: refresh_schedule cron expression not validated at config load time
+  module: src/grimoire/config.py
+  severity: low
+  status: fixed
+  description: 'Invalid cron expressions pass config loading and fail at runtime with
+    unhelpful errors.
+
+    '
+  reproduction_steps:
+  - Set refresh_schedule to "not-a-cron" in config.yaml.
+  - Start Grimoire — unclear error at scheduler startup.
+  root_cause_hypothesis: 'No @model_validator for cron expression format.
+
+    '
+- slug: non-atomic-config-write
+  title: backlog_save_weights writes config file non-atomically
+  module: src/grimoire/web/router.py
+  severity: low
+  status: fixed
+  description: 'Config file is opened with "w" mode and written directly. Process
+    kill mid-write corrupts config.
+
+    '
+  reproduction_steps:
+  - Click "Save to config" on backlog page.
+  - Kill server during yaml.dump write.
+  - Config file is empty or corrupted.
+  root_cause_hypothesis: 'Direct file write instead of write-to-temp-then-rename pattern.
+
+    '
