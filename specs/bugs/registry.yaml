@@ -537,7 +537,7 @@ bugs:
     title: refresh_schedule cron expression not validated at config load time
     module: src/grimoire/config.py
     severity: low
-    status: open
+    status: fixed
     description: >
       Invalid cron expressions pass config loading and fail at runtime with unhelpful errors.
     reproduction_steps:
@@ -545,6 +545,18 @@ bugs:
       - Start Grimoire — unclear error at scheduler startup.
     root_cause_hypothesis: >
       No @model_validator for cron expression format.
+    files_changed:
+      - src/grimoire/config.py
+      - tests/test_config.py
+      - specs/bugs/BUG-11.md
+    approach: >
+      Added @field_validator("refresh_schedule") on GrimoireConfig that runs
+      CronTrigger.from_crontab (apscheduler, already a dep) and re-raises
+      ValueError as a clear "Invalid cron expression" message, surfaced by
+      Pydantic as ValidationError at load_config time. Extracted reusable
+      _validate_cron_expression helper.
+    risk_level: low
+    commit_message: "fix(config): validate refresh_schedule cron at config load"
 
   - slug: non-atomic-config-write
     title: backlog_save_weights writes config file non-atomically

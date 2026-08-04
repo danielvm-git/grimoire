@@ -8,9 +8,24 @@ from pathlib import Path
 from typing import Annotated, Literal, Union
 
 import yaml
+from apscheduler.triggers.cron import CronTrigger
 from dataconfy import ConfigManager, DataManager
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing_extensions import Self
+
+
+def _validate_cron_expression(value: str) -> None:
+    """Raise ``ValueError`` if *value* is not a parseable 5-field cron expression.
+
+    Uses APScheduler's ``CronTrigger.from_crontab`` — the same parser the
+    schedulers in ``app.py``, ``checks/scheduler.py`` and ``actions/scheduler.py``
+    use at runtime — so config-load rejection matches scheduler-startup behavior.
+    """
+    try:
+        CronTrigger.from_crontab(value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid cron expression {value!r}: {exc}") from exc
+
 
 _ENV_VAR_PATTERN = re.compile(r"^\$\{([^}]+)\}$")
 
@@ -208,6 +223,17 @@ class GrimoireConfig(BaseModel):
         if not self.repositories:
             raise ValueError("At least one repository source must be configured")
         return self
+
+    @field_validator("refresh_schedule")
+    @classmethod
+    def _validate_refresh_schedule(cls, v: str) -> str:
+        """Validate the cron expression at config load time (bug #11).
+
+        Without this, an invalid ``refresh_schedule`` passes loading and only
+        fails later at scheduler startup with an opaque error.
+        """
+        _validate_cron_expression(v)
+        return v
 
 
 def _parse_repo_source(raw: dict) -> RepoSource:  # type: ignore[type-arg]
