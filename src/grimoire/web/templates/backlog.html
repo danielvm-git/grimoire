@@ -253,7 +253,9 @@
     let currentGroupBy = '{{ group_by }}';
 
     // --- Filtering via HTMX ---
-    function applyFilters() {
+    // Build the current filter params from the UI state. Shared by the backlog
+    // list partial and the export endpoints so export honors active filters (bug #9).
+    function currentFilterParams() {
         const checkedBoxes = Array.from(document.querySelectorAll('.category-filter:checked')).map(c => c.value);
         const cats = checkedBoxes.flatMap(v => CATEGORY_MAP[v] || [v]);
         const minScore = document.getElementById('min-score-slider').value;
@@ -267,6 +269,11 @@
         document.querySelectorAll('.weight-slider').forEach(s => {
             params.set('w_' + s.dataset.key, s.value);
         });
+        return params;
+    }
+
+    function applyFilters() {
+        const params = currentFilterParams();
         const url = '/partials/backlog-items?' + params.toString();
         htmx.ajax('GET', url, {target: '#backlog-items', swap: 'innerHTML'});
     }
@@ -324,7 +331,8 @@
     document.getElementById('export-md').addEventListener('click', async function(e) {
         e.preventDefault();
         try {
-            const resp = await fetch('/api/backlog/export');
+            const qs = currentFilterParams().toString();
+            const resp = await fetch('/api/backlog/export' + (qs ? '?' + qs : ''));
             const text = await resp.text();
             await navigator.clipboard.writeText(text);
             showToast('Backlog copied to clipboard', 'success');
@@ -332,6 +340,17 @@
             showToast('Failed to copy', 'error');
         }
     });
+
+    // Re-point the Download link at the filtered export whenever filters change (bug #9).
+    function updateExportDownloadLink() {
+        const qs = currentFilterParams().toString();
+        const link = document.getElementById('export-download');
+        link.href = '/api/backlog/export' + (qs ? '?' + qs : '');
+    }
+    updateExportDownloadLink();
+    document.querySelectorAll('.category-filter').forEach(cb => cb.addEventListener('change', updateExportDownloadLink));
+    document.getElementById('min-score-slider').addEventListener('change', updateExportDownloadLink);
+    document.getElementById('backlog-search').addEventListener('input', updateExportDownloadLink);
 
     // --- Copy single item ---
     document.addEventListener('click', function(e) {

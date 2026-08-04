@@ -843,7 +843,7 @@ class TestBacklogSaveWeightsValidation:
 
         resp = await web_client.post(
             "/api/backlog/save-weights",
-            json={"category_weights": {"bug": 5}, "workflow_weights": {"CI": 3}},
+            json={"category_weights": {"failing_workflow": 5}},
         )
         assert resp.status_code == 200
         import yaml
@@ -851,4 +851,63 @@ class TestBacklogSaveWeightsValidation:
         written = yaml.safe_load(config_file.read_text())
         # The backlog section is well-formed (validated shape), not arbitrary JSON
         assert isinstance(written["backlog"], dict)
-        assert written["backlog"]["category_weights"] == {"bug": 5}
+        # The user's weight overrides the default; the model fills the rest
+        cw = written["backlog"]["category_weights"]
+        assert isinstance(cw, dict)
+        assert cw["failing_workflow"] == 5
+        # Non-user-supplied categories retain their defaults
+        assert cw["failing_check_error"] == 80.0
+
+
+class TestSessionExecuteDeprecationSuppressed:
+    """Bug #8 — the SQLModel session.execute() deprecation nag is silenced.
+
+    All 11 ``session.execute()`` call sites in router.py run raw ``text()`` SQL,
+    for which ``session.execute()`` is the *correct* API (``session.exec()`` is for
+    ORM ``select()`` — see the already-fixed bugs ``checks-router-improper-session-exec``
+    and ``github-service-improper-delete-exec``). SQLModel nevertheless emits an
+    indiscriminate ``DeprecationWarning`` on every ``execute()`` call. The fix
+    registers a module-level filter that ignores that specific misleading warning.
+
+    Route-level warning assertions are brittle (warning-filter state is process-
+    global and order-dependent), so this test verifies the filter is registered and
+    that it actually suppresses the SQLModel message.
+    """
+
+    def test_session_execute_deprecation_filter_is_registered(self) -> None:
+        import re as _re
+        import warnings
+
+        # Importing the router module registers the filter (module top-level).
+        from grimoire.web import router  # noqa: F401
+
+        # Filter tuple: (action, message_pattern, category, module, lineno)
+        session_exec_filters = [
+            f for f in warnings.filters
+            if len(f) >= 3
+            and f[0] == "ignore"
+            and isinstance(f[1], (_re.Pattern, str))
+            and "session.exec" in (f[1].pattern if isinstance(f[1], _re.Pattern) else f[1])
+        ]
+        assert session_exec_filters, (
+            "expected an ignore-filter for the SQLModel session.execute() nag"
+        )
+
+    def test_sqlmodel_nag_is_suppressed(self) -> None:
+        """The exact SQLModel message is suppressed by the module filter."""
+        import warnings
+
+        from grimoire.web import router  # noqa: F401
+
+        with warnings.catch_warnings(record=True) as caught:
+            # Don't override with simplefilter("always") — let module filters apply.
+            warnings.warn_explicit(
+                "You probably want to use `session.exec()` instead of `session.execute()`.",
+                DeprecationWarning,
+                filename="grimoire/web/router.py",
+                lineno=1,
+            )
+        nags = [w for w in caught if "session.exec" in str(w.message)]
+        assert nags == [], (
+            f"SQLModel session.execute() nag was not suppressed: {len(nags)}"
+        )
