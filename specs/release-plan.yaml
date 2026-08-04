@@ -90,5 +90,5 @@ epics:
     file: specs/epics/e12-mcp-server/epic.yaml
     wsjf: 95
     bcps: 20
-    status: in_progress
+    status: done
 
