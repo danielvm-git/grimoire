@@ -114,9 +114,16 @@ async def resolve_repositories(
     """Build the list of tracked repos from config, validating via the API."""
     seen: dict[str, TrackedRepository] = {}
 
+    # Load cached repository metadata once so that 304 cache hits can recover
+    # archived/default_branch from the DB instead of using blind defaults (bug #7).
+    cached_repo_meta: dict[str, CachedRepository] = {}
+    async with AsyncSession(client._engine) as session:
+        for cr in (await session.exec(select(CachedRepository))).all():
+            cached_repo_meta[cr.full_name] = cr
+
     for source in config.repositories:
         if isinstance(source, StaticRepoSource):
-            await _resolve_static(source, client, seen)
+            await _resolve_static(source, client, seen, cached_repo_meta)
         elif isinstance(source, TeamRepoSource):
             await _resolve_team(source, client, seen)
 
@@ -127,13 +134,21 @@ async def _resolve_static(
     source: StaticRepoSource,
     client: GitHubClient,
     seen: dict[str, TrackedRepository],
+    cached_repo_meta: dict[str, CachedRepository] | None = None,
 ) -> None:
     try:
         data = await client.get_repo(source.repo)
         if data is None:
-            # 304 cache hit — use the repo name as-is
-            default_branch = "main"
-            archived = False
+            # 304 cache hit — recover archived/default_branch from the DB cache
+            # rather than blindly defaulting (bug #7). Fall back to conservative
+            # defaults only when no cached row exists.
+            cached = (cached_repo_meta or {}).get(source.repo)
+            if cached is not None:
+                default_branch = cached.default_branch or "main"
+                archived = cached.archived
+            else:
+                default_branch = "main"
+                archived = False
         else:
             default_branch = data.get("default_branch", "main")
             archived = data.get("archived", False)
