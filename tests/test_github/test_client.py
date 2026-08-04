@@ -8,7 +8,12 @@ import respx
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from grimoire.database import create_tables, get_engine
-from grimoire.github.client import GitHubAPIError, GitHubClient, NotFoundError
+from grimoire.github.client import (
+    GitHubAPIError,
+    GitHubClient,
+    NotFoundError,
+    RateLimitError,
+)
 
 
 @pytest.fixture
@@ -496,3 +501,108 @@ async def test_api_requests_metric_incremented(client: GitHubClient) -> None:
     )._value.get()
 
     assert after == before + 1
+
+
+# ---------------------------------------------------------------------------
+# 429 secondary rate-limit retry (bug #5)
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_429_retries_then_succeeds(client: GitHubClient) -> None:
+    """A 429 secondary rate-limit response should be retried, not abort (bug #5)."""
+    route = respx.get("https://api.github.com/repos/owner/repo")
+    route.side_effect = [
+        httpx.Response(
+            429,
+            text="secondary rate limit",
+            headers={
+                "X-RateLimit-Remaining": "4999",
+                "X-RateLimit-Limit": "5000",
+                "Retry-After": "0",
+            },
+        ),
+        httpx.Response(
+            200,
+            json={"full_name": "owner/repo"},
+            headers={"X-RateLimit-Remaining": "4998", "X-RateLimit-Limit": "5000"},
+        ),
+    ]
+    data = await client.get_repo("owner/repo")
+    assert data is not None
+    assert data["full_name"] == "owner/repo"
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_429_exhausts_retries_raises_rate_limit_error(
+    client: GitHubClient,
+) -> None:
+    """Persistent 429s should exhaust retries and raise RateLimitError (bug #5)."""
+    respx.get("https://api.github.com/repos/owner/repo").mock(
+        return_value=httpx.Response(
+            429,
+            text="secondary rate limit",
+            headers={
+                "X-RateLimit-Remaining": "4999",
+                "X-RateLimit-Limit": "5000",
+                "Retry-After": "0",
+            },
+        )
+    )
+    with pytest.raises(RateLimitError):
+        await client.get_repo("owner/repo")
+
+
+# ---------------------------------------------------------------------------
+# Paginated 304 mid-stream (bug #4)
+# ---------------------------------------------------------------------------
+
+
+@respx.mock
+async def test_paginated_304_on_page2_does_not_truncate(
+    client: GitHubClient,
+) -> None:
+    """A 304 on page > 1 must not silently drop accumulated data (bug #4).
+
+    Page 1 returns 200 with one item + a next link. Page 2 returns 304.
+    The client must not return only the page-1 items; a mid-pagination 304
+    means the per-page cache says 'unchanged' — the client should re-request
+    page 2 unconditionally (no ETag) to get the actual data.
+    """
+    page2_url = (
+        "https://api.github.com/repos/owner/repo/issues?state=open&per_page=100&page=2"
+    )
+    route = respx.get("https://api.github.com/repos/owner/repo/issues")
+    # page1 200 (with next link) -> page2 304 -> page2-retry 200
+    route.side_effect = [
+        httpx.Response(
+            200,
+            json=[{"number": 1, "title": "Issue 1"}],
+            headers={
+                "Link": f'<{page2_url}>; rel="next"',
+                "X-RateLimit-Remaining": "4999",
+                "X-RateLimit-Limit": "5000",
+            },
+        ),
+        httpx.Response(
+            304,
+            headers={
+                "X-RateLimit-Remaining": "4998",
+                "X-RateLimit-Limit": "5000",
+            },
+        ),
+        httpx.Response(
+            200,
+            json=[{"number": 2, "title": "Issue 2"}],
+            headers={
+                "X-RateLimit-Remaining": "4997",
+                "X-RateLimit-Limit": "5000",
+            },
+        ),
+    ]
+    issues = await client.get_open_issues("owner/repo")
+    assert issues is not None
+    # Both pages' items present — no silent truncation
+    assert len(issues) == 2
+    assert {i["number"] for i in issues} == {1, 2}
