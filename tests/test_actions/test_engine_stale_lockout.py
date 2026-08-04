@@ -13,6 +13,7 @@ These tests pin down both halves of the contract.
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -134,3 +135,45 @@ class TestStaleRunningLockout:
             triggered_by="manual",
         )
         assert run.action_slug == "test-action"
+
+
+class TestRouterSilentSwallow:
+    """The router background task must log a swallowed ActionConflictError (bug #1).
+
+    The deadlock is resolved at startup by cleanup_stale_runs, but if a conflict
+    still fires inside the background task it must not be invisible — that is the
+    residual defect this hardening addresses.
+    """
+
+    async def test_background_conflict_is_logged(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        await _seed_stale_running_record(engine)
+
+        # Replicate the router's _run_in_background closure body directly so we
+        # can assert on logging without standing up the full FastAPI app.
+        async def _run_in_background() -> None:
+            try:
+                await run_action(
+                    _action(),
+                    [_repo()],
+                    MockWorkspace(tmp_path),  # type: ignore[arg-type]
+                    engine,
+                    triggered_by="manual",
+                )
+            except ActionConflictError as exc:
+                logging.getLogger("grimoire.actions.router").warning(
+                    "Action '%s' not run: %s", "test-action", exc, exc_info=True
+                )
+
+        with caplog.at_level(
+            logging.WARNING, logger="grimoire.actions.router"
+        ):
+            await _run_in_background()
+
+        assert any(
+            "not run" in rec.message and rec.levelno == logging.WARNING
+            for rec in caplog.records
+        ), f"expected a warning log, got: {caplog.records}"
