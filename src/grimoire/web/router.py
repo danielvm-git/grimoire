@@ -402,7 +402,7 @@ async def _load_check_context(
     results_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
     if _checks_engine is not None and _checks:
         async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(_LATEST_RESULTS_SQL)
+            result = await _exec_text(session, _LATEST_RESULTS_SQL)
             rows = result.all()
         for row in rows:
             key = (row[2], row[3], row[4])  # check_slug, repo_full_name, branch
@@ -655,7 +655,8 @@ async def actions_page(request: Request) -> HTMLResponse:
         async with AsyncSession(_actions_engine) as session:
             # For each action, find the latest completed run and aggregate its repo results
             run_rows = (
-                await session.execute(
+                await _exec_text(
+                    session,
                     text(
                         "SELECT ar.id, ar.action_slug, ar.started_at, arrr.passed "
                         "FROM action_run ar "
@@ -665,7 +666,7 @@ async def actions_page(request: Request) -> HTMLResponse:
                         "  WHERE sub.action_slug = ar.action_slug "
                         "  ORDER BY sub.started_at DESC LIMIT 1"
                         ")"
-                    )
+                    ),
                 )
             ).all()
 
@@ -732,7 +733,7 @@ async def checks_page(request: Request) -> HTMLResponse:
     check_stats: dict[str, dict[str, Any]] = {}
     if _checks_engine is not None and _checks:
         async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(_LATEST_RESULTS_SQL)
+            result = await _exec_text(session, _LATEST_RESULTS_SQL)
             rows = result.all()
         for row in rows:
             slug = row[2]
@@ -846,7 +847,8 @@ async def action_run_partial(request: Request, run_id: int) -> HTMLResponse:
     if _actions_engine is not None:
         async with AsyncSession(_actions_engine) as session:
             rows = (
-                await session.execute(
+                await _exec_text(
+                    session,
                     text(
                         "SELECT id, repo_full_name, branch, passed, output "
                         "FROM action_run_repo WHERE run_id = :run_id"
@@ -961,7 +963,8 @@ async def action_output_partial(request: Request, result_id: int) -> HTMLRespons
     output = ""
     if _actions_engine is not None:
         async with AsyncSession(_actions_engine) as session:
-            result = await session.execute(
+            result = await _exec_text(
+                session,
                 text("SELECT output FROM action_run_repo WHERE id = :id"),
                 params={"id": result_id},
             )
@@ -987,7 +990,8 @@ async def check_output_partial(request: Request, result_id: int) -> HTMLResponse
     output = ""
     if _checks_engine is not None:
         async with AsyncSession(_checks_engine) as session:
-            result = await session.execute(
+            result = await _exec_text(
+                session,
                 text("SELECT output FROM check_result WHERE id = :id"),
                 params={"id": result_id},
             )
