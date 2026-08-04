@@ -314,6 +314,46 @@ class TestLoadConfig:
         assert repo.workflows.exclude == []
 
 
+class TestRefreshScheduleValidation:
+    """refresh_schedule cron expression must be validated at config load."""
+
+    def _write_config(self, tmp_path: Path, schedule: str) -> Path:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent(f"""\
+            github:
+              token: "test"
+            repositories:
+              - repo: "owner/repo"
+            refresh_schedule: "{schedule}"
+            """)
+        )
+        return config_file
+
+    def test_invalid_cron_raises_at_load(self, tmp_path: Path) -> None:
+        """An invalid cron expression must fail fast at config load time."""
+        config_file = self._write_config(tmp_path, "not-a-cron")
+        with pytest.raises(Exception, match="[Ii]nvalid cron"):
+            load_config(config_file)
+
+    def test_cron_with_too_few_fields_raises(self, tmp_path: Path) -> None:
+        """A cron string with the wrong number of fields is rejected."""
+        config_file = self._write_config(tmp_path, "*/5 * *")
+        with pytest.raises(Exception, match="[Ii]nvalid cron"):
+            load_config(config_file)
+
+    def test_valid_default_schedule_accepted(self, tmp_config: Path) -> None:
+        """The default '*/5 * * * *' schedule loads without error."""
+        config = load_config(tmp_config)
+        assert config.refresh_schedule == "*/10 * * * *"
+
+    def test_valid_five_field_cron_accepted(self, tmp_path: Path) -> None:
+        """A well-formed five-field cron expression loads successfully."""
+        config_file = self._write_config(tmp_path, "0 9 * * 1-5")
+        config = load_config(config_file)
+        assert config.refresh_schedule == "0 9 * * 1-5"
+
+
 class TestWorkflowMatchesFilter:
     """Tests for the workflow include/exclude filter logic."""
 
