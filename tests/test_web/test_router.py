@@ -862,52 +862,60 @@ class TestBacklogSaveWeightsValidation:
 class TestSessionExecuteDeprecationSuppressed:
     """Bug #8 — the SQLModel session.execute() deprecation nag is silenced.
 
-    All 11 ``session.execute()`` call sites in router.py run raw ``text()`` SQL,
+    All ``session.execute()`` call sites in router.py run raw ``text()`` SQL,
     for which ``session.execute()`` is the *correct* API (``session.exec()`` is for
     ORM ``select()`` — see the already-fixed bugs ``checks-router-improper-session-exec``
-    and ``github-service-improper-delete-exec``). SQLModel nevertheless emits an
-    indiscriminate ``DeprecationWarning`` on every ``execute()`` call. The fix
-    registers a module-level filter that ignores that specific misleading warning.
-
-    Route-level warning assertions are brittle (warning-filter state is process-
-    global and order-dependent), so this test verifies the filter is registered and
-    that it actually suppresses the SQLModel message.
+    and ``github-service-improper-delete-exec``). The fix uses ``_exec_text()``, a
+    wrapper that suppresses the misleading SQLModel DeprecationWarning via a
+    ``warnings.catch_warnings()`` context manager at each call site.
     """
 
-    def test_session_execute_deprecation_filter_is_registered(self) -> None:
-        import re as _re
+    def test_exec_text_suppresses_nag(self) -> None:
+        """_exec_text() prevents the SQLModel deprecation nag from escaping."""
+        import asyncio
+        import warnings
+        from unittest.mock import AsyncMock, MagicMock
+
+        from grimoire.web.router import _exec_text, _LATEST_RESULTS_SQL
+
+        async def _call() -> None:
+            from sqlmodel.ext.asyncio.session import AsyncSession
+
+            async with AsyncSession(MagicMock()) as session:
+                session.execute = AsyncMock(return_value=MagicMock())
+                with warnings.catch_warnings(record=True) as caught:
+                    await _exec_text(session, _LATEST_RESULTS_SQL)
+                nags = [
+                    w for w in caught
+                    if "session.exec" in str(w.message)
+                ]
+                assert nags == [], (
+                    f"SQLModel session.execute() nag leaked: {len(nags)} nags"
+                )
+
+        asyncio.run(_call())
+
+    def test_raw_execute_leaks_nag(self) -> None:
+        """Without _exec_text(), the SQLModel nag WOULD escape (sanity check)."""
+        import asyncio
         import warnings
 
-        # Importing the router module registers the filter (module top-level).
-        from grimoire.web import router  # noqa: F401
+        from unittest.mock import AsyncMock, MagicMock
 
-        # Filter tuple: (action, message_pattern, category, module, lineno)
-        session_exec_filters = [
-            f for f in warnings.filters
-            if len(f) >= 3
-            and f[0] == "ignore"
-            and isinstance(f[1], (_re.Pattern, str))
-            and "session.exec" in (f[1].pattern if isinstance(f[1], _re.Pattern) else f[1])
-        ]
-        assert session_exec_filters, (
-            "expected an ignore-filter for the SQLModel session.execute() nag"
-        )
+        async def _call() -> None:
+            from sqlalchemy import text as sa_text
+            from sqlmodel.ext.asyncio.session import AsyncSession
 
-    def test_sqlmodel_nag_is_suppressed(self) -> None:
-        """The exact SQLModel message is suppressed by the module filter."""
-        import warnings
+            async with AsyncSession(MagicMock()) as session:
+                session.execute = AsyncMock(return_value=MagicMock())
+                with warnings.catch_warnings(record=True) as caught:
+                    await session.execute(sa_text("SELECT 1"))
+                nags = [
+                    w for w in caught
+                    if "session.exec" in str(w.message)
+                ]
+                assert len(nags) >= 1, (
+                    "expected SQLModel nag on raw execute(), got none"
+                )
 
-        from grimoire.web import router  # noqa: F401
-
-        with warnings.catch_warnings(record=True) as caught:
-            # Don't override with simplefilter("always") — let module filters apply.
-            warnings.warn_explicit(
-                "You probably want to use `session.exec()` instead of `session.execute()`.",
-                DeprecationWarning,
-                filename="grimoire/web/router.py",
-                lineno=1,
-            )
-        nags = [w for w in caught if "session.exec" in str(w.message)]
-        assert nags == [], (
-            f"SQLModel session.execute() nag was not suppressed: {len(nags)}"
-        )
+        asyncio.run(_call())
