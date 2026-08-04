@@ -104,7 +104,7 @@ bugs:
       However, DOMContentLoaded unconditionally executes document.getElementById('repo-grid').classList.remove('hidden'),
       throwing TypeError: Cannot read properties of null.
     reproduction_steps:
-      - Start Grimoire with an empty repository configuration (repos: []).
+      - Start Grimoire with an empty repository configuration.
       - Navigate to / in browser.
       - Inspect browser console for TypeError.
     root_cause_hypothesis: >
@@ -165,7 +165,7 @@ bugs:
       list_actions() in router.py compiles action target regexes via re.compile(a.targets.regex)
       without exception handling. An action with an invalid regex string causes GET /actions/ to crash with HTTP 500.
     reproduction_steps:
-      - Create an action YAML file with targets: { regex: "[invalid" }.
+      - Create an action YAML file with invalid regex targets.
       - Send GET /actions/ request.
       - Observe 500 Internal Server Error.
     root_cause_hypothesis: >
@@ -294,7 +294,7 @@ bugs:
       Misuse of session.exec() for delete() DML operations instead of session.execute().
 
   - slug: github-client-secondary-rate-limit-misclassification
-    title: HTTP 403 rate limit responses without X-RateLimit-Remaining: 0 header bypass RateLimitError
+    title: "HTTP 403 rate limit responses without X-RateLimit-Remaining: 0 header bypass RateLimitError"
     module: src/grimoire/github/client.py
     severity: low
     status: fixed
@@ -413,7 +413,7 @@ bugs:
       _resolve_targets_sync calls re.compile(targets.regex) without exception handling. An invalid
       regex in check YAML crashes all pages that build repo viewmodels.
     reproduction_steps:
-      - Create a check YAML with targets: { regex: "[unclosed" }.
+      - Create a check YAML with invalid regex targets.
       - Load the dashboard.
       - 500 Internal Server Error.
     root_cause_hypothesis: >
