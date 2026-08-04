@@ -12,6 +12,16 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.9.0] - 2026-08-04
+
+### Added
+
+- **mcp:** add MCP server and check backlog queries ([f5587fa](https://github.com/danielvm-git/grimoire/commit/f5587faa1dfe222701c9fec776ad4617547891f9))
+
+### Fixed
+
+- **specs:** quote scalars and fix formatting in bug registry ([c559c1a](https://github.com/danielvm-git/grimoire/commit/c559c1a779242e30b8629a0fcd5f3a78756ae21f))
+
 ## [0.7.1](https://github.com/danielvm-git/grimoire/compare/v0.7.0...v0.7.1) (2026-07-31)
 
 
