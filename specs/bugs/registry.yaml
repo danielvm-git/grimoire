@@ -571,3 +571,59 @@ bugs:
       - Config file is empty or corrupted.
     root_cause_hypothesis: >
       Direct file write instead of write-to-temp-then-rename pattern.
+
+  - slug: env-var-config-crash
+    title: Unset optional env placeholder in config.yaml crashes app boot
+    module: src/grimoire/config.py
+    severity: high
+    status: fixed
+    description: >
+      b4b3568 added mcp.token: "${GRIMOIRE_MCP_TOKEN}" to config.yaml. resolve_env_vars
+      raises ValueError for any unset ${VAR} reference; GRIMOIRE_MCP_TOKEN is not set in the
+      deployed environment, so config load crashes and the app never boots (production outage
+      since 2026-08-04 16:07 UTC). mcp.token is optional (MCPConfig.token defaults to None and
+      the app handles token=None), so an unset optional placeholder must not abort startup.
+    reproduction_steps:
+      - "unset GRIMOIRE_MCP_TOKEN"
+      - "Run load_config() with mcp.token: \"${GRIMOIRE_MCP_TOKEN}\" in config.yaml."
+      - "Observe ValueError: Environment variable 'GRIMOIRE_MCP_TOKEN' is referenced in config but not set."
+    root_cause_hypothesis: >
+      resolve_env_vars is strict by design (fail-fast for required vars like github.token),
+      but config.yaml referenced an OPTIONAL token with the strict form. No optional-reference
+      syntax exists.
+    files_changed:
+      - src/grimoire/config.py
+      - tests/test_config.py
+      - config.yaml
+      - specs/bugs/BUG-2026-08-10T161500-env-var-config-crash.md
+    approach: >
+      Add optional env-var reference syntax "${VAR:-default}" to resolve_env_vars (default may be
+      empty). Plain "${VAR}" stays strict. config.yaml mcp.token uses "${GRIMOIRE_MCP_TOKEN:-}".
+    risk_level: low
+    commit_message: "fix(config): support optional env placeholder default for mcp token"
+
+  - slug: deploy-health-check-window-race
+    title: Platform health check window races slow python cold start, marking deploys failed
+    module: bigbase.yaml
+    severity: high
+    status: fixed
+    description: >
+      The committed bigbase.yaml health_check uses defaults (path /health, interval 2s,
+      max_retries 5, ~8s window) probed immediately while the app starts. Grimoire's cold
+      start binds port 10002 in ~40s, so deployments are marked failed with connection
+      refused even though the app runs and fetches data. The proxy never registers the
+      host, so the site serves the BigBase placeholder.
+    reproduction_steps:
+      - "Trigger any deploy via the pipeline."
+      - "Observe deployment status=failed, error=Health check failed: dial tcp [::1]:10002: connect: connection refused."
+      - "Runtime logs show the app starting and fetching GitHub data seconds later."
+    root_cause_hypothesis: >
+      Health probe window (5 x 2s) is shorter than python cold start (~40s) on the fleet host.
+    files_changed:
+      - bigbase.yaml
+      - specs/bugs/BUG-2026-08-10T161500-env-var-config-crash.md
+    approach: >
+      Tune health_check in bigbase.yaml: interval_seconds 5, max_retries 36 (~3min window),
+      expected_status 200, path /health. Ships via the deploy pipeline.
+    risk_level: low
+    commit_message: "fix(deploy): widen health check window for slow python cold start"

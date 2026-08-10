@@ -3,7 +3,7 @@
 
 workflow_mode: solo-git
 
-active_flow: build_epic
+active_flow: idle
 active_epic_id: e11
 active_story_id: null
 completed_epic: true
@@ -26,8 +26,13 @@ epic_cycle:
   fast_mode: false
 
 bug_cycle:
-  current_step: 8
+  current_step: 6
   completed_steps:
+    - investigate-bug
+    - diagnose-root
+    - develop-tdd
+    - validate-fix
+    - release-branch
     - survey-context
     - map-codebase
     - tracker-recon
