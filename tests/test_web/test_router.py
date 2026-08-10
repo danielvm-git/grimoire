@@ -813,9 +813,7 @@ class TestBacklogSaveWeightsValidation:
         from grimoire.web import router
 
         config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            "github:\n  token: test\nrepositories:\n  - repo: o/r\n"
-        )
+        config_file.write_text("github:\n  token: test\nrepositories:\n  - repo: o/r\n")
         router.set_backlog_config(None, config_file)
 
         resp = await web_client.post(
@@ -836,9 +834,7 @@ class TestBacklogSaveWeightsValidation:
         from grimoire.web import router
 
         config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            "github:\n  token: test\nrepositories:\n  - repo: o/r\n"
-        )
+        config_file.write_text("github:\n  token: test\nrepositories:\n  - repo: o/r\n")
         router.set_backlog_config(None, config_file)
 
         resp = await web_client.post(
@@ -876,7 +872,7 @@ class TestSessionExecuteDeprecationSuppressed:
         import warnings
         from unittest.mock import AsyncMock, MagicMock
 
-        from grimoire.web.router import _exec_text, _LATEST_RESULTS_SQL
+        from grimoire.web.router import _LATEST_RESULTS_SQL, _exec_text
 
         async def _call() -> None:
             from sqlmodel.ext.asyncio.session import AsyncSession
@@ -885,10 +881,7 @@ class TestSessionExecuteDeprecationSuppressed:
                 session.execute = AsyncMock(return_value=MagicMock())
                 with warnings.catch_warnings(record=True) as caught:
                     await _exec_text(session, _LATEST_RESULTS_SQL)
-                nags = [
-                    w for w in caught
-                    if "session.exec" in str(w.message)
-                ]
+                nags = [w for w in caught if "session.exec" in str(w.message)]
                 assert nags == [], (
                     f"SQLModel session.execute() nag leaked: {len(nags)} nags"
                 )

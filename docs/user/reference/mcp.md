@@ -11,7 +11,7 @@ The MCP server is configured in `config.yaml`:
 ```yaml
 mcp:
   enabled: true                    # Enable the /mcp SSE endpoint (default: true)
-  token: "${GRIMOIRE_MCP_TOKEN}"   # Optional API authentication token (default: null)
+  token: "${GRIMOIRE_MCP_TOKEN:-}"   # Optional API authentication token (default: null); "${VAR:-}" leaves it unset when the env var is absent
   endpoint_path: "/mcp"            # FastMCP endpoint path on FastAPI (default: "/mcp")
 ```
 

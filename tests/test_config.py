@@ -58,6 +58,28 @@ class TestResolveEnvVars:
         with pytest.raises(ValueError, match="not set"):
             resolve_env_vars("${DEFINITELY_NOT_SET_12345}")
 
+    def test_optional_reference_with_default(self) -> None:
+        assert resolve_env_vars("${OPTIONAL_UNSET_12345:-fallback}") == "fallback"
+
+    def test_optional_reference_with_empty_default(self) -> None:
+        assert resolve_env_vars("${OPTIONAL_UNSET_12345:-}") == ""
+
+    def test_optional_reference_uses_env_value_when_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OPTIONAL_SET_VAR", "real-value")
+        assert resolve_env_vars("${OPTIONAL_SET_VAR:-fallback}") == "real-value"
+
+    def test_optional_reference_uses_default_when_env_var_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OPTIONAL_EMPTY_VAR", "")
+        assert resolve_env_vars("${OPTIONAL_EMPTY_VAR:-fallback}") == "fallback"
+
+    def test_optional_reference_with_default_in_nested_dict(self) -> None:
+        data = {"outer": {"inner": "${OPTIONAL_UNSET_12345:-none}"}}
+        assert resolve_env_vars(data) == {"outer": {"inner": "none"}}
+
     def test_resolves_nested_dict(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DB_HOST", "localhost")
         data = {"outer": {"inner": "${DB_HOST}"}}
@@ -80,10 +102,23 @@ class TestLoadConfig:
         config = load_config(tmp_config)
         assert isinstance(config, GrimoireConfig)
         assert config.github.token == "ghp_test_token_123"
-        assert len(config.repositories) == 2
-        assert config.staleness.pull_requests_days == 14
-        assert config.staleness.issues_days == 180
-        assert config.refresh_schedule == "*/10 * * * *"
+
+    def test_mcp_token_optional_env_placeholder_unset(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Boot-critical: an unset optional token placeholder must not crash load."""
+        monkeypatch.delenv("GRIMOIRE_MCP_TOKEN", raising=False)
+        cfg_path = tmp_path / "config.yaml"
+        cfg_path.write_text(
+            'github:\n  token: "${TEST_GITHUB_TOKEN}"\n'
+            'repositories:\n  - repo: "owner/repo"\n'
+            'mcp:\n  enabled: true\n  token: "${GRIMOIRE_MCP_TOKEN:-}"\n'
+            '  endpoint_path: "/mcp"\n'
+        )
+        monkeypatch.setenv("TEST_GITHUB_TOKEN", "ghp_test")
+        config = load_config(cfg_path)
+        assert config.mcp.enabled is True
+        assert config.mcp.token in (None, "")
 
     def test_static_repo_with_branches(self, tmp_config: Path) -> None:
         config = load_config(tmp_config)

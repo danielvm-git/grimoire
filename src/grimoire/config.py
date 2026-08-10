@@ -27,7 +27,7 @@ def _validate_cron_expression(value: str) -> None:
         raise ValueError(f"Invalid cron expression {value!r}: {exc}") from exc
 
 
-_ENV_VAR_PATTERN = re.compile(r"^\$\{([^}]+)\}$")
+_ENV_VAR_PATTERN = re.compile(r"^\$\{([^}:]+)(?::-([^}]*))?\}$")
 
 
 def _get_config_manager() -> ConfigManager:
@@ -44,17 +44,26 @@ def resolve_env_vars(raw: object) -> object:
     """Recursively walk a parsed YAML structure and resolve ``${ENV_VAR}`` references.
 
     Only exact-match string values are resolved (no partial interpolation).
-    Raises ``ValueError`` for references to unset environment variables.
+
+    ``${VAR}`` raises ``ValueError`` when the variable is unset (fail-fast for
+    required settings). ``${VAR:-default}`` resolves to ``default`` when the
+    variable is unset or empty — the opt-out for optional settings (``${VAR:-}``
+    yields an empty string).
     """
     if isinstance(raw, str):
         match = _ENV_VAR_PATTERN.match(raw)
         if match:
             var_name = match.group(1)
+            has_default = match.group(2) is not None
+            default = match.group(2) if has_default else None
             value = os.environ.get(var_name)
-            if value is None:
-                raise ValueError(
-                    f"Environment variable '{var_name}' is referenced in config but not set"
-                )
+            if value in (None, ""):
+                if has_default:
+                    return default
+                if value is None:
+                    raise ValueError(
+                        f"Environment variable '{var_name}' is referenced in config but not set"
+                    )
             return value
         return raw
     if isinstance(raw, dict):

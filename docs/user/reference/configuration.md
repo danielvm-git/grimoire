@@ -2,7 +2,7 @@
 
 Complete reference for Grimoire's `config.yaml` file.
 
-All string values support environment variable references with the syntax `"${ENV_VAR}"`. Only exact-match strings are resolved — no partial interpolation.
+All string values support environment variable references with the syntax `"${ENV_VAR}"`. Only exact-match strings are resolved — no partial interpolation. A reference to an unset variable fails configuration loading; use the optional form `"${ENV_VAR:-default}"` (or `"${ENV_VAR:-}"` for an empty default) when the value is not required.
 
 ## Config file resolution
 
