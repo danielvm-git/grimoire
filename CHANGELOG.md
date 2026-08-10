@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.10.2] - 2026-08-10
+
+### Fixed
+
+- **config:** support optional env placeholder default for mcp token ([#29](https://github.com/danielvm-git/grimoire/issues/29)) ([72d1073](https://github.com/danielvm-git/grimoire/commit/72d1073623a0360a28c245208b4f876f43f1fb00))
+
 ## [0.10.1] - 2026-08-10
 
 ### Fixed
