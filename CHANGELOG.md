@@ -12,6 +12,22 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.10.1] - 2026-08-10
+
+### Fixed
+
+- **web:** use explicit params kwarg in _exec_text to avoid nesting ([83152bf](https://github.com/danielvm-git/grimoire/commit/83152bff6898116ad8455db7fd5d21aaf6ddc23b))
+- **web:** clamp time-ago, atomic config write, suppress SQLModel nag, export filter respect ([#27](https://github.com/danielvm-git/grimoire/issues/27)) ([7a6fcc3](https://github.com/danielvm-git/grimoire/commit/7a6fcc3f5d5fbf7ab86bbc73e42b7d56b7fc9db7))
+- **config:** validate refresh_schedule cron at config load ([#26](https://github.com/danielvm-git/grimoire/issues/26)) ([3cb9f93](https://github.com/danielvm-git/grimoire/commit/3cb9f93b480c0523c7f7bf7458645043b870e3c8))
+- **github:** retry 429 and re-request on mid-pagination 304 ([#25](https://github.com/danielvm-git/grimoire/issues/25)) ([81e2568](https://github.com/danielvm-git/grimoire/commit/81e2568dbb499bf4e643fb7f4f1c9afaec8ebd68))
+- **github:** recover archived/default_branch from cache on 304 ([#24](https://github.com/danielvm-git/grimoire/issues/24)) ([21f443a](https://github.com/danielvm-git/grimoire/commit/21f443a0d3ef235fcef20e1c7b4be995335c2c41))
+- **workspace:** reject path traversal in branch/owner/repo names ([#23](https://github.com/danielvm-git/grimoire/issues/23)) ([e3770e2](https://github.com/danielvm-git/grimoire/commit/e3770e21c18ef9b7689f71f8010ba0b5fd1fb8b9))
+- **actions:** recover stale lockout on restart, cap subprocess output to 64KB ([#22](https://github.com/danielvm-git/grimoire/issues/22)) ([d9183ea](https://github.com/danielvm-git/grimoire/commit/d9183ea11b24a90f35b6eb6dcf58b8c8d03d4442))
+
+### Removed
+
+- **revert:** drop unset GRIMOIRE_MCP_TOKEN placeholder that crashed config load ([#28](https://github.com/danielvm-git/grimoire/issues/28)) ([68af287](https://github.com/danielvm-git/grimoire/commit/68af2872e9ab53c6094cb300967f4ff2d871d50e))
+
 ## [0.10.0] - 2026-08-04
 
 ### Added
