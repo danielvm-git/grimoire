@@ -7,4 +7,8 @@ start:
   port: 8000
 health_check:
   path: /health
+  expected_status: 200
+  timeout_seconds: 30
+  interval_seconds: 5
+  max_retries: 36
 
