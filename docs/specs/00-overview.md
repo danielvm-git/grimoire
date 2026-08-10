@@ -105,7 +105,7 @@ Module 1: Scaffolding & Configuration  ──(no deps)
 
 ```yaml
 # GitHub authentication
-# Supports environment variable references: "${ENV_VAR}"
+# Supports environment variable references: "${ENV_VAR}" (or "${ENV_VAR:-default}" for optional values)
 github:
   token: "${GITHUB_TOKEN}"   # or a literal: "ghp_your_token_here"
 
@@ -152,7 +152,7 @@ refresh_schedule: "*/5 * * * *"
 # MCP Server configuration
 mcp:
   enabled: true
-  token: "${GRIMOIRE_MCP_TOKEN}"
+  token: "${GRIMOIRE_MCP_TOKEN:-}"
   endpoint_path: "/mcp"
 
 # Paths
