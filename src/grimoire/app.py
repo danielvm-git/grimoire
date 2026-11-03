@@ -21,7 +21,7 @@ from grimoire.actions.router import router as actions_router
 from grimoire.actions.router import set_actions_state
 from grimoire.actions.scheduler import register_actions
 from grimoire.checks.engine import run_check_for_all_targets
-from grimoire.checks.loader import load_checks
+from grimoire.checks.loader import CheckDefinition, load_checks
 from grimoire.checks.router import router as checks_router
 from grimoire.checks.router import set_checks_state
 from grimoire.checks.scheduler import register_checks
@@ -235,10 +235,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             refreshed_repos, refreshed_stats = await refresh_all_stats(config, client)
         update_cache(refreshed_repos, refreshed_stats)
         update_repo_metrics(refreshed_stats)
-        await prune_stale_data(engine, refreshed_repos, config.workspace_dir)
-
-        # Sync local clones with their remotes so worktrees have fresh data
-        await workspace.sync_all(refreshed_repos)
+        # Pruning the DB cache and syncing local clones are independent, so run
+        # them concurrently instead of paying both latencies back-to-back.
+        await asyncio.gather(
+            prune_stale_data(engine, refreshed_repos, config.workspace_dir),
+            workspace.sync_all(refreshed_repos),
+        )
 
         # Mutate the original list in-place so scheduler closures see updated repos
         repos.clear()
@@ -246,15 +248,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         set_checks_state(checks, refreshed_repos, workspace, engine)
         set_actions_state(actions, refreshed_repos, workspace, engine)
 
-        # Run default-schedule checks (those without a cron schedule)
+        # Run default-schedule checks (those without a cron schedule) concurrently.
+        # Bounded so a large check set cannot multiply the engine's own fan-out.
         default_checks = [c for c in checks if c.enabled and not c.schedule]
-        for check in default_checks:
-            try:
-                await run_check_for_all_targets(
-                    check, refreshed_repos, workspace, engine, triggered_by="refresh"
-                )
-            except Exception:
-                logger.exception("Default-schedule check '%s' failed", check.slug)
+        checks_sem = asyncio.Semaphore(5)
+
+        async def _run_default_check(check: CheckDefinition) -> None:
+            async with checks_sem:
+                try:
+                    await run_check_for_all_targets(
+                        check,
+                        refreshed_repos,
+                        workspace,
+                        engine,
+                        triggered_by="refresh",
+                    )
+                except Exception:
+                    logger.exception("Default-schedule check '%s' failed", check.slug)
+
+        await asyncio.gather(*(_run_default_check(c) for c in default_checks))
 
         return refreshed_repos
 
