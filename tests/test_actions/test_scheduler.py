@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from grimoire.actions.loader import ActionDefinition
 from grimoire.actions.scheduler import register_actions
@@ -56,3 +59,30 @@ class TestRegisterActions:
         register_actions(scheduler, actions, repos, MagicMock(), MagicMock())
 
         assert scheduler.add_job.call_count == 0
+
+
+async def test_scheduled_action_skips_when_disabled_at_fire_time(
+    monkeypatch: Any,
+) -> None:
+    """Toggling an action off must stop cron execution without a restart."""
+    calls: list[object] = []
+
+    async def fake_run(*args: object, **kwargs: object) -> None:
+        calls.append(args)
+
+    monkeypatch.setattr("grimoire.actions.scheduler.run_action", fake_run)
+
+    action = _action("live", schedule="* * * * *")
+    scheduler = AsyncIOScheduler()
+    register_actions(scheduler, [action], [], MagicMock(), MagicMock())
+    job = scheduler.get_job("action:live")
+    assert job is not None
+    func = job.func
+
+    action.enabled = False
+    await func()
+    assert calls == []
+
+    action.enabled = True
+    await func()
+    assert len(calls) == 1

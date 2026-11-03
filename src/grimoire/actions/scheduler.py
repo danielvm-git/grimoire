@@ -43,12 +43,18 @@ def register_actions(
             """Return an async wrapper that ``AsyncIOScheduler`` can invoke."""
 
             async def _job() -> None:
+                # Re-check at fire time: toggling enabled does not re-register
+                # jobs, so this guard is what makes a disable take effect now.
+                if not a.enabled:
+                    return
                 await run_action(a, repos, workspace, engine, triggered_by="cron")
 
             if isinstance(scheduler, AsyncIOScheduler):
                 return _job  # AsyncIOScheduler
 
             def _sync_job() -> None:
+                if not a.enabled:
+                    return
                 asyncio.get_event_loop().run_until_complete(
                     run_action(a, repos, workspace, engine, triggered_by="cron")
                 )
