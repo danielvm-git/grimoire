@@ -351,12 +351,23 @@ bugs:
     root_cause_hypothesis: >
       Queries were written using standard SQLAlchemy session.execute() syntax rather than SQLModel's session.exec().
     files_changed:
+      - src/grimoire/db_exec.py
       - src/grimoire/web/router.py
+      - src/grimoire/database.py
+      - src/grimoire/checks/router.py
+      - src/grimoire/github/client.py
+      - src/grimoire/github/service.py
       - tests/test_web/test_router.py
+      - tests/test_db_exec.py
     approach: >
-      All raw text() SQL goes through _exec_text(), which suppresses SQLModel's misleading nag. The filter pattern is a plain regex string (not str(re.compile(...))) and start-agnostic; the regression test now uses a real AsyncSession instead of a mock.
+      The nag leak had two causes: the filter pattern was str(re.compile(...)) rather
+      than a regex string, and it was start-anchored while the message begins with
+      whitespace and an emoji. exec_raw() in grimoire/db_exec.py now owns the
+      suppression and is used by every raw text()/Core DML call site across web,
+      checks, github, and database modules. The regression test uses a real
+      AsyncSession instead of a mock, so it can actually observe the warning.
     risk_level: low
-    commit_message: "fix(web): suppress SQLModel session.execute nag correctly"
+    commit_message: "fix(web): suppress SQLModel session.execute nag correctly; refactor(db): route raw execute through exec_raw"
 
   - slug: dashboard-partials-missing-empty-state
     title: Matrix and list dashboard partial templates render empty table/div without user feedback
