@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import re
 import tempfile
-import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from importlib.metadata import version
@@ -21,6 +20,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import StalenessConfig
 from grimoire.database import ActionRunRecord
+from grimoire.db_exec import exec_raw
 from grimoire.models import TrackedRepository, WorkflowStatus
 from grimoire.targeting import TargetSpec
 from grimoire.web.backlog import (
@@ -353,33 +353,16 @@ _LATEST_RESULTS_SQL = text(
     "AND cr.timestamp = latest.max_ts"
 )
 
-# Regex matching SQLModel's misleading session.execute() deprecation nag (bug #8).
-# Plain regex string (not re.compile) consumed by warnings.filterwarnings().
-# The warning text starts with whitespace and an emoji, so the pattern must not
-# be anchored at the start (filterwarnings matches from position 0).
-_SESSION_EXEC_NAG = r"[\s\S]*You probably want to use `session\.exec\(\)` instead of `session\.execute\(\)`"
-
 
 async def _exec_text(
     session: AsyncSession, statement: Any, *, params: dict[str, Any] | None = None
 ) -> Any:
-    """Run a raw ``text()`` SQL statement, suppressing SQLModel's deprecation nag.
+    """Run raw ``text()`` SQL, suppressing SQLModel's misleading nag.
 
-    Bug #8 (deprecated-session-execute-usage): SQLModel emits a DeprecationWarning
-    on every ``session.execute()`` call urging ``session.exec()``. That advice only
-    applies to ORM ``select()`` queries; the call sites here run raw ``text()`` SQL,
-    for which ``session.execute()`` is the CORRECT API (see the already-fixed bugs
-    ``checks-router-improper-session-exec`` and ``github-service-improper-delete-exec``).
-    This helper suppresses the misleading nag at the call site so it is robust under
-    pytest (which resets module-level warning filters).
+    Thin alias kept for the web router's call sites; see
+    :func:`grimoire.db_exec.exec_raw` for the rationale.
     """
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", message=_SESSION_EXEC_NAG, category=DeprecationWarning
-        )
-        if params:
-            return await session.execute(statement, params=params)
-        return await session.execute(statement)
+    return await exec_raw(session, statement, params=params)
 
 
 async def _load_check_context(

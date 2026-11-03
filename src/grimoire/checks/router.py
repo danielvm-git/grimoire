@@ -18,6 +18,7 @@ from grimoire.checks.engine import (
     try_start_check,
 )
 from grimoire.database import CheckResultRecord, CheckRunRecord, CheckToggleRecord
+from grimoire.db_exec import exec_raw
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ async def get_check_results(slug: str) -> list[CheckResultResponse]:
     )
 
     async with AsyncSession(_engine) as session:
-        rows = (await session.execute(query, params={"slug": slug})).all()
+        rows = (await exec_raw(session, query, params={"slug": slug})).all()
 
     return [
         CheckResultResponse(

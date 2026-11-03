@@ -28,6 +28,7 @@ from grimoire.database import (
     CachedWorkflowStatus,
     CheckResultRecord,
 )
+from grimoire.db_exec import exec_raw
 from grimoire.github.client import GitHubClient, NotFoundError
 from grimoire.models import (
     IssueDetail,
@@ -593,23 +594,27 @@ async def save_stats_to_db(
 
             # Delete old cached data for this repo
             fn = stats.full_name
-            await session.execute(
-                delete(CachedIssue).where(CachedIssue.repo_full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CachedIssue).where(CachedIssue.repo_full_name == fn),  # type: ignore[arg-type]
             )
-            await session.execute(
+            await exec_raw(
+                session,
                 delete(CachedPullRequest).where(
                     CachedPullRequest.repo_full_name == fn  # type: ignore[arg-type]
-                )
+                ),
             )
-            await session.execute(
+            await exec_raw(
+                session,
                 delete(CachedWorkflowStatus).where(
                     CachedWorkflowStatus.repo_full_name == fn  # type: ignore[arg-type]
-                )
+                ),
             )
-            await session.execute(
+            await exec_raw(
+                session,
                 delete(CachedRepository).where(
                     CachedRepository.full_name == fn  # type: ignore[arg-type]
-                )
+                ),
             )
 
             # Write CachedRepository
@@ -858,22 +863,27 @@ async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> i
         stale_names = [name for name in cached if name not in active_names]
 
         for fn in stale_names:
-            await session.execute(
-                delete(CachedIssue).where(CachedIssue.repo_full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CachedIssue).where(CachedIssue.repo_full_name == fn),  # type: ignore[arg-type]
             )
-            await session.execute(
-                delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn),  # type: ignore[arg-type]
             )
-            await session.execute(
+            await exec_raw(
+                session,
                 delete(CachedWorkflowStatus).where(
                     CachedWorkflowStatus.repo_full_name == fn  # type: ignore[arg-type]
-                )
+                ),
             )
-            await session.execute(
-                delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn),  # type: ignore[arg-type]
             )
-            await session.execute(
-                delete(CachedRepository).where(CachedRepository.full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CachedRepository).where(CachedRepository.full_name == fn),  # type: ignore[arg-type]
             )
             pruned += 1
 

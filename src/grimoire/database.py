@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from grimoire.db_exec import exec_raw
+
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -217,14 +219,16 @@ async def cleanup_stale_runs(engine: AsyncEngine) -> None:
 
     async with AsyncSession(engine) as session:
         now = _utcnow()
-        await session.execute(
+        await exec_raw(
+            session,
             text(
                 "UPDATE check_run SET status = 'interrupted', finished_at = :now "
                 "WHERE status = 'running'"
             ),
             params={"now": now},
         )
-        await session.execute(
+        await exec_raw(
+            session,
             text(
                 "UPDATE action_run SET status = 'interrupted', finished_at = :now "
                 "WHERE status = 'running'"
