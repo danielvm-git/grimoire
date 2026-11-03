@@ -866,24 +866,29 @@ class TestSessionExecuteDeprecationSuppressed:
     ``warnings.catch_warnings()`` context manager at each call site.
     """
 
-    def test_exec_text_suppresses_nag(self) -> None:
-        """_exec_text() prevents the SQLModel deprecation nag from escaping."""
-        import asyncio
+    async def test_exec_text_suppresses_nag(self) -> None:
+        """_exec_text() prevents the real SQLModel nag from escaping.
+
+        Uses a real AsyncSession so the SQLModel ``execute()`` wrapper actually
+        emits its warning — a mocked ``session.execute`` would make this test
+        vacuous (bug #8).
+        """
         import warnings
-        from unittest.mock import AsyncMock, MagicMock
 
-        from grimoire.web.router import _LATEST_RESULTS_SQL, _exec_text
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlmodel.ext.asyncio.session import AsyncSession
 
-        async def _call() -> None:
-            from sqlmodel.ext.asyncio.session import AsyncSession
+        from grimoire.web.router import _exec_text
 
-            async with AsyncSession(MagicMock()) as session:
-                session.execute = AsyncMock(return_value=MagicMock())
+        engine = create_async_engine("sqlite+aiosqlite://")
+        try:
+            async with AsyncSession(engine) as session:
                 with warnings.catch_warnings(record=True) as caught:
-                    await _exec_text(session, _LATEST_RESULTS_SQL)
-                nags = [w for w in caught if "session.exec" in str(w.message)]
-                assert nags == [], (
-                    f"SQLModel session.execute() nag leaked: {len(nags)} nags"
-                )
+                    warnings.simplefilter("always")
+                    await _exec_text(session, text("SELECT 1"))
+        finally:
+            await engine.dispose()
 
-        asyncio.run(_call())
+        nags = [w for w in caught if "session.exec" in str(w.message)]
+        assert nags == [], f"SQLModel session.execute() nag leaked: {len(nags)} nags"

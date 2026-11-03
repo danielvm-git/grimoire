@@ -354,9 +354,10 @@ _LATEST_RESULTS_SQL = text(
 )
 
 # Regex matching SQLModel's misleading session.execute() deprecation nag (bug #8).
-_SESSION_EXEC_NAG = re.compile(
-    r"You probably want to use `session\.exec\(\)` instead of `session\.execute\(\)`"
-)
+# Plain regex string (not re.compile) consumed by warnings.filterwarnings().
+# The warning text starts with whitespace and an emoji, so the pattern must not
+# be anchored at the start (filterwarnings matches from position 0).
+_SESSION_EXEC_NAG = r"[\s\S]*You probably want to use `session\.exec\(\)` instead of `session\.execute\(\)`"
 
 
 async def _exec_text(
@@ -374,7 +375,7 @@ async def _exec_text(
     """
     with warnings.catch_warnings():
         warnings.filterwarnings(
-            "ignore", message=str(_SESSION_EXEC_NAG), category=DeprecationWarning
+            "ignore", message=_SESSION_EXEC_NAG, category=DeprecationWarning
         )
         if params:
             return await session.execute(statement, params=params)
@@ -894,7 +895,9 @@ async def action_results_partial(
             "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_actions_engine) as session:
-            run_rows = (await session.execute(run_query, params={"slug": slug})).all()
+            run_rows = (
+                await _exec_text(session, run_query, params={"slug": slug})
+            ).all()
 
         # For each run, fetch its per-repo results
         result_query = text(
@@ -906,7 +909,7 @@ async def action_results_partial(
             run_id = run_row[0]
             async with AsyncSession(_actions_engine) as session:
                 result_rows = (
-                    await session.execute(result_query, params={"run_id": run_id})
+                    await _exec_text(session, result_query, params={"run_id": run_id})
                 ).all()
 
             results_list = [
@@ -1034,7 +1037,9 @@ async def check_results_partial(
             "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_checks_engine) as session:
-            run_rows = (await session.execute(run_query, params={"slug": slug})).all()
+            run_rows = (
+                await _exec_text(session, run_query, params={"slug": slug})
+            ).all()
 
         # For each run, fetch its per-repo results
         result_query = text(
@@ -1046,7 +1051,7 @@ async def check_results_partial(
             run_id = run_row[0]
             async with AsyncSession(_checks_engine) as session:
                 result_rows = (
-                    await session.execute(result_query, params={"run_id": run_id})
+                    await _exec_text(session, result_query, params={"run_id": run_id})
                 ).all()
 
             results_list = [
@@ -1100,7 +1105,7 @@ async def check_results_partial(
             )
             async with AsyncSession(_checks_engine) as session:
                 orphan_rows = (
-                    await session.execute(orphan_query, params={"slug": slug})
+                    await _exec_text(session, orphan_query, params={"slug": slug})
                 ).all()
             if orphan_rows:
                 results_list = [
