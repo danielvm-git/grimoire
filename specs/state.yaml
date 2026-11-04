@@ -3,7 +3,7 @@
 
 workflow_mode: solo-git
 
-active_flow: idle
+active_flow: fix_bug
 active_epic_id: e11
 active_story_id: null
 completed_epic: true
@@ -26,23 +26,18 @@ epic_cycle:
   fast_mode: false
 
 bug_cycle:
-  current_step: 6
-  completed_steps:
-    - investigate-bug
-    - diagnose-root
-    - develop-tdd
-    - validate-fix
-    - release-branch
-    - survey-context
-    - map-codebase
-    - tracker-recon
-    - history-recon
-    - bind-n-frozen
-    - seed-registry
-    - qa-report
-    - module-audit
-    - fix-bugs
-    - verify-work
+  current_step: 1
+  completed_steps: []
+  audit_source: specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
+  scope:
+    - run-lifecycle-terminality
+    - check-admission-guard
+    - archived-cache-roundtrip
+    - workflow-conclusion-mapping
+    - workspace-partial-bare
+    - subprocess-cancellation-leak
+    - config-refresh-idempotency
+    - dead-code-observability
 
 release:
   target_version: null
@@ -57,17 +52,17 @@ metrics:
   bcp_per_hour: null
 
 git:
-  branch: main
-  hash: 5471b8a
+  branch: fix/audit-gaps
+  hash: 912f10f
   pushed: false
 
 handoff:
   last_step_completed: >
-    release-branch: finalized e11 epic. Verified test suite (417 passed), overall coverage (85%),
-    security review gate (specs/security/REVIEW.md), and archived epic capsule to specs/epics/archive/e11-e2e-browser-testing.
+    fix_bug step 1: created eight bug capsules from the 2026-11-04 hidden-state-machine audit.
+    Baseline: 468 passed, lint clean, HEAD 912f10f. Branch fix/audit-gaps.
   open_decisions: []
   required_reading:
-    - specs/epics/archive/e11-e2e-browser-testing/epic.yaml
-    - specs/security/REVIEW.md
-  next_skill: survey-context
+    - specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
+    - specs/bugs/BUG-2026-11-04T000000-run-lifecycle-terminality.md
+  next_skill: investigate-bug
 

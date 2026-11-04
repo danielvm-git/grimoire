@@ -266,6 +266,23 @@ def _get_xdg_data_dir() -> Path:
     return _get_data_manager().data_dir
 
 
+def resolve_config_path(path: Path | None = None) -> Path:
+    """Return the config file path without loading it.
+
+    Resolution order: explicit path → ``GRIMOIRE_CONFIG`` → ``./config.yaml``
+    → XDG path. Used by both :func:`load_config` and the save-weights API so
+    they can never disagree about which file is authoritative.
+    """
+    if path is not None:
+        return path
+    env_path = os.environ.get("GRIMOIRE_CONFIG")
+    if env_path:
+        return Path(env_path)
+    if Path("config.yaml").exists():
+        return Path("config.yaml")
+    return _get_xdg_config_path()
+
+
 def load_config(path: Path | None = None) -> GrimoireConfig:
     """Load and validate the Grimoire configuration file.
 
@@ -275,14 +292,7 @@ def load_config(path: Path | None = None) -> GrimoireConfig:
     3. ``./config.yaml`` in the current working directory.
     4. ``~/.config/grimoire/config.yaml`` (XDG config path).
     """
-    if path is None:
-        env_path = os.environ.get("GRIMOIRE_CONFIG")
-        if env_path:
-            path = Path(env_path)
-        elif Path("config.yaml").exists():
-            path = Path("config.yaml")
-        else:
-            path = _get_xdg_config_path()
+    path = resolve_config_path(path)
 
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")

@@ -606,3 +606,11 @@ async def test_paginated_304_on_page2_does_not_truncate(
     # Both pages' items present — no silent truncation
     assert len(issues) == 2
     assert {i["number"] for i in issues} == {1, 2}
+
+
+def test_no_last_next_link_state() -> None:
+    """The shared pagination cursor must not exist (F15)."""
+    from grimoire.github.client import GitHubClient
+
+    assert "_last_next_link" not in GitHubClient.__dict__
+    assert not hasattr(GitHubClient, "_last_next_link")

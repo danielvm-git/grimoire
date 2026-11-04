@@ -4,24 +4,34 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import shutil
 import tempfile
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import (
+    PROCESS_OWNER_ID,
+    RUN_LEASE_SECONDS,
     CheckResultRecord,
     CheckRunRecord,
+    complete_run,
+    fail_run,
     mark_run_running,
     start_run_heartbeat,
 )
 from grimoire.models import CheckResult
 from grimoire.observability.metrics import update_check_metrics
-from grimoire.script import create_script_process, read_stdout_stderr_capped
+from grimoire.script import (
+    create_script_process,
+    read_stdout_stderr_capped,
+    terminate_process,
+)
 from grimoire.state import RunState
 from grimoire.targeting import resolve_targets, target_env
 
@@ -36,6 +46,8 @@ OUTPUT_SIZE_CAP = 64 * 1024  # 64 KB
 _DEFAULT_TIMEOUT = 300  # 5 minutes
 _CONCURRENCY = 5
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class CheckProgress:
@@ -43,6 +55,11 @@ class CheckProgress:
 
     completed: int = 0
     total: int = 0
+    expires_at: datetime | None = None
+
+
+class CheckConflictError(Exception):
+    """Raised when a check is already queued or running."""
 
 
 # In-memory tracking of currently-running check slugs and their progress
@@ -57,16 +74,32 @@ def _check_lock(slug: str) -> asyncio.Lock:
     return _check_locks[slug]
 
 
+def _memory_lease() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(seconds=RUN_LEASE_SECONDS)
+
+
 def is_check_running(slug: str) -> bool:
-    """Return True if the check is currently executing."""
-    return slug in _running_checks
+    """Return True if the check is currently executing.
+
+    Entries carry a lease so a dropped background task cannot block the slug
+    forever (bug: check-admission-guard).
+    """
+    progress = _running_checks.get(slug)
+    if progress is None:
+        return False
+    if progress.expires_at is not None and progress.expires_at < datetime.now(
+        timezone.utc
+    ):
+        _running_checks.pop(slug, None)
+        return False
+    return True
 
 
 def try_start_check(slug: str) -> bool:
     """Atomically check and mark a check as running. Returns True if acquired."""
-    if slug in _running_checks:
+    if is_check_running(slug):
         return False
-    _running_checks[slug] = CheckProgress()
+    _running_checks[slug] = CheckProgress(expires_at=_memory_lease())
     return True
 
 
@@ -98,6 +131,36 @@ async def create_check_run(
     if run_id is None:
         raise RuntimeError("check run record was not assigned an id")
     return run_id
+
+
+async def prepare_check_run(
+    engine: AsyncEngine, check: CheckDefinition, triggered_by: str
+) -> int:
+    """Reserve a check slot and persist a queued run; return its id.
+
+    Every entry point (API, web, cron, refresh, MCP) goes through here, so the
+    admission guard cannot be bypassed (bug: check-admission-guard).
+    """
+    async with _check_lock(check.slug):
+        if is_check_running(check.slug):
+            raise CheckConflictError(f"Check '{check.slug}' is already running")
+
+        async with AsyncSession(engine) as session:
+            stmt = select(CheckRunRecord).where(
+                col(CheckRunRecord.check_slug) == check.slug,
+                col(CheckRunRecord.status).in_(
+                    (RunState.QUEUED.value, RunState.RUNNING.value)
+                ),
+            )
+            existing = (await session.exec(stmt)).first()
+            if existing is not None:
+                raise CheckConflictError(
+                    f"Check '{check.slug}' is already running (run ID: {existing.id})"
+                )
+
+        run_id = await create_check_run(engine, check, triggered_by)
+        _running_checks[check.slug] = CheckProgress(expires_at=_memory_lease())
+        return run_id
 
 
 async def run_check(
@@ -172,6 +235,7 @@ async def run_check(
         output = f"Failed to execute: {exc}"
         passed = False
     finally:
+        await terminate_process(proc)
         if tmp_script is not None:
             tmp_script.unlink(missing_ok=True)
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -235,8 +299,14 @@ async def run_check_for_all_targets(
 ) -> list[CheckResult]:
     """Resolve targets and run the check for every repo × branch combination."""
     if run_id is None:
-        run_id = await create_check_run(engine, check, triggered_by)
-    await mark_run_running(engine, CheckRunRecord, run_id)
+        run_id = await prepare_check_run(engine, check, triggered_by)
+    if not await mark_run_running(engine, CheckRunRecord, run_id):
+        logger.warning(
+            "Check run %s for '%s' was no longer queued; refusing to execute",
+            run_id,
+            check.slug,
+        )
+        return []
     heartbeat = start_run_heartbeat(engine, CheckRunRecord, run_id)
 
     # Register in-memory tracking (may already be set by try_start_check)
@@ -274,25 +344,28 @@ async def run_check_for_all_targets(
         else:
             results = list(await asyncio.gather(*tasks))
 
-        # Mark run as completed
-        async with AsyncSession(engine) as session:
-            record = await session.get(CheckRunRecord, run_id)
-            if record is not None:
-                record.status = RunState.COMPLETED.value
-                record.finished_at = datetime.now(timezone.utc)
-                session.add(record)
-                await session.commit()
+        # Mark run as completed only if this process still owns a running row.
+        if not await complete_run(
+            engine, CheckRunRecord, run_id, owner_id=PROCESS_OWNER_ID
+        ):
+            logger.warning(
+                "Check run %s for '%s' was reclaimed before completion; "
+                "leaving its terminal status untouched",
+                run_id,
+                check.slug,
+            )
 
         return results
     except Exception:
-        # Mark run as failed so it doesn't leave ghost "running" records
-        async with AsyncSession(engine) as session:
-            record = await session.get(CheckRunRecord, run_id)
-            if record is not None:
-                record.status = RunState.FAILED.value
-                record.finished_at = datetime.now(timezone.utc)
-                session.add(record)
-                await session.commit()
+        # Mark run as failed so it doesn't leave ghost "running" records.
+        if not await fail_run(
+            engine, CheckRunRecord, run_id, owner_id=PROCESS_OWNER_ID
+        ):
+            logger.warning(
+                "Check run %s for '%s' was already terminal; not overwriting",
+                run_id,
+                check.slug,
+            )
         raise
     finally:
         heartbeat.cancel()

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 from apscheduler.triggers.cron import CronTrigger
 
-from grimoire.checks.engine import run_check_for_all_targets
+from grimoire.checks.engine import CheckConflictError, run_check_for_all_targets
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -48,9 +51,12 @@ def register_checks(
                 # jobs, so this guard is what makes a disable take effect now.
                 if not c.enabled:
                     return
-                await run_check_for_all_targets(
-                    c, repos, workspace, engine, triggered_by="cron"
-                )
+                try:
+                    await run_check_for_all_targets(
+                        c, repos, workspace, engine, triggered_by="cron"
+                    )
+                except CheckConflictError:
+                    logger.info("Check '%s' already running; cron skipped", c.slug)
 
             # APScheduler 3 AsyncIOScheduler expects a callable; for sync
             # schedulers fall back to running the coroutine in the loop.
@@ -61,11 +67,14 @@ def register_checks(
             def _sync_job() -> None:
                 if not c.enabled:
                     return
-                asyncio.get_event_loop().run_until_complete(
-                    run_check_for_all_targets(
-                        c, repos, workspace, engine, triggered_by="cron"
+                try:
+                    asyncio.get_event_loop().run_until_complete(
+                        run_check_for_all_targets(
+                            c, repos, workspace, engine, triggered_by="cron"
+                        )
                     )
-                )
+                except CheckConflictError:
+                    logger.info("Check '%s' already running; cron skipped", c.slug)
 
             return _sync_job
 

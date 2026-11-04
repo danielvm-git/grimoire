@@ -127,6 +127,18 @@ class TestToggleCheck:
         resp = await check_client.post("/api/checks/nonexistent/toggle")
         assert resp.status_code == 404
 
+    async def test_put_enabled_is_idempotent(self, check_client: AsyncClient) -> None:
+        """Replaying the same desired state must not flip it back (F10)."""
+        for _ in range(2):
+            resp = await check_client.put(
+                "/api/checks/test-check/enabled", json={"enabled": False}
+            )
+            assert resp.status_code == 200
+            assert resp.json()["enabled"] is False
+
+        resp = await check_client.get("/api/checks/")
+        assert resp.json()[0]["enabled"] is False
+
 
 class TestRunCheck:
     async def test_run_check(self, check_client: AsyncClient) -> None:

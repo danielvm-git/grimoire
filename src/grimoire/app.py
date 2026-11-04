@@ -20,12 +20,12 @@ from grimoire.actions.loader import load_actions
 from grimoire.actions.router import router as actions_router
 from grimoire.actions.router import set_actions_state
 from grimoire.actions.scheduler import register_actions
-from grimoire.checks.engine import run_check_for_all_targets
+from grimoire.checks.engine import CheckConflictError, run_check_for_all_targets
 from grimoire.checks.loader import CheckDefinition, load_checks
 from grimoire.checks.router import router as checks_router
 from grimoire.checks.router import set_checks_state
 from grimoire.checks.scheduler import register_checks
-from grimoire.config import load_config
+from grimoire.config import load_config, resolve_config_path
 from grimoire.database import (
     RUN_LEASE_SECONDS,
     create_tables,
@@ -90,11 +90,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         yield
         return
 
-    # Resolve the config file path for save-weights API
-    import os
-
-    _env_path = os.environ.get("GRIMOIRE_CONFIG")
-    config_file_path = Path(_env_path) if _env_path else Path("config.yaml")
+    # Resolve the config file path for the save-weights API. Use the same
+    # resolver as load_config so the API can never write a different file.
+    config_file_path = resolve_config_path()
 
     # Ensure data directories exist
     config.database_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,6 +271,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                         workspace,
                         engine,
                         triggered_by="refresh",
+                    )
+                except CheckConflictError:
+                    logger.info(
+                        "Default check '%s' already running; refresh skipped",
+                        check.slug,
                     )
                 except Exception:
                     logger.exception("Default-schedule check '%s' failed", check.slug)

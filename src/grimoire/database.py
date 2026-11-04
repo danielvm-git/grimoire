@@ -10,12 +10,17 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import and_, or_, text
+from sqlalchemy import and_, or_, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.state import RECLAIMABLE_RUN_STATES, RunState
+from grimoire.db_exec import exec_raw
+from grimoire.state import (
+    ALL_RUN_STATES,
+    TERMINAL_RUN_STATES,
+    RunState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -267,44 +272,98 @@ async def ensure_schema_compatibility(engine: AsyncEngine) -> None:
 
 
 async def cleanup_stale_runs(engine: AsyncEngine) -> None:
-    """Mark non-terminal runs left by a previous process as 'interrupted'.
+    """Recover runs left by a previous process without stealing live leases.
 
-    Called at startup — if the app was restarted while runs were queued or
-    running, the in-memory tracking is gone and the DB rows would be stuck.
+    Startup used to mark every queued/running row ``interrupted``. That is
+    unsafe with more than one worker: starting worker B would kill worker A's
+    in-flight runs. Reclaim only rows whose lease has expired (or is missing).
     """
-    now = _utcnow()
-    models: tuple[Any, Any] = (CheckRunRecord, ActionRunRecord)
-    async with AsyncSession(engine) as session:
-        for model in models:
-            rows = (
-                await session.exec(
-                    select(model).where(model.status.in_(RECLAIMABLE_RUN_STATES))
-                )
-            ).all()
-            for row in rows:
-                row.status = RunState.INTERRUPTED.value
-                row.finished_at = now
-                row.lease_expires_at = None
-        await session.commit()
+    await reclaim_expired_runs(engine)
 
 
 def _lease_deadline(now: datetime) -> datetime:
     return now + timedelta(seconds=RUN_LEASE_SECONDS)
 
 
-async def mark_run_running(engine: AsyncEngine, model: Any, run_id: int) -> None:
-    """Transition a queued run to 'running' and claim its lease."""
+async def transition_run(
+    engine: AsyncEngine,
+    model: Any,
+    run_id: int,
+    allowed_from: tuple[str, ...],
+    to_state: RunState,
+    *,
+    owner_id: str | None = None,
+) -> bool:
+    """Atomically move a run between states; return True if this caller won.
+
+    A compare-and-set update makes terminal states absorbing: a run reclaimed
+    to ``interrupted`` cannot be reopened by a late engine write.
+    """
+    values: dict[str, Any] = {"status": to_state.value}
+    if to_state.value in TERMINAL_RUN_STATES:
+        values["finished_at"] = _utcnow()
+        values["lease_expires_at"] = None
+
+    statement = update(model).where(
+        model.id == run_id,
+        model.status.in_(allowed_from),
+    )
+    if owner_id is not None:
+        statement = statement.where(model.owner_id == owner_id)
+    statement = statement.values(**values)
+
     async with AsyncSession(engine) as session:
-        record = await session.get(model, run_id)
-        if record is None:
-            return
-        now = _utcnow()
-        record.status = RunState.RUNNING.value
-        record.owner_id = PROCESS_OWNER_ID
-        record.heartbeat_at = now
-        record.lease_expires_at = _lease_deadline(now)
-        session.add(record)
+        result = await exec_raw(session, statement)
         await session.commit()
+        return bool(result.rowcount)
+
+
+async def complete_run(
+    engine: AsyncEngine, model: Any, run_id: int, *, owner_id: str | None = None
+) -> bool:
+    """Mark a running run completed only if this caller still owns it."""
+    return await transition_run(
+        engine,
+        model,
+        run_id,
+        (RunState.RUNNING.value,),
+        RunState.COMPLETED,
+        owner_id=owner_id,
+    )
+
+
+async def fail_run(
+    engine: AsyncEngine, model: Any, run_id: int, *, owner_id: str | None = None
+) -> bool:
+    """Mark a running run failed only if this caller still owns it."""
+    return await transition_run(
+        engine,
+        model,
+        run_id,
+        (RunState.RUNNING.value,),
+        RunState.FAILED,
+        owner_id=owner_id,
+    )
+
+
+async def mark_run_running(engine: AsyncEngine, model: Any, run_id: int) -> bool:
+    """Claim a queued run. Returns False when it is no longer queued."""
+    now = _utcnow()
+    statement = (
+        update(model)
+        .where(model.id == run_id, model.status == RunState.QUEUED.value)
+        .values(
+            status=RunState.RUNNING.value,
+            owner_id=PROCESS_OWNER_ID,
+            heartbeat_at=now,
+            lease_expires_at=_lease_deadline(now),
+            finished_at=None,
+        )
+    )
+    async with AsyncSession(engine) as session:
+        result = await exec_raw(session, statement)
+        await session.commit()
+        return bool(result.rowcount)
 
 
 async def heartbeat_run(engine: AsyncEngine, model: Any, run_id: int) -> None:
@@ -370,6 +429,10 @@ async def reclaim_expired_runs(engine: AsyncEngine) -> int:
                                 model.status == RunState.QUEUED.value,
                                 model.started_at < cutoff,
                             ),
+                            # A corrupt/unknown status is not terminal and not
+                            # reclaimable by the normal predicates; reclaim it
+                            # so it cannot strand forever.
+                            model.status.notin_(tuple(ALL_RUN_STATES)),
                         )
                     )
                 )

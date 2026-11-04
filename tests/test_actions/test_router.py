@@ -235,3 +235,12 @@ class TestToggleAction:
     async def test_toggle_not_found(self, action_client: AsyncClient) -> None:
         resp = await action_client.post("/api/actions/nonexistent/toggle")
         assert resp.status_code == 404
+
+    async def test_put_enabled_is_idempotent(self, action_client: AsyncClient) -> None:
+        """Replaying the same desired state must not flip it back (F10)."""
+        for _ in range(2):
+            resp = await action_client.put(
+                "/api/actions/test-action/enabled", json={"enabled": False}
+            )
+            assert resp.status_code == 200
+            assert resp.json()["enabled"] is False

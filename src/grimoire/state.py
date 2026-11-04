@@ -22,11 +22,21 @@ class RunState(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     INTERRUPTED = "interrupted"
+    CANCELLED = "cancelled"
 
 
 TERMINAL_RUN_STATES: frozenset[str] = frozenset(
-    {RunState.COMPLETED, RunState.FAILED, RunState.INTERRUPTED}
+    {
+        RunState.COMPLETED,
+        RunState.FAILED,
+        RunState.INTERRUPTED,
+        RunState.CANCELLED,
+    }
 )
+
+# Every status the application may persist. Anything else is a corrupt row and
+# is reclaimed to ``interrupted`` rather than stranded forever.
+ALL_RUN_STATES: frozenset[str] = frozenset(state.value for state in RunState)
 
 # States in which a run has not reached a final outcome yet.
 NON_TERMINAL_RUN_STATES: frozenset[str] = frozenset({RunState.QUEUED, RunState.RUNNING})

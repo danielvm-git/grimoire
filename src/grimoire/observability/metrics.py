@@ -5,6 +5,8 @@ All metrics are documented in METRICS.md at the repository root.
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import Iterable
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Response
@@ -190,3 +192,28 @@ def update_rate_limit_metrics(remaining: int, reset_timestamp: int) -> None:
     """Update GitHub rate limit metrics."""
     RATE_LIMIT_REMAINING.set(remaining)
     RATE_LIMIT_RESET.set(reset_timestamp)
+
+
+def remove_repo_metrics(repo_names: Iterable[str]) -> None:
+    """Remove per-repo gauge series for repos that are no longer tracked.
+
+    Prometheus gauges keep the last value for a label set forever unless the
+    series is removed; a pruned repo would otherwise look permanently healthy
+    (or permanently broken) on the dashboard (bug: metric-label-leak).
+    """
+    gauges = (
+        OPEN_ISSUES,
+        STALE_ISSUES,
+        OPEN_PRS,
+        STALE_PRS,
+        TOTAL_BRANCHES,
+        WORKFLOW_FAILURES,
+        LAST_COMMIT_TIMESTAMP,
+        DATA_FETCHED_TIMESTAMP,
+        OLDEST_ISSUE_AGE,
+        OLDEST_PR_AGE,
+    )
+    for repo in repo_names:
+        for gauge in gauges:
+            with contextlib.suppress(KeyError):
+                gauge.remove(repo)

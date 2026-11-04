@@ -439,3 +439,49 @@ class TestResetWorkdir:
         assert dev_result.exists()
         assert (main_result / "README.md").exists()
         assert (dev_result / "dev.txt").exists()
+
+    async def test_reset_repairs_partial_bare(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bare directory that exists is not proof of a usable clone (F7)."""
+        cfg = _minimal_config(tmp_path / "ws")
+        mgr = WorkspaceManager(cfg)
+        bare = mgr._bare_dir("acme/widgets")
+        bare.mkdir(parents=True)
+        calls: list[Path] = []
+
+        async def fake_ensure_bare(bare_dir: Path) -> None:
+            calls.append(bare_dir)
+
+        async def fake_ensure_worktree(full: str, branch: str, bare_dir: Path) -> None:
+            wd = mgr.get_workdir(full, branch)
+            wd.mkdir(parents=True, exist_ok=True)
+            (wd / ".git").write_text("gitdir: x")
+
+        async def fake_run_git(*args: str, cwd: Path) -> str:
+            return ""
+
+        monkeypatch.setattr(mgr, "_ensure_bare_initialized", fake_ensure_bare)
+        monkeypatch.setattr(mgr, "_ensure_worktree", fake_ensure_worktree)
+        monkeypatch.setattr(mgr, "_run_git", fake_run_git)
+
+        await mgr.reset_workdir("acme/widgets", "main")
+
+        assert calls, "reset_workdir did not repair a partial bare clone"
+
+    async def test_ensure_worktree_failure_propagates(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A failed worktree add must raise instead of being swallowed (F7)."""
+        cfg = _minimal_config(tmp_path / "ws")
+        mgr = WorkspaceManager(cfg)
+        bare = mgr._bare_dir("acme/widgets")
+        bare.mkdir(parents=True)
+
+        async def fail(*args: str, cwd: Path) -> str:
+            raise WorkspaceError("worktree add failed")
+
+        monkeypatch.setattr(mgr, "_run_git", fail)
+
+        with pytest.raises(WorkspaceError, match="worktree add failed"):
+            await mgr._ensure_worktree("acme/widgets", "main", bare)

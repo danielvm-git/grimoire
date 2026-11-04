@@ -9,7 +9,9 @@ python3, etc.).  Scripts without a shebang are passed to ``/bin/sh`` via
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
+import signal
 import stat
 import tempfile
 from pathlib import Path
@@ -49,6 +51,7 @@ async def create_script_process(
                 env=env,
                 stdout=stdout,
                 stderr=stderr,
+                start_new_session=True,
             )
         except Exception:
             tmp_path.unlink(missing_ok=True)
@@ -61,8 +64,26 @@ async def create_script_process(
         env=env,
         stdout=stdout,
         stderr=stderr,
+        start_new_session=True,
     )
     return proc, None
+
+
+async def terminate_process(proc: asyncio.subprocess.Process | None) -> None:
+    """Kill the child's whole process group and reap it.
+
+    Called from every engine ``finally`` so cancellation and non-timeout
+    exceptions cannot leave an orphan (bug: subprocess-cancellation-leak).
+    """
+    if proc is None or proc.returncode is not None:
+        return
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        with contextlib.suppress(ProcessLookupError):
+            proc.kill()
+    with contextlib.suppress(asyncio.CancelledError, ProcessLookupError):
+        await asyncio.shield(proc.wait())
 
 
 async def _read_stream_capped(

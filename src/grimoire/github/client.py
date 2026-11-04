@@ -208,8 +208,8 @@ class GitHubClient:
         params: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]] | None:
         """Follow ``Link: rel="next"`` headers to collect all pages."""
-        # Serialize pagination to prevent concurrent calls from corrupting
-        # the shared _last_next_link instance state.
+        # Serialize pagination so concurrent calls cannot interleave page
+        # traversal. The cursor itself is request-local via _next_link_out.
         async with self._pagination_lock:
             return await self._paginated_get_locked(path, params)
 
@@ -312,7 +312,6 @@ class GitHubClient:
 
                 self._update_rate_limit(response)
                 next_link = self._parse_next_link(response)
-                self._last_next_link = next_link
                 if _next_link_out is not None:
                     _next_link_out["next"] = next_link
                 self._record_api_request(path, response.status_code)
@@ -461,8 +460,6 @@ class GitHubClient:
         API_REQUESTS.labels(endpoint=endpoint, status=str(status_code)).inc()
 
     # -- pagination ----------------------------------------------------------
-
-    _last_next_link: str | None = None
 
     @staticmethod
     def _parse_next_link(response: httpx.Response) -> str | None:

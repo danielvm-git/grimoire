@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -102,3 +103,15 @@ async def test_mcp_server_token_auth(tmp_path: Path):
             "/mcp/messages/", headers={"X-MCP-Token": "secret-token-123"}
         )
         assert res_auth.status_code == 400
+
+
+def test_empty_token_warns(caplog: pytest.LogCaptureFixture) -> None:
+    """Mounting without a token must be visible in logs (F20)."""
+    app = FastAPI()
+    fake = MagicMock()
+    fake.sse_app.return_value = FastAPI()
+
+    with caplog.at_level(logging.WARNING, logger="grimoire.mcp.server"):
+        mount_mcp_server(app=app, mcp=fake, token=None)
+
+    assert "without authentication" in caplog.text

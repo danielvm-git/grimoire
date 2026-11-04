@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.checks.engine import run_check_for_all_targets
+from grimoire.checks.engine import CheckConflictError, run_check_for_all_targets
 from grimoire.checks.queries import get_check_backlog, get_latest_check_results
 
 if TYPE_CHECKING:
@@ -84,14 +84,17 @@ class MCPToolHandlers:
 
         if refresh:
             for check in self.checks:
-                await run_check_for_all_targets(
-                    check=check,
-                    repos=self.repos,
-                    workspace=self.workspace,
-                    engine=self.engine,
-                    triggered_by="api",
-                    specific_repo=repo,
-                )
+                try:
+                    await run_check_for_all_targets(
+                        check=check,
+                        repos=self.repos,
+                        workspace=self.workspace,
+                        engine=self.engine,
+                        triggered_by="api",
+                        specific_repo=repo,
+                    )
+                except CheckConflictError:
+                    continue
 
         async with AsyncSession(self.engine) as session:
             results = await get_latest_check_results(session, repo_full_name=repo)
@@ -127,14 +130,17 @@ class MCPToolHandlers:
 
         if refresh:
             for check in self.checks:
-                await run_check_for_all_targets(
-                    check=check,
-                    repos=self.repos,
-                    workspace=self.workspace,
-                    engine=self.engine,
-                    triggered_by="api",
-                    specific_repo=repo,
-                )
+                try:
+                    await run_check_for_all_targets(
+                        check=check,
+                        repos=self.repos,
+                        workspace=self.workspace,
+                        engine=self.engine,
+                        triggered_by="api",
+                        specific_repo=repo,
+                    )
+                except CheckConflictError:
+                    continue
 
         async with AsyncSession(self.engine) as session:
             return await get_check_backlog(
@@ -159,14 +165,26 @@ class MCPToolHandlers:
 
         executed_summary = []
         for check in target_checks:
-            results = await run_check_for_all_targets(
-                check=check,
-                repos=self.repos,
-                workspace=self.workspace,
-                engine=self.engine,
-                triggered_by="api",
-                specific_repo=repo,
-            )
+            try:
+                results = await run_check_for_all_targets(
+                    check=check,
+                    repos=self.repos,
+                    workspace=self.workspace,
+                    engine=self.engine,
+                    triggered_by="api",
+                    specific_repo=repo,
+                )
+            except CheckConflictError:
+                executed_summary.append(
+                    {
+                        "check_slug": check.slug,
+                        "check_name": check.name,
+                        "results_count": 0,
+                        "passed": False,
+                        "error": "already running",
+                    }
+                )
+                continue
             executed_summary.append(
                 {
                     "check_slug": check.slug,

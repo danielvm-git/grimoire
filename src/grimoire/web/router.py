@@ -20,10 +20,10 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import StalenessConfig
-from grimoire.database import ActionRunRecord
+from grimoire.database import ActionRunRecord, CheckRunRecord
 from grimoire.db_exec import exec_raw
 from grimoire.models import TrackedRepository, WorkflowStatus
-from grimoire.state import RunState
+from grimoire.state import TERMINAL_RUN_STATES, RunState
 from grimoire.targeting import TargetSpec
 from grimoire.web.backlog import (
     BacklogItem,
@@ -36,6 +36,8 @@ from grimoire.web.backlog import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["web"])
+
+_TERMINAL_RUN_STATES_SQL = ", ".join(f"'{s}'" for s in sorted(TERMINAL_RUN_STATES))
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 try:
@@ -879,7 +881,7 @@ async def action_results_partial(
             "SELECT id, triggered_by, started_at "
             "FROM action_run "
             "WHERE action_slug = :slug "
-            "AND status IN ('completed', 'failed', 'interrupted') "
+            f"AND status IN ({_TERMINAL_RUN_STATES_SQL}) "
             "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_actions_engine) as session:
@@ -1022,7 +1024,7 @@ async def check_results_partial(
             "SELECT id, triggered_by, started_at "
             "FROM check_run "
             "WHERE check_slug = :slug "
-            "AND status IN ('completed', 'failed', 'interrupted') "
+            f"AND status IN ({_TERMINAL_RUN_STATES_SQL}) "
             "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_checks_engine) as session:
@@ -1236,8 +1238,18 @@ async def check_run_status_partial(
     auto-refresh results.
     """
     from grimoire.checks.engine import get_check_progress, is_check_running
+    from grimoire.checks.router import _engine as _checks_engine
 
     running = is_check_running(slug)
+    if not running and _checks_engine is not None:
+        async with AsyncSession(_checks_engine) as session:
+            stmt = select(CheckRunRecord).where(
+                col(CheckRunRecord.check_slug) == slug,
+                col(CheckRunRecord.status).in_(
+                    (RunState.QUEUED.value, RunState.RUNNING.value)
+                ),
+            )
+            running = (await session.exec(stmt)).first() is not None
     progress = get_check_progress(slug)
     resp = templates.TemplateResponse(
         request,
@@ -1264,10 +1276,10 @@ async def check_run_trigger(
     The returned partial includes polling to detect completion.
     """
     from grimoire.checks.engine import (
+        CheckConflictError,
         clear_check_running,
-        create_check_run,
+        prepare_check_run,
         run_check_for_all_targets,
-        try_start_check,
     )
     from grimoire.checks.router import (
         _checks,
@@ -1294,14 +1306,10 @@ async def check_run_trigger(
     if checks_workspace is None or checks_engine is None:
         raise HTTPException(status_code=500, detail="Checks engine not configured")
 
-    if not try_start_check(slug):
-        raise HTTPException(status_code=409, detail="Check is already running")
-
     try:
-        run_id = await create_check_run(checks_engine, check, "manual")
-    except Exception:
-        clear_check_running(slug)
-        raise
+        run_id = await prepare_check_run(checks_engine, check, "manual")
+    except CheckConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     async def _run_in_background() -> None:
         try:

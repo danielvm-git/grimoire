@@ -4,23 +4,28 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import (
+    PROCESS_OWNER_ID,
+    RUN_LEASE_SECONDS,
     ActionRunRecord,
     ActionRunRepoRecord,
+    complete_run,
+    fail_run,
     mark_run_running,
     start_run_heartbeat,
 )
 from grimoire.models import ActionRepoResult, ActionRun
 from grimoire.observability.metrics import update_action_metrics
-from grimoire.script import create_script_process, read_output_capped
+from grimoire.script import create_script_process, read_output_capped, terminate_process
 from grimoire.state import RunState
 from grimoire.targeting import resolve_targets, target_env
 
@@ -34,6 +39,8 @@ if TYPE_CHECKING:
 OUTPUT_SIZE_CAP = 64 * 1024  # 64 KB
 _DEFAULT_TIMEOUT = 600  # 10 minutes
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ActionProgress:
@@ -41,6 +48,7 @@ class ActionProgress:
 
     completed: int = 0
     total: int = 0
+    expires_at: datetime | None = None
 
 
 # In-memory tracking of currently-running action slugs and their progress
@@ -48,9 +56,25 @@ _running_actions: dict[str, ActionProgress] = {}
 _action_locks: dict[str, asyncio.Lock] = {}
 
 
+def _memory_lease() -> datetime:
+    return datetime.now(timezone.utc) + timedelta(seconds=RUN_LEASE_SECONDS)
+
+
 def is_action_running(slug: str) -> bool:
-    """Return True if the action is currently executing."""
-    return slug in _running_actions
+    """Return True if the action is currently executing.
+
+    Entries carry a lease so a dropped background task cannot block the slug
+    forever (bug: check-admission-guard).
+    """
+    progress = _running_actions.get(slug)
+    if progress is None:
+        return False
+    if progress.expires_at is not None and progress.expires_at < datetime.now(
+        timezone.utc
+    ):
+        _running_actions.pop(slug, None)
+        return False
+    return True
 
 
 def get_action_progress(slug: str) -> ActionProgress | None:
@@ -78,7 +102,7 @@ async def prepare_action_run(
     running, whether tracked in memory or only in the database.
     """
     async with _action_lock(action.slug):
-        if action.slug in _running_actions:
+        if is_action_running(action.slug):
             raise ActionConflictError(f"Action '{action.slug}' is already running")
 
         async with AsyncSession(engine) as session:
@@ -104,7 +128,7 @@ async def prepare_action_run(
             await session.commit()
             await session.refresh(record)
 
-        _running_actions[action.slug] = ActionProgress()
+        _running_actions[action.slug] = ActionProgress(expires_at=_memory_lease())
         run_id = record.id
         if run_id is None:
             raise RuntimeError("action run record was not assigned an id")
@@ -135,7 +159,10 @@ async def run_action(
 
     if run_id is None:
         run_id = await prepare_action_run(action, engine, triggered_by)
-    await mark_run_running(engine, ActionRunRecord, run_id)
+    if not await mark_run_running(engine, ActionRunRecord, run_id):
+        raise RuntimeError(
+            f"Action run {run_id} for '{action.slug}' was no longer queued"
+        )
     heartbeat = start_run_heartbeat(engine, ActionRunRecord, run_id)
 
     # 3. Resolve targets and execute
@@ -200,24 +227,27 @@ async def run_action(
                         session.add(repo_record)
                         await session.commit()
 
-        # Mark run as completed
+        # Mark run as completed only if this process still owns a running row.
         finished_at = datetime.now(timezone.utc)
-        async with AsyncSession(engine) as session:
-            record = await session.get(ActionRunRecord, run_id)
-            if record is not None:
-                record.status = RunState.COMPLETED.value
-                record.finished_at = finished_at
-                session.add(record)
-                await session.commit()
+        if not await complete_run(
+            engine, ActionRunRecord, run_id, owner_id=PROCESS_OWNER_ID
+        ):
+            logger.warning(
+                "Action run %s for '%s' was reclaimed before completion; "
+                "leaving its terminal status untouched",
+                run_id,
+                action.slug,
+            )
     except Exception:
-        # Mark run as failed so it doesn't permanently block future runs
-        async with AsyncSession(engine) as session:
-            record = await session.get(ActionRunRecord, run_id)
-            if record is not None:
-                record.status = RunState.FAILED.value
-                record.finished_at = datetime.now(timezone.utc)
-                session.add(record)
-                await session.commit()
+        # Mark run as failed so it doesn't permanently block future runs.
+        if not await fail_run(
+            engine, ActionRunRecord, run_id, owner_id=PROCESS_OWNER_ID
+        ):
+            logger.warning(
+                "Action run %s for '%s' was already terminal; not overwriting",
+                run_id,
+                action.slug,
+            )
         raise
     finally:
         heartbeat.cancel()
@@ -275,6 +305,7 @@ async def _execute_global_action(
         output = f"Failed to execute: {exc}"
         passed = False
     finally:
+        await terminate_process(proc)
         if tmp_script is not None:
             tmp_script.unlink(missing_ok=True)
 
@@ -320,6 +351,7 @@ async def _execute_action(
         output = f"Failed to execute: {exc}"
         passed = False
     finally:
+        await terminate_process(proc)
         if tmp_script is not None:
             tmp_script.unlink(missing_ok=True)
 

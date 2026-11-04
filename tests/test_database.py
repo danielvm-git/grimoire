@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlmodel import select
 
 from grimoire.database import create_tables, get_engine, get_session
 
@@ -278,3 +279,92 @@ async def test_ensure_schema_compatibility_adds_missing_run_columns(
         columns = {row[1] for row in result.fetchall()}
 
     assert {"owner_id", "heartbeat_at", "lease_expires_at"} <= columns
+
+
+async def test_cleanup_does_not_interrupt_live_owner(engine: AsyncEngine) -> None:
+    """A live owner's future lease must survive startup cleanup (F2)."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.database import CheckRunRecord, cleanup_stale_runs
+
+    async with AsyncSession(engine) as session:
+        session.add(
+            CheckRunRecord(
+                check_slug="live",
+                check_name="Live",
+                triggered_by="cron",
+                status="running",
+                owner_id="worker-A",
+                lease_expires_at=datetime.now(UTC) + timedelta(seconds=60),
+            )
+        )
+        await session.commit()
+
+    await cleanup_stale_runs(engine)
+
+    async with AsyncSession(engine) as session:
+        row = (
+            await session.exec(
+                select(CheckRunRecord).where(CheckRunRecord.check_slug == "live")
+            )
+        ).first()
+        assert row is not None
+        assert row.status == "running"
+
+
+async def test_unknown_status_is_reclaimed(engine: AsyncEngine) -> None:
+    """A corrupt status is reclaimed instead of stranding forever (F9)."""
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.database import CheckRunRecord, reclaim_expired_runs
+
+    async with AsyncSession(engine) as session:
+        session.add(
+            CheckRunRecord(
+                check_slug="corrupt",
+                check_name="Corrupt",
+                triggered_by="manual",
+                status="bogus",
+            )
+        )
+        await session.commit()
+
+    await reclaim_expired_runs(engine)
+
+    async with AsyncSession(engine) as session:
+        row = (
+            await session.exec(
+                select(CheckRunRecord).where(CheckRunRecord.check_slug == "corrupt")
+            )
+        ).first()
+        assert row is not None
+        assert row.status == "interrupted"
+
+
+async def test_complete_run_is_compare_and_set(engine: AsyncEngine) -> None:
+    """A second completion cannot reopen a terminal run (F1)."""
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.database import (
+        CheckRunRecord,
+        complete_run,
+        mark_run_running,
+    )
+
+    async with AsyncSession(engine) as session:
+        run = CheckRunRecord(check_slug="cas", check_name="CAS", triggered_by="manual")
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+        run_id = run.id
+
+    assert await mark_run_running(engine, CheckRunRecord, run_id) is True
+    assert await complete_run(engine, CheckRunRecord, run_id) is True
+    assert await complete_run(engine, CheckRunRecord, run_id) is False
+
+    async with AsyncSession(engine) as session:
+        row = await session.get(CheckRunRecord, run_id)
+        assert row is not None
+        assert row.status == "completed"

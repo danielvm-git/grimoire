@@ -458,3 +458,23 @@ class TestActionProgress:
         assert not is_action_running("test-action")
         assert get_action_progress("test-action") is None
         assert result.results[0].passed is False
+
+
+def test_stale_action_memory_flag_expires() -> None:
+    """A dropped action task's memory entry expires (F4)."""
+    from datetime import UTC, datetime, timedelta
+
+    from grimoire.actions.engine import (
+        ActionProgress,
+        _running_actions,
+        is_action_running,
+    )
+
+    _running_actions["stale"] = ActionProgress(
+        expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
+    try:
+        assert is_action_running("stale") is False
+        assert "stale" not in _running_actions
+    finally:
+        _running_actions.pop("stale", None)

@@ -13,10 +13,10 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.checks.engine import (
+    CheckConflictError,
     clear_check_running,
-    create_check_run,
+    prepare_check_run,
     run_check_for_all_targets,
-    try_start_check,
 )
 from grimoire.database import CheckResultRecord, CheckRunRecord, CheckToggleRecord
 from grimoire.db_exec import exec_raw
@@ -83,6 +83,10 @@ class CheckRunDetail(BaseModel):
     started_at: datetime
     finished_at: datetime | None
     results: list[CheckRepoResultResponse]
+
+
+class ToggleRequest(BaseModel):
+    enabled: bool
 
 
 # ---------------------------------------------------------------------------
@@ -273,17 +277,13 @@ async def run_check_endpoint(
     assert _workspace is not None
     assert _engine is not None
 
-    if not try_start_check(slug):
-        raise HTTPException(status_code=409, detail="Check is already running")
-
     workspace = _workspace
     engine = _engine
 
     try:
-        run_id = await create_check_run(engine, check, "manual")
-    except Exception:
-        clear_check_running(slug)
-        raise
+        run_id = await prepare_check_run(engine, check, "manual")
+    except CheckConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     async def _run_in_background() -> None:
         try:
@@ -335,6 +335,30 @@ async def toggle_check(slug: str) -> dict[str, object]:
         await session.commit()
 
     return {"slug": slug, "enabled": check.enabled}
+
+
+@router.put("/{slug}/enabled")
+async def set_check_enabled(slug: str, payload: ToggleRequest) -> dict[str, object]:
+    """Set a check's enabled state idempotently.
+
+    ``POST /toggle`` flips the current value, so a retried request flips twice.
+    This desired-state endpoint is safe to replay.
+    """
+    check = _find_check(slug)
+    assert _engine is not None
+
+    check.enabled = payload.enabled
+
+    async with AsyncSession(_engine) as session:
+        existing = await session.get(CheckToggleRecord, slug)
+        if existing:
+            existing.enabled = payload.enabled
+            session.add(existing)
+        else:
+            session.add(CheckToggleRecord(check_slug=slug, enabled=payload.enabled))
+        await session.commit()
+
+    return {"slug": slug, "enabled": payload.enabled}
 
 
 @router.get("/{slug}/status")

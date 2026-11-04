@@ -589,6 +589,47 @@ class TestCheckRunStatusPartial:
         assert resp.status_code == 200
         assert resp.headers.get("HX-Trigger") == "checkRunCompleted"
 
+    async def test_db_running_state_falls_back(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        """A cron/MCP run is visible even when memory is empty (F13)."""
+        from sqlmodel import select
+        from sqlmodel.ext.asyncio.session import AsyncSession
+
+        import grimoire.checks.router as checks_router
+        from grimoire.database import CheckRunRecord
+
+        engine = checks_router._engine
+        assert engine is not None
+        async with AsyncSession(engine) as session:
+            session.add(
+                CheckRunRecord(
+                    check_slug="watchdog",
+                    check_name="Watchdog",
+                    triggered_by="cron",
+                    status="running",
+                )
+            )
+            await session.commit()
+        try:
+            resp = await web_client_with_checks.get(
+                "/partials/check-run-status/watchdog"
+            )
+            assert "Running" in resp.text
+        finally:
+            async with AsyncSession(engine) as session:
+                rows = (
+                    await session.exec(
+                        select(CheckRunRecord).where(
+                            CheckRunRecord.check_slug == "watchdog",
+                            CheckRunRecord.status == "running",
+                        )
+                    )
+                ).all()
+                for row in rows:
+                    await session.delete(row)
+                await session.commit()
+
     async def test_no_trigger_when_still_running(
         self, web_client_with_checks: AsyncClient
     ) -> None:

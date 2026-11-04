@@ -72,6 +72,10 @@ class ActionRunDetail(BaseModel):
     results: list[ActionRepoResultResponse]
 
 
+class ToggleRequest(BaseModel):
+    enabled: bool
+
+
 # ---------------------------------------------------------------------------
 # Module-level state — set from outside
 # ---------------------------------------------------------------------------
@@ -260,8 +264,6 @@ async def run_action_endpoint(
                 specific_repo=repo,
                 run_id=run_id,
             )
-        except ActionConflictError as exc:
-            logger.warning("Action '%s' not run: %s", action.slug, exc, exc_info=True)
         except Exception:
             logger.exception("Action '%s' background run failed", action.slug)
         finally:
@@ -317,3 +319,23 @@ async def toggle_action(slug: str) -> dict[str, object]:
         await session.commit()
 
     return {"slug": slug, "enabled": action.enabled}
+
+
+@router.put("/{slug}/enabled")
+async def set_action_enabled(slug: str, payload: ToggleRequest) -> dict[str, object]:
+    """Set an action's enabled state idempotently (safe to replay)."""
+    action = _find_action(slug)
+    assert _engine is not None
+
+    action.enabled = payload.enabled
+
+    async with AsyncSession(_engine) as session:
+        existing = await session.get(ActionToggleRecord, slug)
+        if existing:
+            existing.enabled = payload.enabled
+            session.add(existing)
+        else:
+            session.add(ActionToggleRecord(action_slug=slug, enabled=payload.enabled))
+        await session.commit()
+
+    return {"slug": slug, "enabled": payload.enabled}

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.checks.engine import OUTPUT_SIZE_CAP, run_check
@@ -269,3 +274,148 @@ class TestRunCheckForAllTargets:
                 )
             ).all()
         assert [r.branch for r in rows] == ["main"]
+
+
+class TestCancellation:
+    async def test_cancelled_run_kills_child(self, tmp_path: Path) -> None:
+        """Cancelling a check must kill its whole process group (F8)."""
+        engine = await get_engine(str(tmp_path / "cancel.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+        pid_file = tmp_path / "child.pid"
+        check = _check(f"sleep 30 & echo $! > {pid_file}; wait")
+
+        task = asyncio.create_task(
+            run_check(check, _repo(), "main", ws, engine)  # type: ignore[arg-type]
+        )
+        for _ in range(100):
+            if pid_file.exists() and pid_file.read_text().strip():
+                break
+            await asyncio.sleep(0.05)
+        assert pid_file.exists(), "child never started"
+        pid = int(pid_file.read_text().strip())
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        for _ in range(40):
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            pytest.fail("child survived cancellation")
+
+
+async def test_terminal_state_is_absorbing(tmp_path: Path) -> None:
+    """A reclaimed run must never be reopened by the engine (F1)."""
+    from grimoire.checks.engine import run_check_for_all_targets
+    from grimoire.database import CheckRunRecord, reclaim_expired_runs
+
+    engine = await get_engine(str(tmp_path / "absorbing.db"))
+    await create_tables(engine)
+    check = CheckDefinition(
+        name="Slow",
+        slug="slow",
+        description="",
+        targets=TargetSpec(list=["acme/repo"]),
+        script="sleep 0.5",
+    )
+    task = asyncio.create_task(
+        run_check_for_all_targets(
+            check,
+            [_repo()],
+            MockWorkspace(tmp_path),
+            engine,  # type: ignore[arg-type]
+        )
+    )
+    await asyncio.sleep(0.15)
+
+    async with AsyncSession(engine) as session:
+        row = (
+            await session.exec(
+                select(CheckRunRecord).where(CheckRunRecord.check_slug == "slow")
+            )
+        ).first()
+        assert row is not None
+        row.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        session.add(row)
+        await session.commit()
+
+    await reclaim_expired_runs(engine)
+    await task
+
+    async with AsyncSession(engine) as session:
+        row = (
+            await session.exec(
+                select(CheckRunRecord).where(CheckRunRecord.check_slug == "slow")
+            )
+        ).first()
+        assert row is not None
+        assert row.status == "interrupted"
+
+
+async def test_two_entry_points_run_once(tmp_path: Path) -> None:
+    """Cron and MCP must not both execute the same check (F3)."""
+    from grimoire.checks.engine import CheckConflictError, run_check_for_all_targets
+
+    engine = await get_engine(str(tmp_path / "admission.db"))
+    await create_tables(engine)
+    counter = tmp_path / "count.txt"
+    check = _check(f"echo x >> {counter}; sleep 0.2")
+
+    results = await asyncio.gather(
+        run_check_for_all_targets(
+            check,
+            [_repo()],
+            MockWorkspace(tmp_path),
+            engine,  # type: ignore[arg-type]
+            triggered_by="cron",
+        ),
+        run_check_for_all_targets(
+            check,
+            [_repo()],
+            MockWorkspace(tmp_path),
+            engine,  # type: ignore[arg-type]
+            triggered_by="mcp",
+        ),
+        return_exceptions=True,
+    )
+
+    assert sum(isinstance(r, CheckConflictError) for r in results) == 1
+    assert len(counter.read_text().splitlines()) == 1
+
+
+async def test_prepare_check_run_conflict(tmp_path: Path) -> None:
+    """A second admission for the same slug raises (F3)."""
+    from grimoire.checks.engine import (
+        CheckConflictError,
+        _running_checks,
+        prepare_check_run,
+    )
+
+    engine = await get_engine(str(tmp_path / "conflict.db"))
+    await create_tables(engine)
+    check = _check("echo ok")
+    try:
+        await prepare_check_run(engine, check, "manual")
+        with pytest.raises(CheckConflictError):
+            await prepare_check_run(engine, check, "manual")
+    finally:
+        _running_checks.pop(check.slug, None)
+
+
+def test_stale_memory_flag_expires() -> None:
+    """A dropped task's memory entry expires instead of blocking forever (F4)."""
+    from grimoire.checks.engine import CheckProgress, _running_checks, is_check_running
+
+    _running_checks["stale"] = CheckProgress(
+        expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
+    try:
+        assert is_check_running("stale") is False
+        assert "stale" not in _running_checks
+    finally:
+        _running_checks.pop("stale", None)

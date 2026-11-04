@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
@@ -12,6 +13,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from grimoire.mcp.tools import MCPToolHandlers
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -121,4 +124,9 @@ def mount_mcp_server(
         auth_app.mount("/", sse_app)
         app.mount(endpoint_path, auth_app)
     else:
+        logger.warning(
+            "MCP endpoint mounted at %s without authentication "
+            "(token is empty); set mcp.token to require auth",
+            endpoint_path,
+        )
         app.mount(endpoint_path, sse_app)

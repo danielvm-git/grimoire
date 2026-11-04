@@ -101,7 +101,15 @@ class WorkspaceManager:
                 await self._configure_identity(bare_dir)
 
                 for branch in branches:
-                    await self._ensure_worktree(repo.full_name, branch, bare_dir)
+                    try:
+                        await self._ensure_worktree(repo.full_name, branch, bare_dir)
+                    except WorkspaceError:
+                        logger.warning(
+                            "failed to add worktree for %s/%s",
+                            repo.full_name,
+                            branch,
+                            exc_info=True,
+                        )
 
         await asyncio.gather(*[_setup_one(repo) for repo in repos])
 
@@ -162,6 +170,10 @@ class WorkspaceManager:
             if not bare_dir.exists():
                 await self._clone_bare(full_name)
                 await self._configure_identity(bare_dir)
+            else:
+                # A directory is not proof of a usable clone: repair a partial
+                # clone left by a crash before any worktree operation uses it.
+                await self._ensure_bare_initialized(bare_dir)
 
             if not workdir.exists():
                 await self._ensure_worktree(full_name, branch, bare_dir)
@@ -325,3 +337,4 @@ class WorkspaceManager:
             logger.warning(
                 "failed to add worktree for %s/%s: %s", full_name, branch, exc
             )
+            raise

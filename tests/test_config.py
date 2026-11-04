@@ -15,6 +15,7 @@ from grimoire.config import (
     _get_xdg_config_path,
     _get_xdg_data_dir,
     load_config,
+    resolve_config_path,
     resolve_env_vars,
 )
 
@@ -582,3 +583,24 @@ class TestConfigPathResolution:
         assert config.workspace_dir == grimoire_data / "workspace"
         assert config.database_path == grimoire_data / "grimoire.db"
         assert config.log_file == grimoire_data / "grimoire.log"
+
+
+def test_resolve_config_path_matches_load_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The save-weights API and load_config must agree on the file (F11)."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        textwrap.dedent(
+            """\
+            github:
+              token: "test"
+            repositories:
+              - repo: "owner/repo"
+            """
+        )
+    )
+    monkeypatch.setenv("GRIMOIRE_CONFIG", str(config_file))
+
+    assert resolve_config_path() == config_file
+    assert load_config().github.token == "test"

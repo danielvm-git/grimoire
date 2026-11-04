@@ -30,6 +30,7 @@ from grimoire.database import (
 )
 from grimoire.github.client import GitHubClient
 from grimoire.github.service import (
+    _map_conclusion,
     fetch_repository_stats,
     load_stats_from_db,
     prune_stale_data,
@@ -134,6 +135,76 @@ async def test_resolve_skips_archived(client: GitHubClient) -> None:
     config = _make_config(repos=[StaticRepoSource(repo="owner/archived")])
     repos = await resolve_repositories(config, client)
     assert len(repos) == 0
+
+
+@respx.mock
+async def test_archived_survives_304(client: GitHubClient, engine: AsyncEngine) -> None:
+    """A repo observed archived must stay skipped on a later 304 (F5)."""
+    url = "https://api.github.com/repos/owner/was-archived"
+    respx.get(url).mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json={
+                    "full_name": "owner/was-archived",
+                    "default_branch": "main",
+                    "archived": False,
+                },
+                headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+            ),
+            httpx.Response(
+                200,
+                json={
+                    "full_name": "owner/was-archived",
+                    "default_branch": "main",
+                    "archived": True,
+                },
+                headers={"X-RateLimit-Remaining": "4998", "X-RateLimit-Limit": "5000"},
+            ),
+            httpx.Response(
+                304,
+                headers={"X-RateLimit-Remaining": "4997", "X-RateLimit-Limit": "5000"},
+            ),
+        ]
+    )
+    config = _make_config(repos=[StaticRepoSource(repo="owner/was-archived")])
+
+    repos = await resolve_repositories(config, client)
+    assert len(repos) == 1
+    await save_stats_to_db(
+        engine,
+        [
+            RepositoryStats(
+                full_name="owner/was-archived",
+                default_branch="main",
+                fetched_at=datetime.now(UTC),
+            )
+        ],
+        repos,
+    )
+
+    assert await resolve_repositories(config, client) == []
+    assert await resolve_repositories(config, client) == []
+
+
+async def test_archived_tombstone_not_pruned(engine: AsyncEngine) -> None:
+    """Archived tombstones survive pruning so a 304 can still skip them (F5)."""
+    async with AsyncSession(engine) as session:
+        session.add(
+            CachedRepository(
+                full_name="owner/was-archived",
+                default_branch="main",
+                archived=True,
+            )
+        )
+        await session.commit()
+
+    await prune_stale_data(engine, [])
+
+    async with AsyncSession(engine) as session:
+        row = await session.get(CachedRepository, "owner/was-archived")
+        assert row is not None
+        assert row.archived is True
 
 
 @respx.mock
@@ -973,3 +1044,34 @@ async def test_refresh_guard_rejects_concurrent_start(
 
     with pytest.raises(service_module.RefreshAlreadyRunning):
         await refresh_all_stats(object(), object())  # type: ignore[arg-type]
+
+
+async def test_refresh_exception_resets_active(
+    client: GitHubClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed refresh must not leave is_refresh_running() stuck (F12)."""
+    from grimoire.github import service as service_module
+
+    async def boom(*args: object, **kwargs: object) -> list[object]:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(service_module, "resolve_repositories", boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await refresh_all_stats(_make_config(), client)
+
+    assert not service_module.is_refresh_running()
+    assert service_module.get_refresh_progress() is None
+
+
+def test_every_github_conclusion_maps_explicitly() -> None:
+    """Terminal failures must not fall through to 'unknown' (F6)."""
+    assert _map_conclusion("startup_failure") == "failure"
+    assert _map_conclusion("stale") == "failure"
+    assert _map_conclusion("success") == "success"
+    assert _map_conclusion("failure") == "failure"
+    assert _map_conclusion("cancelled") == "failure"
+    assert _map_conclusion("timed_out") == "failure"
+    assert _map_conclusion("action_required") == "pending"
+    assert _map_conclusion("queued") == "pending"
+    assert _map_conclusion("in_progress") == "pending"

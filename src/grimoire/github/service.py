@@ -38,6 +38,7 @@ from grimoire.models import (
     TrackedRepository,
     WorkflowStatus,
 )
+from grimoire.observability.metrics import remove_repo_metrics
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +159,36 @@ async def resolve_repositories(
     return list(seen.values())
 
 
+async def _remember_archived_repo(
+    client: GitHubClient, full_name: str, default_branch: str = "main"
+) -> None:
+    """Persist an archived observation so a later ETag 304 still skips it.
+
+    A tracked repo that becomes archived is removed from the active set, but
+    without a tombstone the cached ``archived`` flag stays False and the next
+    304 re-tracks it (bug: archived-cache-roundtrip).
+    """
+    now = datetime.now(UTC)
+    async with AsyncSession(client._engine) as session:
+        row = await session.get(CachedRepository, full_name)
+        if row is None:
+            session.add(
+                CachedRepository(
+                    full_name=full_name,
+                    default_branch=default_branch,
+                    archived=True,
+                    fetched_at=now,
+                )
+            )
+        else:
+            row.archived = True
+            if not row.default_branch:
+                row.default_branch = default_branch
+            row.fetched_at = now
+            session.add(row)
+        await session.commit()
+
+
 async def _resolve_static(
     source: StaticRepoSource,
     client: GitHubClient,
@@ -181,6 +212,7 @@ async def _resolve_static(
             archived = data.get("archived", False)
 
         if archived:
+            await _remember_archived_repo(client, source.repo, default_branch)
             logger.info("Skipping archived repository %s", source.repo)
             return None
 
@@ -226,10 +258,11 @@ async def _resolve_team(
         full_name = repo_data.get("full_name", "")
         if full_name in exclude_set:
             continue
+        default_branch = repo_data.get("default_branch", "main")
         if repo_data.get("archived", False):
+            await _remember_archived_repo(client, full_name, default_branch)
             continue
 
-        default_branch = repo_data.get("default_branch", "main")
         resolved.append(
             TrackedRepository(
                 full_name=full_name,
@@ -479,6 +512,8 @@ def _map_conclusion(conclusion: str) -> str:
         "failure": "failure",
         "cancelled": "failure",
         "timed_out": "failure",
+        "startup_failure": "failure",
+        "stale": "failure",
         "action_required": "pending",
         "pending": "pending",
         "queued": "pending",
@@ -531,20 +566,20 @@ async def refresh_all_stats(
         raise RefreshAlreadyRunning("A data refresh is already in progress")
     _refresh_active = True
 
-    # Compute a preliminary repo count from config so the progress bar can
-    # show a meaningful denominator before any async work completes.
-    # Static repos are known exactly; team repos need API resolution, so we
-    # fall back to the cached count if available.
-    preliminary_total = sum(
-        1 for src in config.repositories if isinstance(src, StaticRepoSource)
-    )
-
-    # Mark refresh as running immediately (before async work begins) so that
-    # polling endpoints see it as in-progress right away.
-    progress = RefreshProgress(completed=0, total=preliminary_total)
+    # Mark refresh as running immediately (before any async work or config
+    # inspection) so polling endpoints always see a progress object.
+    progress = RefreshProgress()
     _refresh_progress = progress
 
     try:
+        # Compute a preliminary repo count from config so the progress bar can
+        # show a meaningful denominator before any async work completes.
+        # Static repos are known exactly; team repos need API resolution, so we
+        # fall back to the cached count if available.
+        progress.total = sum(
+            1 for src in config.repositories if isinstance(src, StaticRepoSource)
+        )
+
         # Load previous data so 304 (Not Modified) responses preserve old values
         cached_repos, old_stats_list = await load_stats_from_db(client._engine)
         old_stats_map = {s.full_name: s for s in old_stats_list}
@@ -649,6 +684,7 @@ async def save_stats_to_db(
                 CachedRepository(
                     full_name=stats.full_name,
                     default_branch=stats.default_branch,
+                    archived=False,
                     source=repo.source,
                     branches_json=json.dumps(repo.branches),
                     open_issues=stats.open_issues,
@@ -829,7 +865,7 @@ async def prune_removed_repos(engine: AsyncEngine, config: GrimoireConfig) -> in
     if not configured_names:
         return 0
 
-    return await _prune_repos_from_db(engine, configured_names)
+    return len(await _prune_repos_from_db(engine, configured_names))
 
 
 async def prune_stale_data(
@@ -847,7 +883,9 @@ async def prune_stale_data(
     Returns the number of repos pruned.
     """
     active_names = {r.full_name for r in repos}
-    pruned = await _prune_repos_from_db(engine, active_names)
+    pruned_names = await _prune_repos_from_db(engine, active_names)
+    pruned = len(pruned_names)
+    remove_repo_metrics(pruned_names)
 
     # Clean up excluded workflows: for each active repo, delete cached
     # workflow statuses that no longer pass the include/exclude filter.
@@ -870,18 +908,24 @@ async def prune_stale_data(
         await session.commit()
 
     # Clean up workspace directories for pruned repos
-    if workspace_dir and pruned:
+    if workspace_dir and pruned_names:
         _prune_workspace_dirs(workspace_dir, active_names)
 
     return pruned
 
 
-async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> int:
-    """Delete DB rows for repos not in *active_names*.  Returns count pruned."""
-    pruned = 0
+async def _prune_repos_from_db(
+    engine: AsyncEngine, active_names: set[str]
+) -> list[str]:
+    """Delete DB rows for repos not in *active_names*. Returns pruned names."""
+    pruned: list[str] = []
     async with AsyncSession(engine) as session:
-        cached = (await session.exec(select(CachedRepository.full_name))).all()
-        stale_names = [name for name in cached if name not in active_names]
+        cached_rows = (await session.exec(select(CachedRepository))).all()
+        stale_names = [
+            row.full_name
+            for row in cached_rows
+            if row.full_name not in active_names and not row.archived
+        ]
 
         for fn in stale_names:
             await exec_raw(
@@ -906,11 +950,11 @@ async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> i
                 session,
                 delete(CachedRepository).where(CachedRepository.full_name == fn),  # type: ignore[arg-type]
             )
-            pruned += 1
+            pruned.append(fn)
 
         if pruned:
             await session.commit()
-            logger.info("Pruned %d repos no longer tracked: %s", pruned, stale_names)
+            logger.info("Pruned %d repos no longer tracked: %s", len(pruned), pruned)
 
     return pruned
 

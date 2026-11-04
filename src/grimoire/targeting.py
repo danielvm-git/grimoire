@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
-from grimoire.script import create_script_process
+from grimoire.script import create_script_process, terminate_process
 
 if TYPE_CHECKING:
     from grimoire.models import TrackedRepository
@@ -140,5 +140,6 @@ async def _script_matches(
         return False
 
     finally:
+        await terminate_process(proc)
         if tmp_script is not None:
             tmp_script.unlink(missing_ok=True)

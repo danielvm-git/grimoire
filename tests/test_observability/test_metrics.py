@@ -181,3 +181,13 @@ async def test_update_repo_metrics_sets_age_gauges_and_histograms() -> None:
     assert issue_hist_count >= 2
     assert pr_hist_count is not None
     assert pr_hist_count >= 2
+
+
+def test_remove_repo_metrics() -> None:
+    """Pruned repos must not keep a stale gauge series (F19)."""
+    from grimoire.observability.metrics import remove_repo_metrics
+
+    OPEN_ISSUES.labels(repo="acme/gone").set(3)
+    remove_repo_metrics(["acme/gone"])
+
+    assert all(key[0] != "acme/gone" for key in OPEN_ISSUES._metrics)

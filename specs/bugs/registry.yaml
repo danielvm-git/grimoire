@@ -721,3 +721,173 @@ bugs:
       expected_status 200, path /health. Ships via the deploy pipeline.
     risk_level: low
     commit_message: "fix(deploy): widen health check window for slow python cold start"
+
+  # -------------------------------------------------------------------------
+  # 2026-11-04 hidden-state-machine audit
+  # -------------------------------------------------------------------------
+
+  - slug: run-lifecycle-terminality
+    title: Terminal run states are not absorbing and startup cleanup ignores ownership
+    module: src/grimoire/database.py
+    severity: critical
+    status: fixed
+    description: >
+      reclaim_expired_runs() marks a run interrupted, then the engine overwrites it
+      with completed/failed. cleanup_stale_runs() interrupts every queued/running row
+      at startup, including a live worker's rows. Unknown statuses strand forever.
+    files_changed:
+      - src/grimoire/database.py
+      - src/grimoire/checks/engine.py
+      - src/grimoire/actions/engine.py
+      - src/grimoire/state.py
+      - tests/test_database.py
+      - tests/test_checks/test_engine.py
+    approach: >
+      Add RunState.CANCELLED; add transition_run() CAS plus complete_run/fail_run;
+      mark_run_running only claims queued rows; cleanup delegates to lease-based
+      reclaim; reclaim unknown statuses; include cancelled in history filters.
+    risk_level: low
+    commit_message: "fix(state): make terminal run states absorbing and owner-scoped"
+
+  - slug: check-admission-guard
+    title: Check admission guard bypassed by cron, refresh and MCP; memory flags leak
+    module: src/grimoire/checks/engine.py
+    severity: critical
+    status: fixed
+    description: >
+      Only the API/web paths called try_start_check(); cron, refresh and MCP called
+      run_check_for_all_targets() directly. Two runs for one slug executed and the
+      first finisher popped the shared memory flag.
+    files_changed:
+      - src/grimoire/checks/engine.py
+      - src/grimoire/checks/router.py
+      - src/grimoire/checks/scheduler.py
+      - src/grimoire/web/router.py
+      - src/grimoire/app.py
+      - src/grimoire/mcp/tools.py
+      - tests/test_checks/test_engine.py
+    approach: >
+      Add CheckConflictError and prepare_check_run() under _check_lock; all entry
+      points use the engine; add a memory lease TTL; remove the dead lock usage.
+    risk_level: low
+    commit_message: "fix(checks): enforce a single admission guard for every trigger"
+
+  - slug: archived-cache-roundtrip
+    title: Archived status never round-trips through the repository cache
+    module: src/grimoire/github/service.py
+    severity: high
+    status: fixed
+    description: >
+      CachedRepository.archived was read on a 304 but never written, and the prune
+      step deleted the row for an archived repo, so a 304 re-tracked it.
+    files_changed:
+      - src/grimoire/github/service.py
+      - tests/test_github/test_service.py
+    approach: >
+      Persist an archived tombstone when the API reports archived=True; write
+      archived=False explicitly for tracked repos; keep tombstones during prune.
+    risk_level: low
+    commit_message: "fix(github): persist archived status across ETag cache hits"
+
+  - slug: workflow-conclusion-mapping
+    title: Workflow conclusion startup_failure is projected as unknown
+    module: src/grimoire/github/service.py
+    severity: high
+    status: fixed
+    description: >
+      _map_conclusion() had no entry for startup_failure or stale, so terminal CI
+      failures rendered as gray unknown and never reached the backlog.
+    files_changed:
+      - src/grimoire/github/service.py
+      - tests/test_github/test_service.py
+    approach: >
+      Map startup_failure and stale to failure; add an exhaustive conclusion test.
+    risk_level: low
+    commit_message: "fix(github): map startup_failure and stale to failure"
+
+  - slug: workspace-partial-bare
+    title: Partial bare clone is not repaired by reset_workdir and worktree errors are swallowed
+    module: src/grimoire/workspace/manager.py
+    severity: high
+    status: fixed
+    description: >
+      reset_workdir() only cloned when the bare dir was absent and never called
+      _ensure_bare_initialized(); _ensure_worktree() swallowed WorkspaceError.
+    files_changed:
+      - src/grimoire/workspace/manager.py
+      - tests/test_workspace/test_manager.py
+    approach: >
+      Repair a partial bare clone before worktree use; raise from _ensure_worktree;
+      setup logs a per-branch failure instead of aborting the repo.
+    risk_level: low
+    commit_message: "fix(workspace): repair partial bare clones and propagate worktree errors"
+
+  - slug: subprocess-cancellation-leak
+    title: Subprocess survives task cancellation and becomes an orphan
+    module: src/grimoire/script.py
+    severity: high
+    status: fixed
+    description: >
+      The engines only killed the child on TimeoutError; CancelledError left the
+      process group running.
+    files_changed:
+      - src/grimoire/script.py
+      - src/grimoire/checks/engine.py
+      - src/grimoire/actions/engine.py
+      - src/grimoire/targeting.py
+      - tests/test_checks/test_engine.py
+    approach: >
+      Start scripts in a new session and add terminate_process() to every finally.
+    risk_level: low
+    commit_message: "fix(script): kill and reap the process group on cancellation"
+
+  - slug: config-refresh-idempotency
+    title: Config path divergence, refresh claimed state, duplicate running sources, non-idempotent toggles
+    module: src/grimoire/config.py
+    severity: medium
+    status: fixed
+    description: >
+      Save-weights re-derived ./config.yaml instead of the loaded path; a refresh
+      exception before the try left _refresh_active stuck; the check partial read
+      memory only; POST /toggle flips on retry.
+    files_changed:
+      - src/grimoire/config.py
+      - src/grimoire/app.py
+      - src/grimoire/github/service.py
+      - src/grimoire/web/router.py
+      - src/grimoire/checks/router.py
+      - src/grimoire/actions/router.py
+      - tests/test_config.py
+      - tests/test_github/test_service.py
+      - tests/test_web/test_router.py
+      - tests/test_checks/test_router.py
+      - tests/test_actions/test_router.py
+    approach: >
+      Extract resolve_config_path(); set refresh progress before the try; add the
+      DB fallback to the check partial; add PUT /enabled desired-state endpoints.
+    risk_level: low
+    commit_message: "fix(config,web): unify config path, refresh state and toggle idempotency"
+
+  - slug: dead-code-observability
+    title: Dead pagination state, unreachable handler, metric label leak, empty MCP token
+    module: src/grimoire/github/client.py
+    severity: low
+    status: fixed
+    description: >
+      _last_next_link was written but never read; an unreachable ActionConflictError
+      handler remained; pruned repos kept stale Prometheus gauges; an empty MCP token
+      disabled auth silently.
+    files_changed:
+      - src/grimoire/github/client.py
+      - src/grimoire/actions/router.py
+      - src/grimoire/observability/metrics.py
+      - src/grimoire/github/service.py
+      - src/grimoire/mcp/server.py
+      - tests/test_github/test_client.py
+      - tests/test_observability/test_metrics.py
+      - tests/test_mcp/test_server.py
+    approach: >
+      Remove the dead cursor and handler; add remove_repo_metrics(); log a warning
+      when the MCP endpoint mounts without a token.
+    risk_level: low
+    commit_message: "chore: remove dead pagination state and stale metric labels"
