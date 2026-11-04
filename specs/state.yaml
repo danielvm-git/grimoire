@@ -46,10 +46,10 @@ bug_cycle:
     - dead-code-observability
 
 release:
-  target_version: null
-  last_tag: null
+  target_version: "0.11.6"
+  last_tag: "v0.11.6"
   last_publish: null
-  ci_verified: false
+  ci_verified: true
 
 metrics:
   story_start: "2026-07-30T12:00:00Z"
@@ -59,14 +59,14 @@ metrics:
 
 git:
   branch: main
-  hash: 0bcf75e
-  pushed: false
+  hash: a276e62
+  pushed: true
 
 handoff:
   last_step_completed: >
-    release-branch: fast-forwarded fix/audit-gaps into main (0bcf75e), pushed to
-    origin. just check green (490 passed, 85% coverage); all 14 audit checks pass.
-    CI verification pending.
+    release-branch: merged fix/audit-gaps into main, pushed origin, CI green
+    (test/build/release), semantic-release published v0.11.6. just check green
+    (490 passed, 85% coverage); all 14 audit checks pass. Branch cleaned up.
   open_decisions: []
   required_reading:
     - specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
