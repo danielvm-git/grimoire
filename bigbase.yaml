@@ -5,7 +5,7 @@ build:
 start:
   # Direct venv entrypoint: the platform's auto path runs `uv run`, which can
   # stall resolving the environment at startup and never bind the port.
-  command: "./run.sh"
+  command: "sh run.sh"
   port: 8000
 health_check:
   path: /health
