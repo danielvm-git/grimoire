@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.11.5] - 2026-11-04
+
+### Fixed
+
+- **deploy:** force Python 3.13 in the deploy environment ([#36](https://github.com/danielvm-git/grimoire/issues/36)) ([7421bba](https://github.com/danielvm-git/grimoire/commit/7421bba89c8c98073f476dd4fee385a82582c09c))
+
 ## [0.11.4] - 2026-11-04
 
 ### Fixed
