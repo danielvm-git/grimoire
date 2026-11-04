@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.11.2] - 2026-11-04
+
+### Fixed
+
+- **deploy:** start the app from the prebuilt venv ([#33](https://github.com/danielvm-git/grimoire/issues/33)) ([08490cd](https://github.com/danielvm-git/grimoire/commit/08490cd86712e72fe3c26e611936361eebb57a43))
+
 ## [0.11.1] - 2026-11-04
 
 ### Fixed
