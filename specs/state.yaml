@@ -3,7 +3,7 @@
 
 workflow_mode: solo-git
 
-active_flow: fix_bug
+active_flow: idle
 active_epic_id: e11
 active_story_id: null
 completed_epic: true
@@ -32,6 +32,7 @@ bug_cycle:
     - diagnose-root
     - develop-tdd
     - validate-fix
+    - release-branch
   audit_source: specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
   resolution_commit: 44d5e4f
   scope:
@@ -48,7 +49,7 @@ release:
   target_version: null
   last_tag: null
   last_publish: null
-  ci_verified: true
+  ci_verified: false
 
 metrics:
   story_start: "2026-07-30T12:00:00Z"
@@ -57,18 +58,18 @@ metrics:
   bcp_per_hour: null
 
 git:
-  branch: fix/audit-gaps
-  hash: 44d5e4f
+  branch: main
+  hash: 0bcf75e
   pushed: false
 
 handoff:
   last_step_completed: >
-    fix_bug steps 1-4 complete: eight capsules fixed on branch fix/audit-gaps
-    in commit 44d5e4f. just check green (490 passed); all 14 audit checks pass.
-    Step 5 release-branch is pending user approval for push/PR.
+    release-branch: fast-forwarded fix/audit-gaps into main (0bcf75e), pushed to
+    origin. just check green (490 passed, 85% coverage); all 14 audit checks pass.
+    CI verification pending.
   open_decisions: []
   required_reading:
     - specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
     - specs/bugs/BUG-2026-11-04T000000-run-lifecycle-terminality.md
-  next_skill: release-branch
+  next_skill: survey-context
 
