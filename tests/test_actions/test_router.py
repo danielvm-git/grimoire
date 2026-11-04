@@ -121,7 +121,8 @@ class TestRunAction:
         assert resp.status_code == 200
         body = resp.json()
         assert body["action_slug"] == "test-action"
-        assert body["status"] == "running"
+        assert body["status"] == "queued"
+        assert body["id"] is not None
         assert body["results"] == []
 
     async def test_run_action_not_found(self, action_client: AsyncClient) -> None:
@@ -150,7 +151,7 @@ class TestRunAction:
         resp = await action_client.post("/api/actions/test-action/run?repo=acme/repo")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "running"
+        assert body["status"] == "queued"
 
 
 class TestRunHistory:

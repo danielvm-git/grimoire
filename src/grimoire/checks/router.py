@@ -9,16 +9,18 @@ from typing import TYPE_CHECKING
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.checks.engine import (
-    is_check_running,
+    clear_check_running,
+    create_check_run,
     run_check_for_all_targets,
     try_start_check,
 )
 from grimoire.database import CheckResultRecord, CheckRunRecord, CheckToggleRecord
 from grimoire.db_exec import exec_raw
+from grimoire.state import RunState
 
 logger = logging.getLogger(__name__)
 
@@ -277,6 +279,12 @@ async def run_check_endpoint(
     workspace = _workspace
     engine = _engine
 
+    try:
+        run_id = await create_check_run(engine, check, "manual")
+    except Exception:
+        clear_check_running(slug)
+        raise
+
     async def _run_in_background() -> None:
         try:
             await run_check_for_all_targets(
@@ -286,18 +294,23 @@ async def run_check_endpoint(
                 engine,
                 specific_repo=repo,
                 triggered_by="manual",
+                run_id=run_id,
             )
         except Exception:
             logger.exception("Check '%s' background run failed", slug)
+        finally:
+            # Guarantees the in-memory flag is released even if the engine
+            # raised before reaching its own cleanup.
+            clear_check_running(slug)
 
     background_tasks.add_task(_run_in_background)
 
     return CheckRunDetail(
-        id=0,
+        id=run_id,
         check_slug=slug,
         check_name=check.name,
         triggered_by="manual",
-        status="running",
+        status=RunState.QUEUED.value,
         started_at=datetime.now(timezone.utc),
         finished_at=None,
         results=[],
@@ -326,6 +339,21 @@ async def toggle_check(slug: str) -> dict[str, object]:
 
 @router.get("/{slug}/status")
 async def check_status(slug: str) -> dict[str, object]:
-    """Return whether a check is currently running."""
+    """Return whether a check is currently queued or running.
+
+    Reads the database, matching the action status endpoint, so the answer does
+    not depend on which process happens to hold the in-memory flag.
+    """
     _find_check(slug)
-    return {"slug": slug, "running": is_check_running(slug)}
+    assert _engine is not None
+
+    async with AsyncSession(_engine) as session:
+        stmt = select(CheckRunRecord).where(
+            col(CheckRunRecord.check_slug) == slug,
+            col(CheckRunRecord.status).in_(
+                (RunState.QUEUED.value, RunState.RUNNING.value)
+            ),
+        )
+        running = (await session.exec(stmt)).first() is not None
+
+    return {"slug": slug, "running": running}

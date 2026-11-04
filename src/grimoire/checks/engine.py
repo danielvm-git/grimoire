@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import shutil
 import tempfile
 import time
@@ -12,10 +13,16 @@ from typing import TYPE_CHECKING
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.database import CheckResultRecord, CheckRunRecord
+from grimoire.database import (
+    CheckResultRecord,
+    CheckRunRecord,
+    mark_run_running,
+    start_run_heartbeat,
+)
 from grimoire.models import CheckResult
 from grimoire.observability.metrics import update_check_metrics
 from grimoire.script import create_script_process, read_stdout_stderr_capped
+from grimoire.state import RunState
 from grimoire.targeting import resolve_targets, target_env
 
 if TYPE_CHECKING:
@@ -66,6 +73,31 @@ def try_start_check(slug: str) -> bool:
 def get_check_progress(slug: str) -> CheckProgress | None:
     """Return the progress tracker for a running check, or None if idle."""
     return _running_checks.get(slug)
+
+
+def clear_check_running(slug: str) -> None:
+    """Drop any in-memory tracking for *slug* (idempotent)."""
+    _running_checks.pop(slug, None)
+
+
+async def create_check_run(
+    engine: AsyncEngine, check: CheckDefinition, triggered_by: str
+) -> int:
+    """Persist a queued check run and return its id."""
+    record = CheckRunRecord(
+        check_slug=check.slug,
+        check_name=check.name,
+        triggered_by=triggered_by,
+        status=RunState.QUEUED.value,
+    )
+    async with AsyncSession(engine) as session:
+        session.add(record)
+        await session.commit()
+        await session.refresh(record)
+    run_id = record.id
+    if run_id is None:
+        raise RuntimeError("check run record was not assigned an id")
+    return run_id
 
 
 async def run_check(
@@ -199,24 +231,13 @@ async def run_check_for_all_targets(
     engine: AsyncEngine,
     specific_repo: str | None = None,
     triggered_by: str = "manual",
+    run_id: int | None = None,
 ) -> list[CheckResult]:
     """Resolve targets and run the check for every repo × branch combination."""
-    now = datetime.now(timezone.utc)
-
-    # Create a run record to group all results
-    run_record = CheckRunRecord(
-        check_slug=check.slug,
-        check_name=check.name,
-        triggered_by=triggered_by,
-        status="running",
-        started_at=now,
-    )
-    async with AsyncSession(engine) as session:
-        session.add(run_record)
-        await session.commit()
-        await session.refresh(run_record)
-
-    run_id: int = run_record.id  # type: ignore[assignment]
+    if run_id is None:
+        run_id = await create_check_run(engine, check, triggered_by)
+    await mark_run_running(engine, CheckRunRecord, run_id)
+    heartbeat = start_run_heartbeat(engine, CheckRunRecord, run_id)
 
     # Register in-memory tracking (may already be set by try_start_check)
     if check.slug not in _running_checks:
@@ -257,7 +278,7 @@ async def run_check_for_all_targets(
         async with AsyncSession(engine) as session:
             record = await session.get(CheckRunRecord, run_id)
             if record is not None:
-                record.status = "completed"
+                record.status = RunState.COMPLETED.value
                 record.finished_at = datetime.now(timezone.utc)
                 session.add(record)
                 await session.commit()
@@ -268,10 +289,13 @@ async def run_check_for_all_targets(
         async with AsyncSession(engine) as session:
             record = await session.get(CheckRunRecord, run_id)
             if record is not None:
-                record.status = "failed"
+                record.status = RunState.FAILED.value
                 record.finished_at = datetime.now(timezone.utc)
                 session.add(record)
                 await session.commit()
         raise
     finally:
+        heartbeat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await heartbeat
         _running_checks.pop(check.slug, None)

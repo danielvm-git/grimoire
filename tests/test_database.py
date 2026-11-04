@@ -179,3 +179,72 @@ async def test_restore_action_toggles(engine: AsyncEngine) -> None:
 
     assert actions[0].enabled is False  # restored from DB
     assert actions[1].enabled is True  # no DB record, stays default
+
+
+async def test_reclaim_expired_runs_only_touches_stale_leases(
+    engine: AsyncEngine,
+) -> None:
+    """A run whose lease expired is interrupted; a live lease is untouched."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.database import (
+        ActionRunRecord,
+        CheckRunRecord,
+        reclaim_expired_runs,
+    )
+
+    now = datetime.now(UTC)
+    async with AsyncSession(engine) as session:
+        stale = CheckRunRecord(
+            check_slug="c",
+            check_name="C",
+            triggered_by="manual",
+            status="running",
+            lease_expires_at=now - timedelta(seconds=5),
+        )
+        fresh = ActionRunRecord(
+            action_slug="a",
+            action_name="A",
+            triggered_by="manual",
+            status="running",
+            lease_expires_at=now + timedelta(seconds=60),
+        )
+        session.add(stale)
+        session.add(fresh)
+        await session.flush()
+        stale_id, fresh_id = stale.id, fresh.id
+        await session.commit()
+
+    assert await reclaim_expired_runs(engine) == 1
+
+    async with AsyncSession(engine) as session:
+        stale_row = await session.get(CheckRunRecord, stale_id)
+        fresh_row = await session.get(ActionRunRecord, fresh_id)
+        assert stale_row is not None and stale_row.status == "interrupted"
+        assert fresh_row is not None and fresh_row.status == "running"
+
+
+async def test_mark_run_running_claims_lease(engine: AsyncEngine) -> None:
+    """mark_run_running moves queued -> running and sets owner/heartbeat/lease."""
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.database import CheckRunRecord, mark_run_running
+
+    async with AsyncSession(engine) as session:
+        run = CheckRunRecord(check_slug="c", check_name="C", triggered_by="manual")
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+        run_id = run.id
+
+    await mark_run_running(engine, CheckRunRecord, run_id)
+
+    async with AsyncSession(engine) as session:
+        row = await session.get(CheckRunRecord, run_id)
+        assert row is not None
+        assert row.status == "running"
+        assert row.owner_id
+        assert row.heartbeat_at is not None
+        assert row.lease_expires_at is not None

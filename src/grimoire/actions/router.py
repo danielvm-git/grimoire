@@ -8,11 +8,17 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.actions.engine import ActionConflictError, run_action
+from grimoire.actions.engine import (
+    ActionConflictError,
+    clear_action_running,
+    prepare_action_run,
+    run_action,
+)
 from grimoire.database import ActionRunRecord, ActionRunRepoRecord, ActionToggleRecord
+from grimoire.state import RunState
 
 logger = logging.getLogger(__name__)
 
@@ -225,8 +231,6 @@ async def run_action_endpoint(
 
     Returns 409 if already running.
     """
-    from grimoire.actions.engine import is_action_running
-
     action = _find_action(slug)
     assert _workspace is not None
     assert _engine is not None
@@ -237,11 +241,13 @@ async def run_action_endpoint(
             detail="repo parameter is not valid for global actions (no targets)",
         )
 
-    if is_action_running(slug):
-        raise HTTPException(status_code=409, detail="Action is already running")
-
     workspace = _workspace
     engine = _engine
+
+    try:
+        run_id = await prepare_action_run(action, engine, "manual")
+    except ActionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     async def _run_in_background() -> None:
         try:
@@ -252,21 +258,23 @@ async def run_action_endpoint(
                 engine,
                 triggered_by="manual",
                 specific_repo=repo,
+                run_id=run_id,
             )
         except ActionConflictError as exc:
-            # Another trigger won the race, OR a stale 'running' DB row is
-            # blocking execution (bug #1). The deadlock itself is resolved at
-            # startup by cleanup_stale_runs, but log here so a silently-dropped
-            # action is observable instead of invisible.
             logger.warning("Action '%s' not run: %s", action.slug, exc, exc_info=True)
+        except Exception:
+            logger.exception("Action '%s' background run failed", action.slug)
+        finally:
+            clear_action_running(slug)
 
     background_tasks.add_task(_run_in_background)
 
     return ActionRunDetail(
+        id=run_id,
         action_slug=slug,
         action_name=action.name,
         triggered_by="manual",
-        status="running",
+        status=RunState.QUEUED.value,
         started_at=datetime.now(timezone.utc),
         finished_at=None,
         results=[],
@@ -281,8 +289,10 @@ async def action_status(slug: str) -> dict[str, object]:
 
     async with AsyncSession(_engine) as session:
         stmt = select(ActionRunRecord).where(
-            ActionRunRecord.action_slug == slug,
-            ActionRunRecord.status == "running",
+            col(ActionRunRecord.action_slug) == slug,
+            col(ActionRunRecord.status).in_(
+                (RunState.QUEUED.value, RunState.RUNNING.value)
+            ),
         )
         running = (await session.exec(stmt)).first() is not None
 

@@ -892,3 +892,43 @@ class TestSessionExecuteDeprecationSuppressed:
 
         nags = [w for w in caught if "session.exec" in str(w.message)]
         assert nags == [], f"SQLModel session.execute() nag leaked: {len(nags)} nags"
+
+
+async def test_action_results_include_failed_run(
+    web_client_with_actions: AsyncClient,
+) -> None:
+    """Failed runs are terminal and must appear in the run history partial."""
+    from datetime import datetime, timezone
+
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.actions.router import _engine
+    from grimoire.database import ActionRunRecord, ActionRunRepoRecord
+
+    assert _engine is not None
+    async with AsyncSession(_engine) as session:
+        run = ActionRunRecord(
+            action_slug="test",
+            action_name="Test",
+            triggered_by="manual",
+            status="failed",
+            started_at=datetime.now(timezone.utc),
+        )
+        session.add(run)
+        await session.flush()
+        session.add(
+            ActionRunRepoRecord(
+                run_id=run.id,  # type: ignore[arg-type]
+                repo_full_name="acme/api",
+                branch="main",
+                passed=False,
+                output="boom-unique-failure",
+            )
+        )
+        await session.commit()
+
+    resp = await web_client_with_actions.get("/partials/action-results/test")
+    assert resp.status_code == 200
+    # The failed run is rendered alongside the fixture's completed run.
+    assert resp.text.count("<details") >= 2
+    assert 'title="fail"' in resp.text
