@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
-import warnings
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from importlib.metadata import version
@@ -16,12 +16,14 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import text
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.config import StalenessConfig
 from grimoire.database import ActionRunRecord
+from grimoire.db_exec import exec_raw
 from grimoire.models import TrackedRepository, WorkflowStatus
+from grimoire.state import RunState
 from grimoire.targeting import TargetSpec
 from grimoire.web.backlog import (
     BacklogItem,
@@ -30,6 +32,8 @@ from grimoire.web.backlog import (
     group_by_repo,
     group_by_type,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["web"])
 
@@ -353,32 +357,16 @@ _LATEST_RESULTS_SQL = text(
     "AND cr.timestamp = latest.max_ts"
 )
 
-# Regex matching SQLModel's misleading session.execute() deprecation nag (bug #8).
-_SESSION_EXEC_NAG = re.compile(
-    r"You probably want to use `session\.exec\(\)` instead of `session\.execute\(\)`"
-)
-
 
 async def _exec_text(
     session: AsyncSession, statement: Any, *, params: dict[str, Any] | None = None
 ) -> Any:
-    """Run a raw ``text()`` SQL statement, suppressing SQLModel's deprecation nag.
+    """Run raw ``text()`` SQL, suppressing SQLModel's misleading nag.
 
-    Bug #8 (deprecated-session-execute-usage): SQLModel emits a DeprecationWarning
-    on every ``session.execute()`` call urging ``session.exec()``. That advice only
-    applies to ORM ``select()`` queries; the call sites here run raw ``text()`` SQL,
-    for which ``session.execute()`` is the CORRECT API (see the already-fixed bugs
-    ``checks-router-improper-session-exec`` and ``github-service-improper-delete-exec``).
-    This helper suppresses the misleading nag at the call site so it is robust under
-    pytest (which resets module-level warning filters).
+    Thin alias kept for the web router's call sites; see
+    :func:`grimoire.db_exec.exec_raw` for the rationale.
     """
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore", message=str(_SESSION_EXEC_NAG), category=DeprecationWarning
-        )
-        if params:
-            return await session.execute(statement, params=params)
-        return await session.execute(statement)
+    return await exec_raw(session, statement, params=params)
 
 
 async def _load_check_context(
@@ -890,11 +878,14 @@ async def action_results_partial(
         run_query = text(
             "SELECT id, triggered_by, started_at "
             "FROM action_run "
-            "WHERE action_slug = :slug AND status = 'completed' "
+            "WHERE action_slug = :slug "
+            "AND status IN ('completed', 'failed', 'interrupted') "
             "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_actions_engine) as session:
-            run_rows = (await session.execute(run_query, params={"slug": slug})).all()
+            run_rows = (
+                await _exec_text(session, run_query, params={"slug": slug})
+            ).all()
 
         # For each run, fetch its per-repo results
         result_query = text(
@@ -906,7 +897,7 @@ async def action_results_partial(
             run_id = run_row[0]
             async with AsyncSession(_actions_engine) as session:
                 result_rows = (
-                    await session.execute(result_query, params={"run_id": run_id})
+                    await _exec_text(session, result_query, params={"run_id": run_id})
                 ).all()
 
             results_list = [
@@ -1030,11 +1021,14 @@ async def check_results_partial(
         run_query = text(
             "SELECT id, triggered_by, started_at "
             "FROM check_run "
-            "WHERE check_slug = :slug AND status = 'completed' "
+            "WHERE check_slug = :slug "
+            "AND status IN ('completed', 'failed', 'interrupted') "
             "ORDER BY started_at DESC LIMIT 10"
         )
         async with AsyncSession(_checks_engine) as session:
-            run_rows = (await session.execute(run_query, params={"slug": slug})).all()
+            run_rows = (
+                await _exec_text(session, run_query, params={"slug": slug})
+            ).all()
 
         # For each run, fetch its per-repo results
         result_query = text(
@@ -1046,7 +1040,7 @@ async def check_results_partial(
             run_id = run_row[0]
             async with AsyncSession(_checks_engine) as session:
                 result_rows = (
-                    await session.execute(result_query, params={"run_id": run_id})
+                    await _exec_text(session, result_query, params={"run_id": run_id})
                 ).all()
 
             results_list = [
@@ -1100,7 +1094,7 @@ async def check_results_partial(
             )
             async with AsyncSession(_checks_engine) as session:
                 orphan_rows = (
-                    await session.execute(orphan_query, params={"slug": slug})
+                    await _exec_text(session, orphan_query, params={"slug": slug})
                 ).all()
             if orphan_rows:
                 results_list = [
@@ -1269,7 +1263,12 @@ async def check_run_trigger(
     The check is started as a background task — the response is immediate.
     The returned partial includes polling to detect completion.
     """
-    from grimoire.checks.engine import is_check_running, run_check_for_all_targets
+    from grimoire.checks.engine import (
+        clear_check_running,
+        create_check_run,
+        run_check_for_all_targets,
+        try_start_check,
+    )
     from grimoire.checks.router import (
         _checks,
     )
@@ -1292,16 +1291,32 @@ async def check_run_trigger(
     if check is None:
         raise HTTPException(status_code=404, detail=f"Check '{slug}' not found")
 
-    if is_check_running(slug):
-        raise HTTPException(status_code=409, detail="Check is already running")
-
     if checks_workspace is None or checks_engine is None:
         raise HTTPException(status_code=500, detail="Checks engine not configured")
 
+    if not try_start_check(slug):
+        raise HTTPException(status_code=409, detail="Check is already running")
+
+    try:
+        run_id = await create_check_run(checks_engine, check, "manual")
+    except Exception:
+        clear_check_running(slug)
+        raise
+
     async def _run_in_background() -> None:
-        await run_check_for_all_targets(
-            check, checks_repos, checks_workspace, checks_engine, triggered_by="manual"
-        )
+        try:
+            await run_check_for_all_targets(
+                check,
+                checks_repos,
+                checks_workspace,
+                checks_engine,
+                triggered_by="manual",
+                run_id=run_id,
+            )
+        except Exception:
+            logger.exception("Check '%s' background run failed", slug)
+        finally:
+            clear_check_running(slug)
 
     background_tasks.add_task(_run_in_background)
 
@@ -1328,7 +1343,8 @@ async def action_run_trigger(
     """
     from grimoire.actions.engine import (
         ActionConflictError,
-        is_action_running,
+        clear_action_running,
+        prepare_action_run,
         run_action,
     )
     from grimoire.actions.router import _actions
@@ -1345,11 +1361,13 @@ async def action_run_trigger(
     if action is None:
         raise HTTPException(status_code=404, detail=f"Action '{slug}' not found")
 
-    if is_action_running(slug):
-        raise HTTPException(status_code=409, detail="Action is already running")
-
     if actions_workspace is None or actions_engine is None:
         raise HTTPException(status_code=500, detail="Actions engine not configured")
+
+    try:
+        run_id = await prepare_action_run(action, actions_engine, "manual")
+    except ActionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     async def _run_in_background() -> None:
         try:
@@ -1359,9 +1377,14 @@ async def action_run_trigger(
                 actions_workspace,
                 actions_engine,
                 triggered_by="manual",
+                run_id=run_id,
             )
         except ActionConflictError:
             pass
+        except Exception:
+            logger.exception("Action '%s' background run failed", slug)
+        finally:
+            clear_action_running(slug)
 
     background_tasks.add_task(_run_in_background)
 
@@ -1390,8 +1413,10 @@ async def action_run_status_partial(
     if not running and _actions_engine is not None:
         async with AsyncSession(_actions_engine) as session:
             stmt = select(ActionRunRecord).where(
-                ActionRunRecord.action_slug == slug,
-                ActionRunRecord.status == "running",
+                col(ActionRunRecord.action_slug) == slug,
+                col(ActionRunRecord.status).in_(
+                    (RunState.QUEUED.value, RunState.RUNNING.value)
+                ),
             )
             running = (await session.exec(stmt)).first() is not None
 

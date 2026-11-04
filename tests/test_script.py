@@ -6,7 +6,12 @@ import asyncio
 import sys
 from pathlib import Path
 
-from grimoire.script import OUTPUT_SIZE_CAP, create_script_process, read_output_capped
+from grimoire.script import (
+    OUTPUT_SIZE_CAP,
+    create_script_process,
+    read_output_capped,
+    read_stdout_stderr_capped,
+)
 
 
 async def test_no_shebang_uses_shell(tmp_path: Path) -> None:
@@ -187,3 +192,89 @@ async def test_read_capped_does_not_buffer_everything() -> None:
 
     marker = "[output truncated — showing last 64KB]\n"
     assert len(output) == len(marker) + OUTPUT_SIZE_CAP
+
+
+# ---------------------------------------------------------------------------
+# Separate-stream reader: exit-code race and concurrent draining
+# ---------------------------------------------------------------------------
+
+
+class _EofStream:
+    """A stream that is already at EOF."""
+
+    def at_eof(self) -> bool:
+        return True
+
+    async def read(self, n: int) -> bytes:
+        return b""
+
+
+class _ReapOnWaitProc:
+    """Stub process whose returncode is only set once wait() is awaited."""
+
+    def __init__(self) -> None:
+        self.stdout = _EofStream()
+        self.stderr = _EofStream()
+        self.returncode: int | None = None
+        self.waited = False
+
+    async def wait(self) -> int:
+        self.waited = True
+        self.returncode = 3
+        return 3
+
+
+async def test_read_stdout_stderr_capped_awaits_process_exit() -> None:
+    """The helper must reap the child so returncode is populated."""
+    proc = _ReapOnWaitProc()
+
+    await read_stdout_stderr_capped(proc)  # type: ignore[arg-type]
+
+    assert proc.waited is True
+    assert proc.returncode == 3
+
+
+class _BarrierStream:
+    """A stream whose first read blocks until its peer starts reading too."""
+
+    def __init__(self, barrier: asyncio.Barrier, payload: bytes) -> None:
+        self._barrier = barrier
+        self._payload = payload
+        self._sent = False
+
+    def at_eof(self) -> bool:
+        return self._sent
+
+    async def read(self, n: int) -> bytes:
+        if not self._sent:
+            await self._barrier.wait()
+            self._sent = True
+            return self._payload
+        return b""
+
+
+class _ConcurrentProc:
+    """Stub process exposing two streams that must be read concurrently."""
+
+    def __init__(self) -> None:
+        barrier = asyncio.Barrier(2)
+        self.stdout = _BarrierStream(barrier, b"out")
+        self.stderr = _BarrierStream(barrier, b"err")
+        self.returncode: int | None = None
+
+    async def wait(self) -> int:
+        self.returncode = 0
+        return 0
+
+
+async def test_read_stdout_stderr_capped_reads_both_streams_concurrently() -> None:
+    """Both pipes are drained together, so a full stderr buffer cannot deadlock."""
+    proc = _ConcurrentProc()
+
+    stdout, stderr = await asyncio.wait_for(
+        read_stdout_stderr_capped(proc),  # type: ignore[arg-type]
+        timeout=1.0,
+    )
+
+    assert stdout == "out"
+    assert stderr == "err"

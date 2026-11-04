@@ -80,18 +80,30 @@ class WorkspaceManager:
         return self._workspace_dir
 
     async def setup(self, repos: list[TrackedRepository]) -> None:
-        """Clone/update all repos and configure git identity in each."""
-        for repo in repos:
-            branches = repo.branches or [repo.default_branch]
-            bare_dir = self._bare_dir(repo.full_name)
+        """Clone/update all repos concurrently, serialized per repo.
 
-            if not bare_dir.exists():
-                await self._clone_bare(repo.full_name)
+        Clones are network/disk bound and independent across repositories, so
+        they run with bounded concurrency. Each repo holds its own lock so a
+        concurrent ``reset_workdir``/``sync_repo`` cannot interleave with setup.
+        """
+        sem = asyncio.Semaphore(10)
 
-            await self._configure_identity(bare_dir)
+        async def _setup_one(repo: TrackedRepository) -> None:
+            async with sem, self._repo_lock(repo.full_name):
+                branches = repo.branches or [repo.default_branch]
+                bare_dir = self._bare_dir(repo.full_name)
 
-            for branch in branches:
-                await self._ensure_worktree(repo.full_name, branch, bare_dir)
+                if not bare_dir.exists():
+                    await self._clone_bare(repo.full_name)
+                else:
+                    await self._ensure_bare_initialized(bare_dir)
+
+                await self._configure_identity(bare_dir)
+
+                for branch in branches:
+                    await self._ensure_worktree(repo.full_name, branch, bare_dir)
+
+        await asyncio.gather(*[_setup_one(repo) for repo in repos])
 
     async def sync_repo(self, repo: TrackedRepository) -> None:
         """Fetch latest from remote and reset all worktrees for a single repo."""
@@ -101,6 +113,7 @@ class WorkspaceManager:
             return
 
         async with self._repo_lock(repo.full_name):
+            await self._ensure_bare_initialized(bare_dir)
             await self._run_git("fetch", "origin", cwd=bare_dir)
 
             # Reset each existing worktree to the latest remote state.
@@ -245,6 +258,27 @@ class WorkspaceManager:
         # Bare clones store refs directly under refs/heads/* and lack remote
         # tracking branches.  Configure a normal fetch refspec and populate
         # refs/remotes/origin/* so worktrees can reference origin/<branch>.
+        await self._run_git(
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/*",
+            cwd=bare_dir,
+        )
+        await self._run_git("fetch", "origin", cwd=bare_dir)
+
+    async def _ensure_bare_initialized(self, bare_dir: Path) -> None:
+        """Repair a bare clone left half-initialized by a crashed clone.
+
+        A directory that exists is not proof of a usable clone. If the remote
+        fetch refspec is missing, re-apply it and fetch before any worktree
+        operation tries to use ``origin/<branch>``.
+        """
+        try:
+            await self._run_git("config", "--get", "remote.origin.fetch", cwd=bare_dir)
+            return
+        except WorkspaceError:
+            logger.warning("repairing uninitialized bare clone at %s", bare_dir)
+
         await self._run_git(
             "config",
             "remote.origin.fetch",

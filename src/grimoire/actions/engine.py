@@ -3,18 +3,25 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlmodel import select
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.database import ActionRunRecord, ActionRunRepoRecord
+from grimoire.database import (
+    ActionRunRecord,
+    ActionRunRepoRecord,
+    mark_run_running,
+    start_run_heartbeat,
+)
 from grimoire.models import ActionRepoResult, ActionRun
 from grimoire.observability.metrics import update_action_metrics
 from grimoire.script import create_script_process, read_output_capped
+from grimoire.state import RunState
 from grimoire.targeting import resolve_targets, target_env
 
 if TYPE_CHECKING:
@@ -52,7 +59,56 @@ def get_action_progress(slug: str) -> ActionProgress | None:
 
 
 class ActionConflictError(Exception):
-    """Raised when an action is already running."""
+    """Raised when an action is already queued or running."""
+
+
+def clear_action_running(slug: str) -> None:
+    """Drop any in-memory tracking for *slug* (idempotent)."""
+    _running_actions.pop(slug, None)
+
+
+async def prepare_action_run(
+    action: ActionDefinition,
+    engine: AsyncEngine,
+    triggered_by: str,
+) -> int:
+    """Reserve an action slot and persist a queued run; return its id.
+
+    Raises :class:`ActionConflictError` if the action is already queued or
+    running, whether tracked in memory or only in the database.
+    """
+    async with _action_lock(action.slug):
+        if action.slug in _running_actions:
+            raise ActionConflictError(f"Action '{action.slug}' is already running")
+
+        async with AsyncSession(engine) as session:
+            stmt = select(ActionRunRecord).where(
+                col(ActionRunRecord.action_slug) == action.slug,
+                col(ActionRunRecord.status).in_(
+                    (RunState.QUEUED.value, RunState.RUNNING.value)
+                ),
+            )
+            existing = (await session.exec(stmt)).first()
+            if existing is not None:
+                raise ActionConflictError(
+                    f"Action '{action.slug}' is already running (run ID: {existing.id})"
+                )
+
+            record = ActionRunRecord(
+                action_slug=action.slug,
+                action_name=action.name,
+                triggered_by=triggered_by,
+                status=RunState.QUEUED.value,
+            )
+            session.add(record)
+            await session.commit()
+            await session.refresh(record)
+
+        _running_actions[action.slug] = ActionProgress()
+        run_id = record.id
+        if run_id is None:
+            raise RuntimeError("action run record was not assigned an id")
+        return run_id
 
 
 def _action_lock(slug: str) -> asyncio.Lock:
@@ -69,49 +125,22 @@ async def run_action(
     engine: AsyncEngine,
     triggered_by: str,
     specific_repo: str | None = None,
+    run_id: int | None = None,
 ) -> ActionRun:
     """Run an action sequentially against each target repo+branch.
 
-    Raises :class:`ActionConflictError` if the action is already running.
+    Raises :class:`ActionConflictError` if the action is already queued/running.
     """
     now = datetime.now(timezone.utc)
 
-    # 1. Acquire per-action lock to make guard check + record creation atomic
-    async with _action_lock(action.slug):
-        # Check concurrent run guard (in-memory + DB)
-        if action.slug in _running_actions:
-            raise ActionConflictError(f"Action '{action.slug}' is already running")
-
-        async with AsyncSession(engine) as session:
-            stmt = select(ActionRunRecord).where(
-                ActionRunRecord.action_slug == action.slug,
-                ActionRunRecord.status == "running",
-            )
-            existing = (await session.exec(stmt)).first()
-            if existing is not None:
-                raise ActionConflictError(
-                    f"Action '{action.slug}' is already running (run ID: {existing.id})"
-                )
-
-        # 2. Create run record and register in-memory tracking
-        run_record = ActionRunRecord(
-            action_slug=action.slug,
-            action_name=action.name,
-            triggered_by=triggered_by,
-            status="running",
-            started_at=now,
-        )
-        async with AsyncSession(engine) as session:
-            session.add(run_record)
-            await session.commit()
-            await session.refresh(run_record)
-
-    run_id: int = run_record.id  # type: ignore[assignment]
+    if run_id is None:
+        run_id = await prepare_action_run(action, engine, triggered_by)
+    await mark_run_running(engine, ActionRunRecord, run_id)
+    heartbeat = start_run_heartbeat(engine, ActionRunRecord, run_id)
 
     # 3. Resolve targets and execute
     results: list[ActionRepoResult] = []
-    progress = ActionProgress()
-    _running_actions[action.slug] = progress
+    progress = _running_actions.setdefault(action.slug, ActionProgress())
 
     try:
         if action.targets is None:
@@ -176,7 +205,7 @@ async def run_action(
         async with AsyncSession(engine) as session:
             record = await session.get(ActionRunRecord, run_id)
             if record is not None:
-                record.status = "completed"
+                record.status = RunState.COMPLETED.value
                 record.finished_at = finished_at
                 session.add(record)
                 await session.commit()
@@ -185,12 +214,15 @@ async def run_action(
         async with AsyncSession(engine) as session:
             record = await session.get(ActionRunRecord, run_id)
             if record is not None:
-                record.status = "failed"
+                record.status = RunState.FAILED.value
                 record.finished_at = datetime.now(timezone.utc)
                 session.add(record)
                 await session.commit()
         raise
     finally:
+        heartbeat.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await heartbeat
         _running_actions.pop(action.slug, None)
 
     # 6. Return summary

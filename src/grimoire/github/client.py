@@ -13,6 +13,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import CachedETag
+from grimoire.db_exec import exec_raw
 from grimoire.observability.metrics import API_REQUESTS, update_rate_limit_metrics
 
 logger = logging.getLogger(__name__)
@@ -406,7 +407,7 @@ class GitHubClient:
                     set_={"etag": etag, "last_modified": last_modified},
                 )
             )
-            await session.execute(stmt)
+            await exec_raw(session, stmt)
             await session.commit()
 
     # -- rate limit ----------------------------------------------------------

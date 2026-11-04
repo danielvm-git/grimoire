@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import os
+import uuid
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
+from sqlalchemy import and_, or_
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+from grimoire.state import RECLAIMABLE_RUN_STATES, RunState
+
+logger = logging.getLogger(__name__)
+
+# A running run owns a lease for this long; the engine refreshes it via
+# ``start_run_heartbeat`` while the script executes.
+RUN_LEASE_SECONDS = 60
+
+# Identifies this process as the lease owner of the runs it starts.
+PROCESS_OWNER_ID = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
 
 
 def _utcnow() -> datetime:
@@ -29,9 +45,13 @@ class CheckRunRecord(SQLModel, table=True):
     check_slug: str = Field(index=True)
     check_name: str
     triggered_by: str  # "manual" | "cron" | "refresh"
-    status: str = "running"  # "running" | "completed"
+    # queued | running | completed | failed | interrupted (see grimoire.state)
+    status: str = RunState.QUEUED.value
     started_at: datetime = Field(default_factory=_utcnow)
     finished_at: Optional[datetime] = None
+    owner_id: str = Field(default="", index=True)
+    heartbeat_at: Optional[datetime] = None
+    lease_expires_at: Optional[datetime] = None
 
 
 class CheckResultRecord(SQLModel, table=True):
@@ -82,9 +102,13 @@ class ActionRunRecord(SQLModel, table=True):
     action_slug: str = Field(index=True)
     action_name: str
     triggered_by: str  # "manual" | "cron" | "api"
-    status: str = "running"  # "running" | "completed" | "failed"
+    # queued | running | completed | failed | interrupted (see grimoire.state)
+    status: str = RunState.QUEUED.value
     started_at: datetime = Field(default_factory=_utcnow)
     finished_at: Optional[datetime] = None
+    owner_id: str = Field(default="", index=True)
+    heartbeat_at: Optional[datetime] = None
+    lease_expires_at: Optional[datetime] = None
 
 
 class ActionRunRepoRecord(SQLModel, table=True):
@@ -208,30 +232,120 @@ async def get_session(engine: AsyncEngine) -> AsyncSession:
 
 
 async def cleanup_stale_runs(engine: AsyncEngine) -> None:
-    """Mark any 'running' check/action run records as 'interrupted'.
+    """Mark non-terminal runs left by a previous process as 'interrupted'.
 
-    Called at startup — if the app was restarted while runs were in progress,
-    the in-memory tracking is gone and the DB records would be stuck forever.
+    Called at startup — if the app was restarted while runs were queued or
+    running, the in-memory tracking is gone and the DB rows would be stuck.
     """
-    from sqlalchemy import text
-
+    now = _utcnow()
+    models: tuple[Any, Any] = (CheckRunRecord, ActionRunRecord)
     async with AsyncSession(engine) as session:
-        now = _utcnow()
-        await session.execute(
-            text(
-                "UPDATE check_run SET status = 'interrupted', finished_at = :now "
-                "WHERE status = 'running'"
-            ),
-            params={"now": now},
-        )
-        await session.execute(
-            text(
-                "UPDATE action_run SET status = 'interrupted', finished_at = :now "
-                "WHERE status = 'running'"
-            ),
-            params={"now": now},
-        )
+        for model in models:
+            rows = (
+                await session.exec(
+                    select(model).where(model.status.in_(RECLAIMABLE_RUN_STATES))
+                )
+            ).all()
+            for row in rows:
+                row.status = RunState.INTERRUPTED.value
+                row.finished_at = now
+                row.lease_expires_at = None
         await session.commit()
+
+
+def _lease_deadline(now: datetime) -> datetime:
+    return now + timedelta(seconds=RUN_LEASE_SECONDS)
+
+
+async def mark_run_running(engine: AsyncEngine, model: Any, run_id: int) -> None:
+    """Transition a queued run to 'running' and claim its lease."""
+    async with AsyncSession(engine) as session:
+        record = await session.get(model, run_id)
+        if record is None:
+            return
+        now = _utcnow()
+        record.status = RunState.RUNNING.value
+        record.owner_id = PROCESS_OWNER_ID
+        record.heartbeat_at = now
+        record.lease_expires_at = _lease_deadline(now)
+        session.add(record)
+        await session.commit()
+
+
+async def heartbeat_run(engine: AsyncEngine, model: Any, run_id: int) -> None:
+    """Refresh the lease of a run only if this process still owns it."""
+    async with AsyncSession(engine) as session:
+        record = await session.get(model, run_id)
+        if (
+            record is None
+            or record.status != RunState.RUNNING.value
+            or record.owner_id != PROCESS_OWNER_ID
+        ):
+            return
+        now = _utcnow()
+        record.heartbeat_at = now
+        record.lease_expires_at = _lease_deadline(now)
+        session.add(record)
+        await session.commit()
+
+
+async def _heartbeat_loop(
+    engine: AsyncEngine, model: Any, run_id: int, interval: float
+) -> None:
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await heartbeat_run(engine, model, run_id)
+        except Exception:  # noqa: BLE001 - heartbeat must not kill the run
+            logger.exception("Heartbeat failed for run %s", run_id)
+
+
+def start_run_heartbeat(
+    engine: AsyncEngine, model: Any, run_id: int
+) -> asyncio.Task[None]:
+    """Start refreshing the run lease in the background."""
+    interval = max(1.0, RUN_LEASE_SECONDS / 3)
+    return asyncio.create_task(_heartbeat_loop(engine, model, run_id, interval))
+
+
+async def reclaim_expired_runs(engine: AsyncEngine) -> int:
+    """Mark runs whose owner stopped heartbeating as 'interrupted'.
+
+    Startup recovery handles the single-process case; this allows a periodic
+    sweep so a crashed owner does not leave a run 'running' forever.
+    """
+    now = _utcnow()
+    cutoff = now - timedelta(seconds=RUN_LEASE_SECONDS)
+    reclaimed = 0
+    models: tuple[Any, Any] = (CheckRunRecord, ActionRunRecord)
+    async with AsyncSession(engine) as session:
+        for model in models:
+            rows = (
+                await session.exec(
+                    select(model).where(
+                        or_(
+                            and_(
+                                model.status == RunState.RUNNING.value,
+                                or_(
+                                    model.lease_expires_at.is_(None),
+                                    model.lease_expires_at < now,
+                                ),
+                            ),
+                            and_(
+                                model.status == RunState.QUEUED.value,
+                                model.started_at < cutoff,
+                            ),
+                        )
+                    )
+                )
+            ).all()
+            for row in rows:
+                row.status = RunState.INTERRUPTED.value
+                row.finished_at = now
+                row.lease_expires_at = None
+            reclaimed += len(rows)
+        await session.commit()
+    return reclaimed
 
 
 async def restore_check_toggles(engine: AsyncEngine, checks: Sequence[Any]) -> None:

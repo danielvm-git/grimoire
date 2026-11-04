@@ -110,11 +110,16 @@ async def read_output_capped(
     :func:`read_stdout_stderr_capped` instead. This helper reads the single
     combined stdout stream (bug #3: bounds memory instead of communicate()).
     """
-    tail, truncated = await _read_stream_capped(proc.stdout, cap)
+    streams = [proc.stdout]
     # Drain stderr if it was separately piped (defensive; normally merged).
     if proc.stderr is not None and proc.stderr is not proc.stdout:
-        await _read_stream_capped(proc.stderr, cap)
-    return _format_capped(tail, truncated)
+        streams.append(proc.stderr)
+    tails = await asyncio.gather(
+        *(_read_stream_capped(stream, cap) for stream in streams)
+    )
+    # Reap the child so ``returncode`` is populated before callers read it.
+    await proc.wait()
+    return _format_capped(*tails[0])
 
 
 async def read_stdout_stderr_capped(
@@ -127,6 +132,10 @@ async def read_stdout_stderr_capped(
     standard marker. Used by the checks engine which keeps the two streams apart
     (bug #3: bounds memory instead of communicate()).
     """
-    out_tail, out_trunc = await _read_stream_capped(proc.stdout, cap)
-    err_tail, err_trunc = await _read_stream_capped(proc.stderr, cap)
+    (out_tail, out_trunc), (err_tail, err_trunc) = await asyncio.gather(
+        _read_stream_capped(proc.stdout, cap),
+        _read_stream_capped(proc.stderr, cap),
+    )
+    # Reap the child so ``returncode`` is populated before callers read it.
+    await proc.wait()
     return _format_capped(out_tail, out_trunc), _format_capped(err_tail, err_trunc)

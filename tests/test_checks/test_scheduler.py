@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
 from grimoire.checks.loader import CheckDefinition
@@ -65,3 +66,29 @@ class TestRegisterChecks:
         register_checks(scheduler, [], [], MagicMock(), MagicMock())
 
         assert scheduler.add_job.call_count == 0
+
+
+async def test_scheduled_check_skips_when_disabled_at_fire_time(
+    monkeypatch: Any,
+) -> None:
+    """Toggling a check off must stop cron execution without a restart."""
+    calls: list[object] = []
+
+    async def fake_run(*args: object, **kwargs: object) -> None:
+        calls.append(args)
+
+    monkeypatch.setattr("grimoire.checks.scheduler.run_check_for_all_targets", fake_run)
+
+    check = _check("live", schedule="* * * * *")
+    scheduler = MagicMock()
+    scheduler._eventloop = True
+    register_checks(scheduler, [check], [], MagicMock(), MagicMock())
+    job = scheduler.add_job.call_args[0][0]
+
+    check.enabled = False
+    await job()
+    assert calls == []
+
+    check.enabled = True
+    await job()
+    assert len(calls) == 1

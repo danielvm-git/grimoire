@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from fnmatch import fnmatch
@@ -28,6 +29,7 @@ from grimoire.database import (
     CachedWorkflowStatus,
     CheckResultRecord,
 )
+from grimoire.db_exec import exec_raw
 from grimoire.github.client import GitHubClient, NotFoundError
 from grimoire.models import (
     IssueDetail,
@@ -75,11 +77,18 @@ class RefreshProgress:
 
 
 _refresh_progress: RefreshProgress | None = None
+# Set synchronously before the first await, so two callers cannot both start a
+# refresh between the check and the scheduled background task.
+_refresh_active = False
+
+
+class RefreshAlreadyRunning(Exception):
+    """Raised when a refresh is requested while one is already in progress."""
 
 
 def is_refresh_running() -> bool:
-    """Return True if a data refresh is currently in progress."""
-    return _refresh_progress is not None
+    """Return True if a data refresh is currently claimed or in progress."""
+    return _refresh_active or _refresh_progress is not None
 
 
 def get_refresh_progress() -> RefreshProgress | None:
@@ -121,11 +130,30 @@ async def resolve_repositories(
         for cr in (await session.exec(select(CachedRepository))).all():
             cached_repo_meta[cr.full_name] = cr
 
-    for source in config.repositories:
-        if isinstance(source, StaticRepoSource):
-            await _resolve_static(source, client, seen, cached_repo_meta)
-        elif isinstance(source, TeamRepoSource):
-            await _resolve_team(source, client, seen)
+    sem = asyncio.Semaphore(_CONCURRENCY_LIMIT)
+
+    async def _resolve_source(source: object) -> list[TrackedRepository]:
+        async with sem:
+            if isinstance(source, StaticRepoSource):
+                repo = await _resolve_static(source, client, cached_repo_meta)
+                return [repo] if repo is not None else []
+            if isinstance(source, TeamRepoSource):
+                return await _resolve_team(source, client)
+            return []
+
+    # Resolve all sources concurrently; gather preserves config order so the
+    # merge below keeps the same precedence as the previous serial loop.
+    groups = await asyncio.gather(
+        *(_resolve_source(source) for source in config.repositories)
+    )
+    for group in groups:
+        for repo in group:
+            existing = seen.get(repo.full_name)
+            if existing is None:
+                seen[repo.full_name] = repo
+            else:
+                merged = list(dict.fromkeys(existing.branches + repo.branches))
+                seen[repo.full_name] = existing.model_copy(update={"branches": merged})
 
     return list(seen.values())
 
@@ -133,9 +161,8 @@ async def resolve_repositories(
 async def _resolve_static(
     source: StaticRepoSource,
     client: GitHubClient,
-    seen: dict[str, TrackedRepository],
     cached_repo_meta: dict[str, CachedRepository] | None = None,
-) -> None:
+) -> TrackedRepository | None:
     try:
         data = await client.get_repo(source.repo)
         if data is None:
@@ -155,40 +182,34 @@ async def _resolve_static(
 
         if archived:
             logger.info("Skipping archived repository %s", source.repo)
-            return
+            return None
 
         branches = source.branches if source.branches else [default_branch]
-
-        if source.repo in seen:
-            existing = seen[source.repo]
-            merged = list(dict.fromkeys(existing.branches + branches))
-            seen[source.repo] = existing.model_copy(update={"branches": merged})
-        else:
-            seen[source.repo] = TrackedRepository(
-                full_name=source.repo,
-                default_branch=default_branch,
-                branches=branches,
-                source="static",
-                workflow_include=source.workflows.include,
-                workflow_exclude=source.workflows.exclude,
-            )
+        return TrackedRepository(
+            full_name=source.repo,
+            default_branch=default_branch,
+            branches=branches,
+            source="static",
+            workflow_include=source.workflows.include,
+            workflow_exclude=source.workflows.exclude,
+        )
     except Exception:
         logger.warning(
             "Failed to resolve static repo %s, skipping", source.repo, exc_info=True
         )
+        return None
 
 
 async def _resolve_team(
     source: TeamRepoSource,
     client: GitHubClient,
-    seen: dict[str, TrackedRepository],
-) -> None:
+) -> list[TrackedRepository]:
     # team format: "org/team-slug"
     try:
         org, team_slug = source.team.split("/", 1)
     except ValueError:
         logger.warning("Invalid team format %r, expected 'org/team-slug'", source.team)
-        return
+        return []
 
     try:
         repos = await client.get_team_repos(org, team_slug)
@@ -196,9 +217,10 @@ async def _resolve_team(
         logger.warning(
             "Failed to fetch repos for team %s, skipping", source.team, exc_info=True
         )
-        return
+        return []
 
     exclude_set = set(source.exclude)
+    resolved: list[TrackedRepository] = []
 
     for repo_data in repos:
         full_name = repo_data.get("full_name", "")
@@ -208,22 +230,18 @@ async def _resolve_team(
             continue
 
         default_branch = repo_data.get("default_branch", "main")
-        branches = [default_branch]
-        source_label = f"team:{source.team}"
-
-        if full_name in seen:
-            existing = seen[full_name]
-            merged = list(dict.fromkeys(existing.branches + branches))
-            seen[full_name] = existing.model_copy(update={"branches": merged})
-        else:
-            seen[full_name] = TrackedRepository(
+        resolved.append(
+            TrackedRepository(
                 full_name=full_name,
                 default_branch=default_branch,
-                branches=branches,
-                source=source_label,
+                branches=[default_branch],
+                source=f"team:{source.team}",
                 workflow_include=source.workflows.include,
                 workflow_exclude=source.workflows.exclude,
             )
+        )
+
+    return resolved
 
 
 # ---------------------------------------------------------------------------
@@ -507,7 +525,11 @@ async def refresh_all_stats(
     config: GrimoireConfig, client: GitHubClient
 ) -> tuple[list[TrackedRepository], list[RepositoryStats]]:
     """Resolve repos, fetch stats concurrently, persist to DB, return results."""
-    global _refresh_progress  # noqa: PLW0603
+    global _refresh_active, _refresh_progress  # noqa: PLW0603
+
+    if _refresh_active:
+        raise RefreshAlreadyRunning("A data refresh is already in progress")
+    _refresh_active = True
 
     # Compute a preliminary repo count from config so the progress bar can
     # show a meaningful denominator before any async work completes.
@@ -569,6 +591,7 @@ async def refresh_all_stats(
         return repos, stats_list
     finally:
         _refresh_progress = None
+        _refresh_active = False
 
 
 # ---------------------------------------------------------------------------
@@ -585,32 +608,41 @@ async def save_stats_to_db(
     now = datetime.now(UTC)
     repo_map = {r.full_name: r for r in repos}
 
+    present_names = [s.full_name for s in stats_list if s.full_name in repo_map]
+
     async with AsyncSession(engine) as session:
+        # Delete old rows for every repo in four statements instead of four
+        # statements per repo (was O(4N) sequential round-trips).
+        if present_names:
+            await exec_raw(
+                session,
+                delete(CachedIssue).where(
+                    CachedIssue.repo_full_name.in_(present_names)  # type: ignore[attr-defined]
+                ),
+            )
+            await exec_raw(
+                session,
+                delete(CachedPullRequest).where(
+                    CachedPullRequest.repo_full_name.in_(present_names)  # type: ignore[attr-defined]
+                ),
+            )
+            await exec_raw(
+                session,
+                delete(CachedWorkflowStatus).where(
+                    CachedWorkflowStatus.repo_full_name.in_(present_names)  # type: ignore[attr-defined]
+                ),
+            )
+            await exec_raw(
+                session,
+                delete(CachedRepository).where(
+                    CachedRepository.full_name.in_(present_names)  # type: ignore[attr-defined]
+                ),
+            )
+
         for stats in stats_list:
             repo = repo_map.get(stats.full_name)
             if repo is None:
                 continue
-
-            # Delete old cached data for this repo
-            fn = stats.full_name
-            await session.execute(
-                delete(CachedIssue).where(CachedIssue.repo_full_name == fn)  # type: ignore[arg-type]
-            )
-            await session.execute(
-                delete(CachedPullRequest).where(
-                    CachedPullRequest.repo_full_name == fn  # type: ignore[arg-type]
-                )
-            )
-            await session.execute(
-                delete(CachedWorkflowStatus).where(
-                    CachedWorkflowStatus.repo_full_name == fn  # type: ignore[arg-type]
-                )
-            )
-            await session.execute(
-                delete(CachedRepository).where(
-                    CachedRepository.full_name == fn  # type: ignore[arg-type]
-                )
-            )
 
             # Write CachedRepository
             session.add(
@@ -688,6 +720,18 @@ async def load_stats_from_db(
     async with AsyncSession(engine) as session:
         cached_repos = (await session.exec(select(CachedRepository))).all()
 
+        # Bulk-load the child rows once instead of issuing three queries per
+        # repo inside the loop below (was O(3N) sequential round-trips).
+        wf_by_repo: defaultdict[str, list[CachedWorkflowStatus]] = defaultdict(list)
+        for wf_row in (await session.exec(select(CachedWorkflowStatus))).all():
+            wf_by_repo[wf_row.repo_full_name].append(wf_row)
+        issues_by_repo: defaultdict[str, list[CachedIssue]] = defaultdict(list)
+        for issue_row in (await session.exec(select(CachedIssue))).all():
+            issues_by_repo[issue_row.repo_full_name].append(issue_row)
+        prs_by_repo: defaultdict[str, list[CachedPullRequest]] = defaultdict(list)
+        for pr_row in (await session.exec(select(CachedPullRequest))).all():
+            prs_by_repo[pr_row.repo_full_name].append(pr_row)
+
         for cr in cached_repos:
             branches = json.loads(cr.branches_json) if cr.branches_json else []
             repo = TrackedRepository(
@@ -705,13 +749,7 @@ async def load_stats_from_db(
             repos.append(repo)
 
             # Load workflow statuses
-            wf_rows = (
-                await session.exec(
-                    select(CachedWorkflowStatus).where(
-                        CachedWorkflowStatus.repo_full_name == cr.full_name
-                    )
-                )
-            ).all()
+            wf_rows = wf_by_repo.get(cr.full_name, [])
             workflows = [
                 WorkflowStatus(
                     name=w.workflow_name,
@@ -724,13 +762,7 @@ async def load_stats_from_db(
             ]
 
             # Load stale issues from cache
-            issue_rows = (
-                await session.exec(
-                    select(CachedIssue).where(
-                        CachedIssue.repo_full_name == cr.full_name
-                    )
-                )
-            ).all()
+            issue_rows = issues_by_repo.get(cr.full_name, [])
             stale_issue_items = [
                 IssueDetail(
                     number=i.number,
@@ -744,13 +776,7 @@ async def load_stats_from_db(
             ]
 
             # Load stale PRs from cache
-            pr_rows = (
-                await session.exec(
-                    select(CachedPullRequest).where(
-                        CachedPullRequest.repo_full_name == cr.full_name
-                    )
-                )
-            ).all()
+            pr_rows = prs_by_repo.get(cr.full_name, [])
             stale_pr_items = [
                 PullRequestDetail(
                     number=p.number,
@@ -858,22 +884,27 @@ async def _prune_repos_from_db(engine: AsyncEngine, active_names: set[str]) -> i
         stale_names = [name for name in cached if name not in active_names]
 
         for fn in stale_names:
-            await session.execute(
-                delete(CachedIssue).where(CachedIssue.repo_full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CachedIssue).where(CachedIssue.repo_full_name == fn),  # type: ignore[arg-type]
             )
-            await session.execute(
-                delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CachedPullRequest).where(CachedPullRequest.repo_full_name == fn),  # type: ignore[arg-type]
             )
-            await session.execute(
+            await exec_raw(
+                session,
                 delete(CachedWorkflowStatus).where(
                     CachedWorkflowStatus.repo_full_name == fn  # type: ignore[arg-type]
-                )
+                ),
             )
-            await session.execute(
-                delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CheckResultRecord).where(CheckResultRecord.repo_full_name == fn),  # type: ignore[arg-type]
             )
-            await session.execute(
-                delete(CachedRepository).where(CachedRepository.full_name == fn)  # type: ignore[arg-type]
+            await exec_raw(
+                session,
+                delete(CachedRepository).where(CachedRepository.full_name == fn),  # type: ignore[arg-type]
             )
             pruned += 1
 

@@ -44,6 +44,10 @@ def register_checks(
             """Return an async wrapper that ``AsyncIOScheduler`` can invoke."""
 
             async def _job() -> None:
+                # Re-check at fire time: toggling enabled does not re-register
+                # jobs, so this guard is what makes a disable take effect now.
+                if not c.enabled:
+                    return
                 await run_check_for_all_targets(
                     c, repos, workspace, engine, triggered_by="cron"
                 )
@@ -55,6 +59,8 @@ def register_checks(
 
             # BackgroundScheduler — wrap in run-until-complete
             def _sync_job() -> None:
+                if not c.enabled:
+                    return
                 asyncio.get_event_loop().run_until_complete(
                     run_check_for_all_targets(
                         c, repos, workspace, engine, triggered_by="cron"

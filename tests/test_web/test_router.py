@@ -866,24 +866,69 @@ class TestSessionExecuteDeprecationSuppressed:
     ``warnings.catch_warnings()`` context manager at each call site.
     """
 
-    def test_exec_text_suppresses_nag(self) -> None:
-        """_exec_text() prevents the SQLModel deprecation nag from escaping."""
-        import asyncio
+    async def test_exec_text_suppresses_nag(self) -> None:
+        """_exec_text() prevents the real SQLModel nag from escaping.
+
+        Uses a real AsyncSession so the SQLModel ``execute()`` wrapper actually
+        emits its warning — a mocked ``session.execute`` would make this test
+        vacuous (bug #8).
+        """
         import warnings
-        from unittest.mock import AsyncMock, MagicMock
 
-        from grimoire.web.router import _LATEST_RESULTS_SQL, _exec_text
+        from sqlalchemy import text
+        from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlmodel.ext.asyncio.session import AsyncSession
 
-        async def _call() -> None:
-            from sqlmodel.ext.asyncio.session import AsyncSession
+        from grimoire.web.router import _exec_text
 
-            async with AsyncSession(MagicMock()) as session:
-                session.execute = AsyncMock(return_value=MagicMock())
+        engine = create_async_engine("sqlite+aiosqlite://")
+        try:
+            async with AsyncSession(engine) as session:
                 with warnings.catch_warnings(record=True) as caught:
-                    await _exec_text(session, _LATEST_RESULTS_SQL)
-                nags = [w for w in caught if "session.exec" in str(w.message)]
-                assert nags == [], (
-                    f"SQLModel session.execute() nag leaked: {len(nags)} nags"
-                )
+                    warnings.simplefilter("always")
+                    await _exec_text(session, text("SELECT 1"))
+        finally:
+            await engine.dispose()
 
-        asyncio.run(_call())
+        nags = [w for w in caught if "session.exec" in str(w.message)]
+        assert nags == [], f"SQLModel session.execute() nag leaked: {len(nags)} nags"
+
+
+async def test_action_results_include_failed_run(
+    web_client_with_actions: AsyncClient,
+) -> None:
+    """Failed runs are terminal and must appear in the run history partial."""
+    from datetime import datetime, timezone
+
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.actions.router import _engine
+    from grimoire.database import ActionRunRecord, ActionRunRepoRecord
+
+    assert _engine is not None
+    async with AsyncSession(_engine) as session:
+        run = ActionRunRecord(
+            action_slug="test",
+            action_name="Test",
+            triggered_by="manual",
+            status="failed",
+            started_at=datetime.now(timezone.utc),
+        )
+        session.add(run)
+        await session.flush()
+        session.add(
+            ActionRunRepoRecord(
+                run_id=run.id,  # type: ignore[arg-type]
+                repo_full_name="acme/api",
+                branch="main",
+                passed=False,
+                output="boom-unique-failure",
+            )
+        )
+        await session.commit()
+
+    resp = await web_client_with_actions.get("/partials/action-results/test")
+    assert resp.status_code == 200
+    # The failed run is rendered alongside the fixture's completed run.
+    assert resp.text.count("<details") >= 2
+    assert 'title="fail"' in resp.text

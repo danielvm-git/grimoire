@@ -216,4 +216,7 @@ __marimo__/
 # Mimocode
 .mimocode/
 
+# zcode agent plans
+.zcode/
+
 

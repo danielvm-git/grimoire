@@ -136,6 +136,38 @@ async def test_resolve_skips_archived(client: GitHubClient) -> None:
     assert len(repos) == 0
 
 
+@respx.mock
+async def test_resolve_merges_duplicate_sources_in_config_order(
+    client: GitHubClient,
+) -> None:
+    """Concurrent resolution must still merge duplicates in config order."""
+    for name in ("owner/repo1", "owner/repo2"):
+        respx.get(f"https://api.github.com/repos/{name}").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "full_name": name,
+                    "default_branch": "main",
+                    "archived": False,
+                },
+                headers={"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"},
+            )
+        )
+    config = _make_config(
+        repos=[
+            StaticRepoSource(repo="owner/repo1", branches=["main"]),
+            StaticRepoSource(repo="owner/repo2", branches=["dev"]),
+            StaticRepoSource(repo="owner/repo1", branches=["develop"]),
+        ]
+    )
+
+    repos = await resolve_repositories(config, client)
+
+    assert [r.full_name for r in repos] == ["owner/repo1", "owner/repo2"]
+    assert repos[0].branches == ["main", "develop"]
+    assert repos[1].branches == ["dev"]
+
+
 # ---------------------------------------------------------------------------
 # resolve_repositories — 304 cache hit (bug #7)
 # ---------------------------------------------------------------------------
@@ -441,6 +473,40 @@ async def test_save_and_load_stats(engine: AsyncEngine) -> None:
     assert loaded_stats[0].workflows[0].name == "CI"
     assert loaded_stats[0].total_branches == 5
     assert loaded_stats[0].last_commit_at is not None
+
+
+async def test_load_stats_groups_children_per_repo(engine: AsyncEngine) -> None:
+    """Bulk-loaded child rows must stay associated with the right repo."""
+    repos = [
+        TrackedRepository(full_name=name, default_branch="main", branches=["main"])
+        for name in ("owner/a", "owner/b")
+    ]
+    now = datetime.now(UTC)
+    stats_list = [
+        RepositoryStats(
+            full_name="owner/a",
+            default_branch="main",
+            workflows=[
+                WorkflowStatus(name="A-CI", branch="main", status="success", url="")
+            ],
+            fetched_at=now,
+        ),
+        RepositoryStats(
+            full_name="owner/b",
+            default_branch="main",
+            workflows=[
+                WorkflowStatus(name="B-CI", branch="main", status="failure", url="")
+            ],
+            fetched_at=now,
+        ),
+    ]
+
+    await save_stats_to_db(engine, stats_list, repos)
+    _loaded_repos, loaded_stats = await load_stats_from_db(engine)
+
+    by_name = {s.full_name: s for s in loaded_stats}
+    assert [w.name for w in by_name["owner/a"].workflows] == ["A-CI"]
+    assert [w.name for w in by_name["owner/b"].workflows] == ["B-CI"]
 
 
 async def test_save_replaces_old_data(engine: AsyncEngine) -> None:
@@ -895,3 +961,15 @@ async def test_refresh_tracks_progress(
     assert not is_refresh_running()
     assert get_refresh_progress() is None
     assert len(result_repos) == 1
+
+
+async def test_refresh_guard_rejects_concurrent_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second refresh cannot start while one is claimed."""
+    from grimoire.github import service as service_module
+
+    monkeypatch.setattr(service_module, "_refresh_active", True)
+
+    with pytest.raises(service_module.RefreshAlreadyRunning):
+        await refresh_all_stats(object(), object())  # type: ignore[arg-type]

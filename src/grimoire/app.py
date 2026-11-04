@@ -21,14 +21,16 @@ from grimoire.actions.router import router as actions_router
 from grimoire.actions.router import set_actions_state
 from grimoire.actions.scheduler import register_actions
 from grimoire.checks.engine import run_check_for_all_targets
-from grimoire.checks.loader import load_checks
+from grimoire.checks.loader import CheckDefinition, load_checks
 from grimoire.checks.router import router as checks_router
 from grimoire.checks.router import set_checks_state
 from grimoire.checks.scheduler import register_checks
 from grimoire.config import load_config
 from grimoire.database import (
+    RUN_LEASE_SECONDS,
     create_tables,
     get_engine,
+    reclaim_expired_runs,
     restore_action_toggles,
     restore_check_toggles,
 )
@@ -44,6 +46,7 @@ from grimoire.github.router import (
     router as repos_router,
 )
 from grimoire.github.service import (
+    RefreshAlreadyRunning,
     load_stats_from_db,
     prune_removed_repos,
     prune_stale_data,
@@ -231,14 +234,22 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Refresh callback for POST /api/refresh
     async def _do_refresh() -> list[TrackedRepository]:
-        with DATA_REFRESH_DURATION.time():
-            refreshed_repos, refreshed_stats = await refresh_all_stats(config, client)
+        try:
+            with DATA_REFRESH_DURATION.time():
+                refreshed_repos, refreshed_stats = await refresh_all_stats(
+                    config, client
+                )
+        except RefreshAlreadyRunning:
+            logger.info("Refresh already in progress — skipping duplicate request")
+            return list(repos)
         update_cache(refreshed_repos, refreshed_stats)
         update_repo_metrics(refreshed_stats)
-        await prune_stale_data(engine, refreshed_repos, config.workspace_dir)
-
-        # Sync local clones with their remotes so worktrees have fresh data
-        await workspace.sync_all(refreshed_repos)
+        # Pruning the DB cache and syncing local clones are independent, so run
+        # them concurrently instead of paying both latencies back-to-back.
+        await asyncio.gather(
+            prune_stale_data(engine, refreshed_repos, config.workspace_dir),
+            workspace.sync_all(refreshed_repos),
+        )
 
         # Mutate the original list in-place so scheduler closures see updated repos
         repos.clear()
@@ -246,15 +257,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         set_checks_state(checks, refreshed_repos, workspace, engine)
         set_actions_state(actions, refreshed_repos, workspace, engine)
 
-        # Run default-schedule checks (those without a cron schedule)
+        # Run default-schedule checks (those without a cron schedule) concurrently.
+        # Bounded so a large check set cannot multiply the engine's own fan-out.
         default_checks = [c for c in checks if c.enabled and not c.schedule]
-        for check in default_checks:
-            try:
-                await run_check_for_all_targets(
-                    check, refreshed_repos, workspace, engine, triggered_by="refresh"
-                )
-            except Exception:
-                logger.exception("Default-schedule check '%s' failed", check.slug)
+        checks_sem = asyncio.Semaphore(5)
+
+        async def _run_default_check(check: CheckDefinition) -> None:
+            async with checks_sem:
+                try:
+                    await run_check_for_all_targets(
+                        check,
+                        refreshed_repos,
+                        workspace,
+                        engine,
+                        triggered_by="refresh",
+                    )
+                except Exception:
+                    logger.exception("Default-schedule check '%s' failed", check.slug)
+
+        await asyncio.gather(*(_run_default_check(c) for c in default_checks))
 
         return refreshed_repos
 
@@ -274,6 +295,16 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     register_checks(scheduler, checks, repos, workspace, engine)
     register_actions(scheduler, actions, repos, workspace, engine)
+
+    # Reclaim runs whose owner stopped heartbeating (multi-worker safety).
+    scheduler.add_job(
+        reclaim_expired_runs,
+        "interval",
+        seconds=RUN_LEASE_SECONDS,
+        args=[engine],
+        id="reclaim-runs",
+        replace_existing=True,
+    )
 
     scheduler.start()
     logger.info("Scheduler started (refresh schedule: %s)", config.refresh_schedule)

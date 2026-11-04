@@ -7,6 +7,8 @@ from typing import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.app import create_app
 from grimoire.checks.loader import CheckDefinition
@@ -134,7 +136,8 @@ class TestRunCheck:
         assert body["check_slug"] == "test-check"
         assert body["check_name"] == "Test Check"
         assert body["triggered_by"] == "manual"
-        assert body["status"] == "running"
+        assert body["status"] == "queued"
+        assert body["id"] > 0
         assert body["results"] == []
 
     async def test_run_check_not_found(self, check_client: AsyncClient) -> None:
@@ -145,7 +148,7 @@ class TestRunCheck:
         resp = await check_client.post("/api/checks/test-check/run?repo=acme/repo")
         assert resp.status_code == 200
         body = resp.json()
-        assert body["status"] == "running"
+        assert body["status"] == "queued"
         assert body["results"] == []
 
     async def test_run_then_get_results(self, check_client: AsyncClient) -> None:
@@ -211,15 +214,38 @@ class TestCheckStatus:
         assert body["running"] is False
 
     async def test_status_running(self, check_client: AsyncClient) -> None:
-        from grimoire.checks.engine import CheckProgress, _running_checks
+        """The status endpoint reads the persisted run state, not just memory."""
+        from grimoire.checks.router import _engine
+        from grimoire.database import CheckRunRecord
 
-        _running_checks["test-check"] = CheckProgress()
+        assert _engine is not None
+        async with AsyncSession(_engine) as session:
+            session.add(
+                CheckRunRecord(
+                    check_slug="test-check",
+                    check_name="Test Check",
+                    triggered_by="manual",
+                    status="running",
+                )
+            )
+            await session.commit()
         try:
             resp = await check_client.get("/api/checks/test-check/status")
             assert resp.status_code == 200
             assert resp.json()["running"] is True
         finally:
-            _running_checks.pop("test-check", None)
+            async with AsyncSession(_engine) as session:
+                rows = (
+                    await session.exec(
+                        select(CheckRunRecord).where(
+                            CheckRunRecord.check_slug == "test-check",
+                            CheckRunRecord.status == "running",
+                        )
+                    )
+                ).all()
+                for row in rows:
+                    await session.delete(row)
+                await session.commit()
 
     async def test_status_not_found(self, check_client: AsyncClient) -> None:
         resp = await check_client.get("/api/checks/nonexistent/status")

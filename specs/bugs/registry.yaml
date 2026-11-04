@@ -5,7 +5,7 @@ bugs:
     title: Stale "running" DB status causes permanent action execution deadlock after restart
     module: src/grimoire/actions/engine.py
     severity: high
-    status: open
+    status: fixed
     description: >
       If the application crashes or restarts while an action is executing, its ActionRunRecord
       remains in status "running" in the SQLite database. Upon restart, is_action_running returns
@@ -21,6 +21,17 @@ bugs:
     root_cause_hypothesis: >
       run_action checks DB status "running" without verifying if an in-memory task is active,
       and application initialization does not recover or reset interrupted "running" records upon startup.
+    files_changed:
+      - src/grimoire/database.py
+      - src/grimoire/app.py
+      - src/grimoire/actions/engine.py
+      - src/grimoire/actions/router.py
+      - tests/test_actions/test_engine_stale_lockout.py
+      - tests/test_database.py
+    approach: >
+      cleanup_stale_runs() runs at startup and marks interrupted "running" rows; per-action asyncio.Lock makes the guard check + record creation atomic; background conflicts are logged. Regression: test_startup_cleanup_recovers_stale_row.
+    risk_level: low
+    commit_message: "fix(actions): recover stale lockout on restart, cap subprocess output to 64KB (PR #22)"
 
   - slug: workspace-sync-concurrency-race
     title: Unlocked repository sync races with active worktree execution and workdir reset
@@ -114,7 +125,7 @@ bugs:
     title: /api/backlog/save-weights endpoint lacks input payload validation, risking permanent config.yaml corruption
     module: src/grimoire/web/router.py
     severity: high
-    status: open
+    status: fixed
     description: >
       The endpoint POST /api/backlog/save-weights accepts arbitrary JSON from request.json() and directly writes it to config.yaml via yaml.dump()
       before invoking Pydantic validation. If an invalid payload is sent, yaml.dump overwrites config.yaml with invalid data before validation fails,
@@ -125,12 +136,19 @@ bugs:
       - Inspect config.yaml to confirm corrupted data was written to disk.
     root_cause_hypothesis: >
       File write operation is performed prior to input validation rather than validating payload before disk write.
+    files_changed:
+      - src/grimoire/web/router.py
+      - tests/test_web/test_router.py
+    approach: >
+      Payload is validated into BacklogConfig.model_validate() before any write and invalid input returns 400 with config untouched. Regression: test_save_weights_invalid_payload_returns_400, test_save_weights_writes_validated_model.
+    risk_level: low
+    commit_message: "fix(web): validate backlog weights payload before writing config"
 
   - slug: subprocess-memory-unbounded-buffer
     title: Unbounded stdout buffering in proc.communicate() causes memory spike before 64KB truncation
     module: src/grimoire/actions/engine.py
     severity: medium
-    status: open
+    status: fixed
     description: >
       _execute_action and _execute_global_action await proc.communicate(), which buffers all
       subprocess stdout and stderr bytes into RAM. If a script outputs hundreds of megabytes of text,
@@ -140,6 +158,15 @@ bugs:
       - Trigger the action and observe high memory consumption prior to 64KB truncation.
     root_cause_hypothesis: >
       Subprocess output stream is read entirely into memory via proc.communicate() before capping is applied.
+    files_changed:
+      - src/grimoire/script.py
+      - src/grimoire/actions/engine.py
+      - src/grimoire/checks/engine.py
+      - tests/test_script.py
+    approach: >
+      Rolling 64KB capped stream reader replaces proc.communicate(); both streams are drained concurrently and proc.wait() reaps the child. Regression: test_read_capped_large_output_truncated_to_tail, test_read_stdout_stderr_capped_reads_both_streams_concurrently.
+    risk_level: low
+    commit_message: "fix(engines): bound subprocess output to 64KB via capped stream reader (PR #22)"
 
   - slug: targeting-zombie-process-leak
     title: Zombie subprocess leak on script targeting timeout
@@ -218,7 +245,7 @@ bugs:
     title: _paginated_get returns truncated result list when page > 1 encounters HTTP 304 Not Modified
     module: src/grimoire/github/client.py
     severity: medium
-    status: open
+    status: fixed
     description: >
       In _paginated_get(), if page 1 returns HTTP 200 OK and a subsequent page returns HTTP 304, _paginated_get breaks and returns page 1 items only.
     reproduction_steps:
@@ -226,6 +253,13 @@ bugs:
       - Observe truncated result list.
     root_cause_hypothesis: >
       _paginated_get treats a 304 on page N > 1 as an end-of-pagination marker without page-level caching.
+    files_changed:
+      - src/grimoire/github/client.py
+      - tests/test_github/test_client.py
+    approach: >
+      Pagination state is returned per call via _next_link_out and a 304 on page > 1 re-requests that page instead of ending pagination. Regression: test_paginated_304_on_page2_does_not_truncate.
+    risk_level: low
+    commit_message: "fix(github): retry 429 and re-request on mid-pagination 304 (PR #25)"
 
   - slug: repo-detail-check-output-layout-break
     title: Check output container inside repository.html breaks inline flex row layout when loaded
@@ -309,13 +343,31 @@ bugs:
     title: Deprecated session.execute called on SQLModel AsyncSession across multiple web router queries
     module: src/grimoire/web/router.py
     severity: low
-    status: open
+    status: fixed
     description: >
       Multiple call sites in router.py use await session.execute(...) instead of await session.exec(...), triggering deprecation warnings.
     reproduction_steps:
       - Trigger web routes querying database and inspect warning logs.
     root_cause_hypothesis: >
       Queries were written using standard SQLAlchemy session.execute() syntax rather than SQLModel's session.exec().
+    files_changed:
+      - src/grimoire/db_exec.py
+      - src/grimoire/web/router.py
+      - src/grimoire/database.py
+      - src/grimoire/checks/router.py
+      - src/grimoire/github/client.py
+      - src/grimoire/github/service.py
+      - tests/test_web/test_router.py
+      - tests/test_db_exec.py
+    approach: >
+      The nag leak had two causes: the filter pattern was str(re.compile(...)) rather
+      than a regex string, and it was start-anchored while the message begins with
+      whitespace and an emoji. exec_raw() in grimoire/db_exec.py now owns the
+      suppression and is used by every raw text()/Core DML call site across web,
+      checks, github, and database modules. The regression test uses a real
+      AsyncSession instead of a mock, so it can actually observe the warning.
+    risk_level: low
+    commit_message: "fix(web): suppress SQLModel session.execute nag correctly; refactor(db): route raw execute through exec_raw"
 
   - slug: dashboard-partials-missing-empty-state
     title: Matrix and list dashboard partial templates render empty table/div without user feedback
@@ -467,7 +519,7 @@ bugs:
     title: GitHub 429 secondary rate limit responses not retried
     module: src/grimoire/github/client.py
     severity: medium
-    status: open
+    status: fixed
     description: >
       GitHub returns 429 for secondary rate limits. The client's status handling falls through to
       raise_for_status(), which raises httpx.HTTPStatusError not caught by the retry handler.
@@ -476,12 +528,19 @@ bugs:
       - Observe the entire refresh aborts instead of retrying.
     root_cause_hypothesis: >
       429 not handled explicitly; falls through to raise_for_status().
+    files_changed:
+      - src/grimoire/github/client.py
+      - tests/test_github/test_client.py
+    approach: >
+      429 is classified as a rate limit, Retry-After/backoff is honored, and retries occur until exhausted before raising RateLimitError. Regression: test_429_retries_then_succeeds, test_429_exhausts_retries_raises_rate_limit_error.
+    risk_level: low
+    commit_message: "fix(github): retry 429 and re-request on mid-pagination 304 (PR #25)"
 
   - slug: stale-repo-304-defaults
     title: Archived repos bypass detection on 304 cache hit
     module: src/grimoire/github/service.py
     severity: low
-    status: open
+    status: fixed
     description: >
       When get_repo returns None (304 cache hit), archived defaults to False and default_branch
       to "main". Archived repos continue consuming API quota.
@@ -490,12 +549,19 @@ bugs:
       - Trigger refresh — the repo is still tracked.
     root_cause_hypothesis: >
       304 fallback doesn't use cached repository metadata.
+    files_changed:
+      - src/grimoire/github/service.py
+      - tests/test_github/test_service.py
+    approach: >
+      Cached repository metadata is loaded up front so 304 responses recover archived/default_branch instead of blind defaults. Regression: test_resolve_304_uses_cached_archived_flag, test_resolve_304_uses_cached_default_branch.
+    risk_level: low
+    commit_message: "fix(github): recover archived/default_branch from cache on 304 (PR #24)"
 
   - slug: backlog-export-ignores-filter-state
     title: Backlog export ignores current filter state
     module: src/grimoire/web/router.py
     severity: low
-    status: open
+    status: fixed
     description: >
       The export endpoint is called without passing the user's current filter parameters. Exported
       content includes all items regardless of active filters.
@@ -505,12 +571,19 @@ bugs:
       - Observe exported content includes all items.
     root_cause_hypothesis: >
       Export button doesn't propagate current filter state to the API endpoint.
+    files_changed:
+      - src/grimoire/web/router.py
+      - tests/test_web/test_backlog.py
+    approach: >
+      The export endpoint accepts and applies the active filter parameters. Regression: test_backlog_export_respects_filter_params.
+    risk_level: low
+    commit_message: "fix(web): clamp time-ago, atomic config write, suppress SQLModel nag, export filter respect (PR #27)"
 
   - slug: time-ago-future-dates
     title: _time_ago returns negative strings for future dates
     module: src/grimoire/web/router.py
     severity: low
-    status: open
+    status: fixed
     description: >
       If dt is in the future (clock skew), _time_ago returns strings like "-3s ago".
     reproduction_steps:
@@ -518,12 +591,19 @@ bugs:
       - Returns "-3s ago" instead of "just now".
     root_cause_hypothesis: >
       No guard against negative seconds in the time delta.
+    files_changed:
+      - src/grimoire/web/router.py
+      - tests/test_web/test_router.py
+    approach: >
+      _time_ago clamps negative deltas to zero so future timestamps render as "0s ago"/"just now". Regression: test_time_ago_future_date_not_negative.
+    risk_level: low
+    commit_message: "fix(web): clamp time-ago, atomic config write, suppress SQLModel nag, export filter respect (PR #27)"
 
   - slug: path-traversal-branch-names
     title: No path traversal protection on branch names in workspace manager
     module: src/grimoire/workspace/manager.py
     severity: medium
-    status: open
+    status: fixed
     description: >
       Branch names from config are used unsanitized in filesystem paths. A branch like "../../etc"
       resolves outside the workspace directory.
@@ -532,6 +612,13 @@ bugs:
       - Observe git operations on paths outside workspace.
     root_cause_hypothesis: >
       get_workdir doesn't validate that the resolved path is within workspace_dir.
+    files_changed:
+      - src/grimoire/workspace/manager.py
+      - tests/test_workspace/test_manager.py
+    approach: >
+      _validate_path_component rejects "..", absolute paths, and null bytes for owner/repo/branch in get_workdir and _bare_dir. Regression: test_branch_with_parent_dir_traversal_rejected, test_absolute_branch_rejected, test_branch_with_null_byte_rejected.
+    risk_level: low
+    commit_message: "fix(workspace): reject path traversal in branch/owner/repo names (PR #23)"
 
   - slug: config-cron-not-validated
     title: refresh_schedule cron expression not validated at config load time
@@ -562,7 +649,7 @@ bugs:
     title: backlog_save_weights writes config file non-atomically
     module: src/grimoire/web/router.py
     severity: low
-    status: open
+    status: fixed
     description: >
       Config file is opened with "w" mode and written directly. Process kill mid-write corrupts config.
     reproduction_steps:
@@ -571,6 +658,13 @@ bugs:
       - Config file is empty or corrupted.
     root_cause_hypothesis: >
       Direct file write instead of write-to-temp-then-rename pattern.
+    files_changed:
+      - src/grimoire/web/router.py
+      - tests/test_web/test_router.py
+    approach: >
+      Config is written to a temp file in the config directory then os.replace()d into place, with cleanup on failure. Regression: test_save_weights_writes_atomically.
+    risk_level: low
+    commit_message: "fix(web): clamp time-ago, atomic config write, suppress SQLModel nag, export filter respect (PR #27)"
 
   - slug: env-var-config-crash
     title: Unset optional env placeholder in config.yaml crashes app boot
