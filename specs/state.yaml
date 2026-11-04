@@ -26,9 +26,14 @@ epic_cycle:
   fast_mode: false
 
 bug_cycle:
-  current_step: 1
-  completed_steps: []
+  current_step: 5
+  completed_steps:
+    - investigate-bug
+    - diagnose-root
+    - develop-tdd
+    - validate-fix
   audit_source: specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
+  resolution_commit: 44d5e4f
   scope:
     - run-lifecycle-terminality
     - check-admission-guard
@@ -53,16 +58,17 @@ metrics:
 
 git:
   branch: fix/audit-gaps
-  hash: 912f10f
+  hash: 44d5e4f
   pushed: false
 
 handoff:
   last_step_completed: >
-    fix_bug step 1: created eight bug capsules from the 2026-11-04 hidden-state-machine audit.
-    Baseline: 468 passed, lint clean, HEAD 912f10f. Branch fix/audit-gaps.
+    fix_bug steps 1-4 complete: eight capsules fixed on branch fix/audit-gaps
+    in commit 44d5e4f. just check green (490 passed); all 14 audit checks pass.
+    Step 5 release-branch is pending user approval for push/PR.
   open_decisions: []
   required_reading:
     - specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
     - specs/bugs/BUG-2026-11-04T000000-run-lifecycle-terminality.md
-  next_skill: investigate-bug
+  next_skill: release-branch
 
