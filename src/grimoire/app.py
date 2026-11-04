@@ -29,6 +29,7 @@ from grimoire.config import load_config
 from grimoire.database import (
     RUN_LEASE_SECONDS,
     create_tables,
+    ensure_schema_compatibility,
     get_engine,
     reclaim_expired_runs,
     restore_action_toggles,
@@ -104,6 +105,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # Database
     engine = await get_engine(str(config.database_path))
     await create_tables(engine)
+    await ensure_schema_compatibility(engine)
 
     # Clean up any run records left in 'running' state from a previous crash
     from grimoire.database import cleanup_stale_runs

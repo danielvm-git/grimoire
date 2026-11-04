@@ -248,3 +248,33 @@ async def test_mark_run_running_claims_lease(engine: AsyncEngine) -> None:
         assert row.owner_id
         assert row.heartbeat_at is not None
         assert row.lease_expires_at is not None
+
+
+async def test_ensure_schema_compatibility_adds_missing_run_columns(
+    engine: AsyncEngine,
+) -> None:
+    """An existing DB from before the lease columns is upgraded in place."""
+    from sqlalchemy import text
+
+    from grimoire.database import ensure_schema_compatibility
+
+    async with engine.begin() as conn:
+        await conn.execute(text("DROP TABLE check_run"))
+        await conn.execute(
+            text(
+                "CREATE TABLE check_run ("
+                "id INTEGER PRIMARY KEY, check_slug VARCHAR, check_name VARCHAR, "
+                "triggered_by VARCHAR, status VARCHAR, started_at DATETIME, "
+                "finished_at DATETIME)"
+            )
+        )
+
+    # Twice: the migration must be idempotent.
+    await ensure_schema_compatibility(engine)
+    await ensure_schema_compatibility(engine)
+
+    async with engine.begin() as conn:
+        result = await conn.execute(text("PRAGMA table_info(check_run)"))
+        columns = {row[1] for row in result.fetchall()}
+
+    assert {"owner_id", "heartbeat_at", "lease_expires_at"} <= columns
