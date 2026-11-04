@@ -9,6 +9,9 @@ start:
 # If the runtime falls back to `uv run`, do not re-sync the environment: the
 # build already created .venv, and syncing at startup can block before bind.
 env:
+  # The platform runtime may default to a newer Python where the current
+  # SQLAlchemy/greenlet stack fails at import (often with no traceback).
+  UV_PYTHON: "3.13"
   UV_NO_SYNC: "1"
 health_check:
   path: /health
