@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -229,6 +229,41 @@ async def create_tables(engine: AsyncEngine) -> None:
 async def get_session(engine: AsyncEngine) -> AsyncSession:
     """Get a new async session."""
     return AsyncSession(engine)
+
+
+# Columns added after the initial schema. Existing deployments keep their DB,
+# so create_all() cannot add them; apply idempotent ALTERs at startup instead.
+_RUN_TABLE_ADDITIONS: dict[str, tuple[tuple[str, str], ...]] = {
+    "check_run": (
+        ("owner_id", "VARCHAR NOT NULL DEFAULT ''"),
+        ("heartbeat_at", "DATETIME"),
+        ("lease_expires_at", "DATETIME"),
+    ),
+    "action_run": (
+        ("owner_id", "VARCHAR NOT NULL DEFAULT ''"),
+        ("heartbeat_at", "DATETIME"),
+        ("lease_expires_at", "DATETIME"),
+    ),
+}
+
+
+async def ensure_schema_compatibility(engine: AsyncEngine) -> None:
+    """Add columns introduced after an existing database was created.
+
+    Grimoire has no migration tool; this keeps deployed databases working when
+    a new column is added without requiring the user to delete grimoire.db.
+    """
+    async with engine.begin() as conn:
+        for table, additions in _RUN_TABLE_ADDITIONS.items():
+            result = await conn.execute(text(f"PRAGMA table_info({table})"))
+            existing = {row[1] for row in result.fetchall()}
+            if not existing:
+                continue  # table not created yet
+            for column, definition in additions:
+                if column not in existing:
+                    await conn.execute(
+                        text(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+                    )
 
 
 async def cleanup_stale_runs(engine: AsyncEngine) -> None:
