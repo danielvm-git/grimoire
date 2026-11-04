@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.11.0] - 2026-11-04
+
+### Added
+
+- **state:** explicit run lifecycle and hot-path hardening ([#30](https://github.com/danielvm-git/grimoire/issues/30)) ([420fa08](https://github.com/danielvm-git/grimoire/commit/420fa08547b4a41fb6498dc5920db9511dc41189))
+
 ## [0.10.2] - 2026-08-10
 
 ### Fixed
