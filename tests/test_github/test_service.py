@@ -961,3 +961,15 @@ async def test_refresh_tracks_progress(
     assert not is_refresh_running()
     assert get_refresh_progress() is None
     assert len(result_repos) == 1
+
+
+async def test_refresh_guard_rejects_concurrent_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second refresh cannot start while one is claimed."""
+    from grimoire.github import service as service_module
+
+    monkeypatch.setattr(service_module, "_refresh_active", True)
+
+    with pytest.raises(service_module.RefreshAlreadyRunning):
+        await refresh_all_stats(object(), object())  # type: ignore[arg-type]

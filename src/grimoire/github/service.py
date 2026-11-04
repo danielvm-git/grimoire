@@ -77,11 +77,18 @@ class RefreshProgress:
 
 
 _refresh_progress: RefreshProgress | None = None
+# Set synchronously before the first await, so two callers cannot both start a
+# refresh between the check and the scheduled background task.
+_refresh_active = False
+
+
+class RefreshAlreadyRunning(Exception):
+    """Raised when a refresh is requested while one is already in progress."""
 
 
 def is_refresh_running() -> bool:
-    """Return True if a data refresh is currently in progress."""
-    return _refresh_progress is not None
+    """Return True if a data refresh is currently claimed or in progress."""
+    return _refresh_active or _refresh_progress is not None
 
 
 def get_refresh_progress() -> RefreshProgress | None:
@@ -518,7 +525,11 @@ async def refresh_all_stats(
     config: GrimoireConfig, client: GitHubClient
 ) -> tuple[list[TrackedRepository], list[RepositoryStats]]:
     """Resolve repos, fetch stats concurrently, persist to DB, return results."""
-    global _refresh_progress  # noqa: PLW0603
+    global _refresh_active, _refresh_progress  # noqa: PLW0603
+
+    if _refresh_active:
+        raise RefreshAlreadyRunning("A data refresh is already in progress")
+    _refresh_active = True
 
     # Compute a preliminary repo count from config so the progress bar can
     # show a meaningful denominator before any async work completes.
@@ -580,6 +591,7 @@ async def refresh_all_stats(
         return repos, stats_list
     finally:
         _refresh_progress = None
+        _refresh_active = False
 
 
 # ---------------------------------------------------------------------------

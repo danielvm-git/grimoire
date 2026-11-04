@@ -27,8 +27,10 @@ from grimoire.checks.router import set_checks_state
 from grimoire.checks.scheduler import register_checks
 from grimoire.config import load_config
 from grimoire.database import (
+    RUN_LEASE_SECONDS,
     create_tables,
     get_engine,
+    reclaim_expired_runs,
     restore_action_toggles,
     restore_check_toggles,
 )
@@ -44,6 +46,7 @@ from grimoire.github.router import (
     router as repos_router,
 )
 from grimoire.github.service import (
+    RefreshAlreadyRunning,
     load_stats_from_db,
     prune_removed_repos,
     prune_stale_data,
@@ -231,8 +234,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # Refresh callback for POST /api/refresh
     async def _do_refresh() -> list[TrackedRepository]:
-        with DATA_REFRESH_DURATION.time():
-            refreshed_repos, refreshed_stats = await refresh_all_stats(config, client)
+        try:
+            with DATA_REFRESH_DURATION.time():
+                refreshed_repos, refreshed_stats = await refresh_all_stats(
+                    config, client
+                )
+        except RefreshAlreadyRunning:
+            logger.info("Refresh already in progress — skipping duplicate request")
+            return list(repos)
         update_cache(refreshed_repos, refreshed_stats)
         update_repo_metrics(refreshed_stats)
         # Pruning the DB cache and syncing local clones are independent, so run
@@ -286,6 +295,16 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     register_checks(scheduler, checks, repos, workspace, engine)
     register_actions(scheduler, actions, repos, workspace, engine)
+
+    # Reclaim runs whose owner stopped heartbeating (multi-worker safety).
+    scheduler.add_job(
+        reclaim_expired_runs,
+        "interval",
+        seconds=RUN_LEASE_SECONDS,
+        args=[engine],
+        id="reclaim-runs",
+        replace_existing=True,
+    )
 
     scheduler.start()
     logger.info("Scheduler started (refresh schedule: %s)", config.refresh_schedule)

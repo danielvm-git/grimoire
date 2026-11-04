@@ -95,6 +95,8 @@ class WorkspaceManager:
 
                 if not bare_dir.exists():
                     await self._clone_bare(repo.full_name)
+                else:
+                    await self._ensure_bare_initialized(bare_dir)
 
                 await self._configure_identity(bare_dir)
 
@@ -111,6 +113,7 @@ class WorkspaceManager:
             return
 
         async with self._repo_lock(repo.full_name):
+            await self._ensure_bare_initialized(bare_dir)
             await self._run_git("fetch", "origin", cwd=bare_dir)
 
             # Reset each existing worktree to the latest remote state.
@@ -255,6 +258,27 @@ class WorkspaceManager:
         # Bare clones store refs directly under refs/heads/* and lack remote
         # tracking branches.  Configure a normal fetch refspec and populate
         # refs/remotes/origin/* so worktrees can reference origin/<branch>.
+        await self._run_git(
+            "config",
+            "remote.origin.fetch",
+            "+refs/heads/*:refs/remotes/origin/*",
+            cwd=bare_dir,
+        )
+        await self._run_git("fetch", "origin", cwd=bare_dir)
+
+    async def _ensure_bare_initialized(self, bare_dir: Path) -> None:
+        """Repair a bare clone left half-initialized by a crashed clone.
+
+        A directory that exists is not proof of a usable clone. If the remote
+        fetch refspec is missing, re-apply it and fetch before any worktree
+        operation tries to use ``origin/<branch>``.
+        """
+        try:
+            await self._run_git("config", "--get", "remote.origin.fetch", cwd=bare_dir)
+            return
+        except WorkspaceError:
+            logger.warning("repairing uninitialized bare clone at %s", bare_dir)
+
         await self._run_git(
             "config",
             "remote.origin.fetch",
