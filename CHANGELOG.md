@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.11.4] - 2026-11-04
+
+### Fixed
+
+- **deploy:** skip uv sync at runtime ([#35](https://github.com/danielvm-git/grimoire/issues/35)) ([fcb4a3a](https://github.com/danielvm-git/grimoire/commit/fcb4a3ae3bdd26433425535246e361ca5a8d2e36))
+
 ## [0.11.3] - 2026-11-04
 
 ### Fixed
