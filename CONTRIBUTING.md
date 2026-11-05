@@ -64,6 +64,20 @@ When adding a feature, add or update tests in the matching `tests/` subdirectory
 4. Push and open a PR against `main`
 5. Describe what your change does and link any related issues
 
+## Releases
+
+Releases are automated by [big-release](https://github.com/danielvm-git/big-release)
+on every push to `main`; the setup follows the
+[big-release guide](https://github.com/danielvm-git/big-release/discussions/72).
+
+- Conventional Commits drive SemVer: `feat:` minor, `fix:`/`perf:` patch,
+  `!` or `BREAKING CHANGE:` major.
+- CI validates `.big-release.yml`, previews the next release, tags it, and
+  creates the GitHub Release.
+- Local checks: `just release-validate` and `just release-dry-run`.
+- Do not create releases manually with `gh release create`; the CI release job
+  is the single source of truth.
+
 ## Architecture
 
 Developer specs live in [`docs/specs/`](docs/specs/). Start with [`00-overview.md`](docs/specs/00-overview.md) for the full architecture, module graph, and API reference.

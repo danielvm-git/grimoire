@@ -267,15 +267,19 @@ Ensure all API routes have:
 - Proper HTTP status codes and error response models.
 - Tags for grouping (e.g., `tags=["checks"]`, `tags=["actions"]`, `tags=["repositories"]`).
 
-## 7.7 — Centralized CI/CD Architecture (v4.1.0)
+## 7.7 — CI/CD Architecture
 
-Grimoire adopts the organization-wide centralized CI/CD architecture hosted in `danielvm-git/.github`.
+Workflows are self-contained in `.github/workflows/` (adapted from the
+`danielvm-git/.github` templates, not remote reusable-workflow calls):
 
-Workflows in `.github/workflows/` invoke central reusable workflows:
-- `test-build-release.yml` -> calls `danielvm-git/.github/.github/workflows/test-build-release-python.yml@main` with `type_checker: "pyright"` and `site_url: "https://grimoire.bigbase.click"`.
-- `deploy.yml` -> calls `danielvm-git/.github/.github/workflows/deploy-python.yml@main`.
-- `test-build-release-docs.yml` -> calls `danielvm-git/.github/.github/workflows/test-build-release-pages-mkdocs.yml@main` with `mkdocs_config: "docs/user/mkdocs.yml"`.
-- `deploy-docs.yml` -> calls `danielvm-git/.github/.github/workflows/deploy-pages-mkdocs.yml@main`.
+- `test-build-release.yml` — test, build, and release. The release job runs
+  [big-release](https://github.com/danielvm-git/big-release) on pushes to `main`:
+  Conventional Commits → SemVer, git tag, GitHub Release. It validates the
+  config and previews the next release before tagging. No Node.js runtime is
+  required.
+- `deploy.yml` — deploys after `Test Build Release` completes.
+- `test-build-release-docs.yml` — builds the MkDocs site.
+- `deploy-docs.yml` — publishes the docs site to GitHub Pages.
 
 ## Acceptance Criteria
 

@@ -152,12 +152,15 @@ scan:
 # Version & Release
 # ============================================================================
 
-# Bump the version in pyproject.toml
+# Validate the big-release configuration
 [group("release")]
-[arg("level", long="level", pattern="^(major|minor|patch)$", help="Semantic version bump level")]
-bump level:
-    #!/usr/bin/env bash
-    uv version --bump={{level}}
+release-validate:
+    big-release validate
+
+# Preview the next release without tagging or publishing
+[group("release")]
+release-dry-run:
+    big-release release --dry-run
 
 # Publish to PyPI (requires authentication)
 [group("release")]
@@ -180,22 +183,3 @@ publish-docker:
     docker push lucabello/grimoire:"${version}"
     docker push lucabello/grimoire:latest
     echo "✓ Published lucabello/grimoire:${version} and lucabello/grimoire:latest"
-
-# Create a GitHub release and publish to PyPI and DockerHub
-[group("release")]
-release: (publish "false") publish-docker
-    #!/usr/bin/env bash
-    latest_release="$(gh release list --limit=1 --order=desc --json=tagName | jq -r '.[].tagName')"
-    echo "Latest release on GitHub is ${latest_release}"
-    pyproject_release="$(yq -oy .project.version pyproject.toml)"
-    echo "Current version in pyproject.toml is v${pyproject_release}"
-    if [[ "${latest_release}" == "v${pyproject_release}" ]] ; then
-        echo "Error: Latest release version matches pyproject.toml version. Bump the version first by using 'just bump'."
-        exit 1
-    fi
-    read -p "Proceed releasing v${pyproject_release}? (y/n): " answer
-    if [[ ! "$answer" == [Yy] ]] ; then
-        echo "Cancelled."
-        exit 1
-    fi
-    gh release create "v${pyproject_release}" --generate-notes --notes-start-tag="${latest_release}"

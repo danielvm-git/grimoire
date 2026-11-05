@@ -14,11 +14,6 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - ".github/workflows/test-build-release-docs.yml"
-      - ".github/workflows/deploy-docs.yml"
 
 permissions:
   contents: read
@@ -159,13 +154,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-
       - name: Install big-release
         run: |
           curl -sL https://github.com/danielvm-git/big-release/releases/latest/download/big-release-linux-amd64 -o big-release && chmod +x big-release && sudo mv big-release /usr/local/bin/ && big-release --version
+
+      - name: Validate big-release config
+        run: big-release validate
+
+      - name: Preview next release
+        run: big-release release --dry-run
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run big-release
         id: big-release
