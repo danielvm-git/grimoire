@@ -59,14 +59,17 @@ metrics:
 
 git:
   branch: main
-  hash: a276e62
+  hash: ab3c9a2
   pushed: true
 
 handoff:
   last_step_completed: >
     release-branch: merged fix/audit-gaps into main, pushed origin, CI green
-    (test/build/release), semantic-release published v0.11.6. just check green
-    (490 passed, 85% coverage); all 14 audit checks pass. Branch cleaned up.
+    (test/build/release); big-release published v0.11.6. just check green
+    (493 passed, 85% coverage). Release automation then aligned with the
+    big-release guide: initialVersion/commitTypes, validate + dry-run in CI,
+    Node.js setup removed, manual just release/bump replaced by
+    release-validate/release-dry-run. CI green; no version bump (ci commit).
   open_decisions: []
   required_reading:
     - specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
