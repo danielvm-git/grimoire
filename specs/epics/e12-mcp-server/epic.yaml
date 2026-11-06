@@ -12,7 +12,7 @@ stories:
     tasks: e12s01-tasks.yaml
   - id: e12s02
     title: "MCP Tools & FastMCP Server"
-    status: pending
+    status: done
     spec: e12s02-mcp-tools-fastmcp-server.md
     tasks: e12s02-tasks.yaml
   - id: e12s03

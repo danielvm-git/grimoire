@@ -127,3 +127,126 @@ async def test_mcp_tool_get_repo_checks_status_and_backlog(tmp_path: Path):
     assert len(backlog["failing_checks"]) == 1
     assert backlog["failing_checks"][0]["slug"] == "lint"
     assert "Syntax error" in backlog["failing_checks"][0]["output"]
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_refresh_branches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    db_engine = await get_engine(str(tmp_path / "test.db"))
+    await create_tables(db_engine)
+    wm = _workspace(tmp_path)
+
+    handlers = MCPToolHandlers(
+        engine=db_engine,
+        checks=[_check("lint", "Linting")],
+        repos=[_repo("lucabello/grimoire")],
+        workspace=wm,
+    )
+
+    # 1. Test refresh in get_repo_checks_status with CheckConflictError handling
+    conflict_called = False
+
+    async def mock_run_conflict(*args, **kwargs):
+        nonlocal conflict_called
+        conflict_called = True
+        from grimoire.checks.engine import CheckConflictError
+
+        raise CheckConflictError("conflict")
+
+    monkeypatch.setattr(
+        "grimoire.mcp.tools.run_check_for_all_targets", mock_run_conflict
+    )
+
+    status = await handlers.get_repo_checks_status("lucabello/grimoire", refresh=True)
+    assert conflict_called is True
+    assert status["repository"] == "lucabello/grimoire"
+
+    # 2. Test refresh in get_check_backlog_data with CheckConflictError handling
+    conflict_backlog_called = False
+
+    async def mock_run_backlog_conflict(*args, **kwargs):
+        nonlocal conflict_backlog_called
+        conflict_backlog_called = True
+        from grimoire.checks.engine import CheckConflictError
+
+        raise CheckConflictError("conflict")
+
+    monkeypatch.setattr(
+        "grimoire.mcp.tools.run_check_for_all_targets", mock_run_backlog_conflict
+    )
+
+    backlog = await handlers.get_check_backlog_data("lucabello/grimoire", refresh=True)
+    assert conflict_backlog_called is True
+    assert backlog["repository"] == "lucabello/grimoire"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tool_run_repo_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    db_engine = await get_engine(str(tmp_path / "test.db"))
+    await create_tables(db_engine)
+    wm = _workspace(tmp_path)
+
+    handlers = MCPToolHandlers(
+        engine=db_engine,
+        checks=[_check("lint", "Linting"), _check("sec", "Security")],
+        repos=[_repo("lucabello/grimoire")],
+        workspace=wm,
+    )
+
+    from datetime import datetime, timezone
+
+    from grimoire.models import CheckResult
+
+    # 1. Normal run all checks
+    async def mock_run_success(*args, **kwargs):
+        return [
+            CheckResult(
+                check_name="Linting",
+                check_slug="lint",
+                repo_full_name="lucabello/grimoire",
+                branch="main",
+                passed=True,
+                output="All clean",
+                timestamp=datetime.now(timezone.utc),
+            )
+        ]
+
+    monkeypatch.setattr(
+        "grimoire.mcp.tools.run_check_for_all_targets", mock_run_success
+    )
+
+    run_all = await handlers.run_repo_checks("lucabello/grimoire")
+    assert run_all["repository"] == "lucabello/grimoire"
+    assert run_all["executed_checks_count"] == 2
+    assert run_all["details"][0]["passed"] is True
+
+    # 2. Specific valid check_slug
+    run_specific = await handlers.run_repo_checks(
+        "lucabello/grimoire", check_slug="lint"
+    )
+    assert run_specific["executed_checks_count"] == 1
+    assert run_specific["details"][0]["check_slug"] == "lint"
+
+    # 3. Specific unknown check_slug -> ValueError
+    with pytest.raises(ValueError, match="Check with slug 'unknown' not found"):
+        await handlers.run_repo_checks("lucabello/grimoire", check_slug="unknown")
+
+    # 4. CheckConflictError handling during run_repo_checks
+    async def mock_run_conflict(*args, **kwargs):
+        from grimoire.checks.engine import CheckConflictError
+
+        raise CheckConflictError("check busy")
+
+    monkeypatch.setattr(
+        "grimoire.mcp.tools.run_check_for_all_targets", mock_run_conflict
+    )
+
+    run_conflict = await handlers.run_repo_checks(
+        "lucabello/grimoire", check_slug="lint"
+    )
+    assert run_conflict["executed_checks_count"] == 1
+    assert run_conflict["details"][0]["passed"] is False
+    assert run_conflict["details"][0]["error"] == "already running"
