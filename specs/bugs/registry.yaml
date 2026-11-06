@@ -1219,7 +1219,8 @@ bugs:
     title: MCP e2e tests emit an SAWarning about a connection already in a transaction
     module: tests/test_mcp/test_e2e.py
     severity: low
-    status: open
+    status: fixed
+    fixed_in: "pending"
     found_in: e12 post-epic review
     description: >
       Both MCP e2e tests emit "SAWarning: The engine provided as bind produced a
@@ -1234,11 +1235,16 @@ bugs:
       A startup or request-path AsyncSession leaves a transaction open on the pooled
       connection before the next session binds to it. Replicating the app lifespan alone
       does not reproduce it, so the trigger involves the HTTP client path in the test.
-    files_changed: []
+    files_changed:
+      - src/grimoire/app.py
+      - tests/test_app.py
     approach: >
-      Deferred: warning-only with no functional impact, and a focused reproduction needs
-      a session-lifecycle investigation of its own. Tracked here so it is not silently
-      dropped. Next step is to trace with sqlalchemy event listeners on checkout/checkin.
+      Root cause: asyncio.create_task(_initial_refresh()) was fire-and-forget, so the
+      lifespan returned while the task was still issuing queries against a closing engine.
+      Track the task on app.state, cancel and await it with suppress(CancelledError) during
+      shutdown, and log cancellation at INFO instead of as an error.
+      Regression: test_lifespan_cancels_background_refresh_on_shutdown (PASS).
+      Evidence: full suite 511 passed with zero warnings, down from 44 at baseline.
     risk_level: low
     commit_message: "(deferred)"
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from importlib.metadata import version
 from pathlib import Path
@@ -329,14 +329,30 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                     "Background initial refresh complete — %d repos",
                     len(refreshed_repos),
                 )
+            except asyncio.CancelledError:
+                # Shutdown cancelled us mid-refresh; that is not a failure.
+                logger.info("Background initial refresh cancelled at shutdown")
+                raise
             except Exception:
                 logger.exception("Background initial refresh failed")
 
-        asyncio.create_task(_initial_refresh())
+        # Tracked on app.state so shutdown can stop it. A fire-and-forget task
+        # kept issuing queries against a closing engine after the lifespan
+        # returned, which produced an SAWarning about a connection already in a
+        # transaction. Provenance: registry.yaml e2e-session-transaction-warning.
+        _app.state.initial_refresh_task = asyncio.create_task(_initial_refresh())
 
     yield
 
     # Shutdown
+    refresh_task: asyncio.Task[None] | None = getattr(
+        _app.state, "initial_refresh_task", None
+    )
+    if refresh_task is not None and not refresh_task.done():
+        refresh_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await refresh_task
+
     if scheduler:
         scheduler.shutdown(wait=False)
     if client:
