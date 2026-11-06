@@ -897,7 +897,8 @@ bugs:
     title: MCPAuthMiddleware uses BaseHTTPMiddleware around the SSE stream, crashing the ASGI app on every client disconnect
     module: src/grimoire/mcp/server.py
     severity: high
-    status: open
+    status: fixed
+    fixed_in: "a8dadc2"
     found_in: e12 post-epic review
     description: >
       mount_mcp_server wraps the FastMCP SSE app in an inner FastAPI app whose only job is
@@ -932,7 +933,8 @@ bugs:
     title: get_check_backlog collapses per-branch results by slug, silently reporting all_passed when another branch is failing
     module: src/grimoire/checks/queries.py
     severity: high
-    status: open
+    status: fixed
+    fixed_in: "6e5b09c"
     found_in: e12 post-epic review
     description: >
       get_latest_check_results returns one row per (check_slug, repo_full_name, branch), because
@@ -963,7 +965,8 @@ bugs:
     title: MCP tools accept untracked repositories and report success with zero results
     module: src/grimoire/mcp/tools.py
     severity: medium
-    status: open
+    status: fixed
+    fixed_in: "006c232"
     found_in: e12 post-epic review
     description: >
       validate_repo only checks the owner/name shape. run_repo_checks and get_repo_checks_status
@@ -992,7 +995,8 @@ bugs:
     title: list_checks omits the targets field required by the module spec
     module: src/grimoire/mcp/tools.py
     severity: medium
-    status: open
+    status: fixed
+    fixed_in: "3c56dab"
     found_in: e12 post-epic review
     description: >
       docs/specs/08-mcp-server.md tool 2 and acceptance criterion 4 require list_checks to return
@@ -1015,7 +1019,8 @@ bugs:
     title: JsonFormatter never serialises exc_info, so every logger.exception loses its traceback
     module: src/grimoire/observability/logging.py
     severity: medium
-    status: open
+    status: fixed
+    fixed_in: "1116052"
     found_in: e12 post-epic review (discovered defect)
     description: >
       JsonFormatter.format builds a fixed dict of timestamp/level/message/module/attributes and
@@ -1041,7 +1046,8 @@ bugs:
     title: MCP spec and user docs name a FastMCP class and server name that the code does not use
     module: docs/specs/08-mcp-server.md
     severity: low
-    status: open
+    status: fixed
+    fixed_in: "bbb384e"
     found_in: e12 post-epic review
     description: >
       docs/specs/08-mcp-server.md calls the server a "FastMCP instance created with name \"grimoire\""
@@ -1067,7 +1073,8 @@ bugs:
     title: No ADR records the MCP server, SSE transport or token-auth decisions
     module: specs/adr/
     severity: medium
-    status: open
+    status: fixed
+    fixed_in: "01cb4d7"
     found_in: e12 post-epic review
     description: >
       e12 added a new externally reachable surface (SSE endpoint for AI agents), an optional bearer
@@ -1090,7 +1097,8 @@ bugs:
     title: The refresh-and-swallow-CheckConflictError block is duplicated across two MCP tools
     module: src/grimoire/mcp/tools.py
     severity: low
-    status: open
+    status: fixed
+    fixed_in: "006c232"
     found_in: e12 post-epic review
     description: >
       get_repo_checks_status and get_check_backlog_data each contain the same 12-line loop that runs
@@ -1111,7 +1119,8 @@ bugs:
     title: Tool registration test asserts only is_error is False, so a tool returning an empty or wrong payload still passes
     module: tests/test_mcp/test_server.py
     severity: low
-    status: open
+    status: fixed
+    fixed_in: "41fe0ad"
     found_in: e12 post-epic review
     description: >
       test_mcp_server_tools_registered_and_invoked calls all five tools and asserts nothing beyond
@@ -1134,7 +1143,7 @@ bugs:
     title: Action router tests leave aiosqlite engines open, producing 40+ "Event loop is closed" thread warnings per run
     module: tests/test_actions/test_router.py
     severity: low
-    status: open
+    status: fixed
     found_in: e12 post-epic review (discovered defect)
     description: >
       Running the suite emits dozens of PytestUnhandledThreadExceptionWarning entries whose traceback
@@ -1160,7 +1169,8 @@ bugs:
     title: e12 story specs contain generated boilerplate instead of real acceptance criteria
     module: specs/epics/archive/e12-mcp-server/
     severity: low
-    status: open
+    status: fixed
+    fixed_in: "8a842bb"
     found_in: e12 post-epic review
     description: >
       All four e12 story files carry the same generated skeleton: the requirement restates the title,
@@ -1187,7 +1197,7 @@ bugs:
     title: get_latest_check_results applies the repo filter twice
     module: src/grimoire/checks/queries.py
     severity: low
-    status: open
+    status: fixed
     found_in: e12 post-epic review
     description: >
       get_latest_check_results filters the max-timestamp subquery by repo_full_name and then applies
