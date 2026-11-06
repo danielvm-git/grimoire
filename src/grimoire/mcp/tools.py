@@ -98,13 +98,14 @@ class MCPToolHandlers:
         ]
 
     async def list_checks(self) -> list[dict[str, Any]]:
-        """List all loaded check definitions."""
+        """List all loaded check definitions, including the scope each one targets."""
         return [
             {
                 "slug": c.slug,
                 "name": c.name,
                 "description": c.description,
                 "severity": c.severity,
+                "targets": c.targets.model_dump(),
             }
             for c in self.checks
         ]

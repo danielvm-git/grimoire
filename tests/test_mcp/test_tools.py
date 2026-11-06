@@ -318,3 +318,34 @@ async def test_run_repo_checks_reports_check_without_matching_targets(
     assert "resolved no targets" in detail["error"]
 
     await db_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_list_checks_includes_targets(tmp_path: Path) -> None:
+    """list_checks must expose targets so an agent knows a check's scope.
+
+    Regression for specs/bugs/registry.yaml mcp-list-checks-missing-targets:
+    docs/specs/08-mcp-server.md requires slug, name, description, severity and targets.
+    """
+    db_engine = await get_engine(str(tmp_path / "test.db"))
+    await create_tables(db_engine)
+    handlers = MCPToolHandlers(
+        engine=db_engine,
+        checks=[_check()],
+        repos=[_repo("lucabello/grimoire")],
+        workspace=_workspace(tmp_path),
+    )
+
+    checks = await handlers.list_checks()
+
+    assert checks == [
+        {
+            "slug": "lint",
+            "name": "Linting",
+            "description": "Run linter",
+            "severity": "error",
+            "targets": {"list": ["lucabello/grimoire"], "regex": None, "script": None},
+        }
+    ]
+
+    await db_engine.dispose()
