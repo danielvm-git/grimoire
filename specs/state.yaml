@@ -5,7 +5,7 @@ workflow_mode: solo-git
 active_flow: build_epic
 active_epic: e12
 active_epic_id: e12
-active_story_id: e12s02
+active_story_id: e12s03
 completed_epic: false
 
 project_cycle:
@@ -18,7 +18,7 @@ project_cycle:
 epic_cycle:
   current_step: 4
   next_skill: develop-tdd
-  story_bcps: 5
+  story_bcps: 1
   completed_steps:
     - 0
     - 1
@@ -39,9 +39,9 @@ git:
   pushed: false
 
 handoff:
-  last_step_completed: "Completed e12s02 (MCP Tools & FastMCP Server tests with 100% coverage); advancing to e12s03."
+  last_step_completed: "Completed e12s03 (FastAPI App SSE Endpoint Mounting & Security tests with 100% coverage); advancing to e12s04."
   open_decisions: []
   required_reading:
     - specs/security/epics/e12/THREAT_MODEL.md
-    - specs/epics/e12-mcp-server/e12s03-fastapi-app-sse-endpoint-mounting-s.md
+    - specs/epics/e12-mcp-server/e12s04-user-documentation-e2e-tests.md
   next_skill: develop-tdd

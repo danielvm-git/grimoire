@@ -17,7 +17,7 @@ stories:
     tasks: e12s02-tasks.yaml
   - id: e12s03
     title: "FastAPI App SSE Endpoint Mounting & Security"
-    status: pending
+    status: done
     spec: e12s03-fastapi-app-sse-endpoint-mounting-s.md
     tasks: e12s03-tasks.yaml
   - id: e12s04
