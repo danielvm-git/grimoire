@@ -1220,7 +1220,7 @@ bugs:
     module: tests/test_mcp/test_e2e.py
     severity: low
     status: fixed
-    fixed_in: "pending"
+    fixed_in: "24c0887"
     found_in: e12 post-epic review
     description: >
       Both MCP e2e tests emit "SAWarning: The engine provided as bind produced a
