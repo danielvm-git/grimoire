@@ -42,6 +42,12 @@ jobs:
 
       - uses: extractions/setup-just@v3
 
+      - name: Verify uv.lock is up to date
+        # Must run before `uv sync`: syncing rewrites a stale lockfile in place,
+        # which would hide the drift. Provenance: registry.yaml
+        # release-workflow-skips-uv-lock.
+        run: uv lock --check
+
       - name: Cache uv virtualenv
         uses: actions/cache@v4
         with:
@@ -181,7 +187,11 @@ jobs:
         run: |
           VER="${{ steps.big-release.outputs.version }}"
           sed -i.bak -E "s/^version = \".*\"/version = \"${VER}\"/" pyproject.toml && rm pyproject.toml.bak
-          git add pyproject.toml CHANGELOG.md
+          # Regenerate the lockfile so the release commit never ships a uv.lock
+          # that disagrees with pyproject.toml. Provenance: registry.yaml
+          # release-workflow-skips-uv-lock.
+          uv lock
+          git add pyproject.toml CHANGELOG.md uv.lock
           git -c user.name="big-release-bot" -c user.email="big-release-bot@danielvm-git.github.io" \
             commit -m "chore(release): update version files to ${VER} [skip ci]"
           git push origin main

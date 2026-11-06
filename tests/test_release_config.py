@@ -45,3 +45,52 @@ def test_justfile_release_path_uses_big_release() -> None:
     assert "big-release validate" in text
     assert "big-release release --dry-run" in text
     assert "gh release create" not in text
+
+
+def test_release_workflow_keeps_lockfile_in_sync() -> None:
+    """The release sync step must regenerate and stage uv.lock."""
+    workflow = _load_yaml(REPO_ROOT / ".github/workflows/test-build-release.yml")
+    steps = workflow["jobs"]["release"]["steps"]
+    sync_step = next(
+        step
+        for step in steps
+        if step.get("name") == "Sync pyproject version and CHANGELOG"
+    )
+    script = sync_step["run"]
+
+    assert "uv lock" in script, "the release step must regenerate uv.lock"
+    assert "uv.lock" in script, "the release step must stage uv.lock"
+
+
+def test_test_job_guards_lockfile_freshness() -> None:
+    """CI must reject a stale uv.lock before uv sync silently repairs it.
+
+    A runtime assertion cannot catch this drift: `uv sync`/`uv run` rewrite uv.lock
+    in the runner before tests execute, so the tree always looks consistent. The
+    guard therefore has to run first, in the workflow. Provenance:
+    specs/bugs/registry.yaml release-workflow-skips-uv-lock.
+    """
+    workflow = _load_yaml(REPO_ROOT / ".github/workflows/test-build-release.yml")
+    steps = workflow["jobs"]["test"]["steps"]
+    names = [step.get("name", "") for step in steps]
+
+    lock_check_index = next(
+        (
+            index
+            for index, step in enumerate(steps)
+            if "uv lock --check" in step.get("run", "")
+        ),
+        None,
+    )
+    assert lock_check_index is not None, (
+        "the test job needs a 'uv lock --check' step so a stale uv.lock fails the build"
+    )
+
+    sync_index = next(
+        index
+        for index, step in enumerate(steps)
+        if step.get("run", "").strip().startswith("uv sync")
+    )
+    assert lock_check_index < sync_index, (
+        f"uv lock --check must run before uv sync (steps: {names})"
+    )
