@@ -53,51 +53,85 @@ epic_cycle:
       (e2e-session-transaction-warning).
 
 release:
-  target_version: "0.12.0"
-  last_tag: "v0.12.0"
-  last_publish: "v0.12.0"
+  target_version: "0.12.3"
+  last_tag: "v0.12.3"
+  last_publish: "0.12.3"
   ci_verified: true
-  ci_run: 42253926602
+  ci_run: 42271501353
   changelog_entry: true
+  version_files_consistent: true
 
-# Post-release work awaiting landing. main is clean and green; this branch holds the
-# e12 post-epic review fixes and is NOT merged (push/PR is outward-facing — needs the user).
-pending_landing:
-  branch: fix/e12-post-epic-review
-  base: main
-  commits: 12
-  preflight: PASS (510 passed)
-  requires: "user approval to push/PR/merge (outward-facing)"
+# Build&Ship cycle (2026-11-06) - all pending work landed and shipped.
+ship:
+  prs_merged: 3
+  ci_runs:
+    - pr: 39
+      title: "fix(mcp): close e12 post-epic review findings"
+      merge_sha: "9b4b83d"
+      run: 42268583331
+      result: "test/build/release all success"
+      outcome: "tag v0.12.1"
+    - pr: 40
+      title: "fix(ci): keep uv.lock in sync with the released version"
+      merge_sha: "0aaff9e"
+      run: 42270622888
+      result: "test/build success, release FAILED (uv not installed, exit 127)"
+      outcome: "big-release tagged v0.12.2 before failing; version commit never landed"
+    - pr: 41
+      title: "fix(ci): install uv in the release job before the lockfile step"
+      merge_sha: "68b4d16"
+      run: 42271501353
+      result: "test/build/release all success"
+      outcome: "tag v0.12.3; pyproject.toml + uv.lock consistent"
+  baseline:
+    tests: "501 passed, 44 warnings"
+  final:
+    tests: "514 passed, 0 warnings"
+    coverage: "88%"
+  registry_open_before: 1
+  registry_open_after: 0
+  residual:
+    - id: tag-v0.12.2-orphan
+      detail: >
+        Tag v0.12.2 exists on a commit whose version bump never landed because the
+        release job died before the sync step. Deleting or re-pointing a tag is
+        outside this run's approval (explicitly excluded). Left as-is and recorded
+        in specs/bugs/registry.yaml release-job-missing-uv.
 
 git:
-  branch: fix/e12-post-epic-review
-  base_branch: main
-  hash: "99abcff"
-  pushed: false
+  branch: main
+  hash: "1f0bff6"
+  pushed: true
+  clean: true
+  worktrees: 1
 
 handoff:
-  last_step_completed: "Closed epic e12 after a full post-epic review: 3 review passes over the whole epic diff, 13 findings logged (2 HIGH, 4 MEDIUM, 7 LOW), 12 fixed with tests, 1 deferred with reason. Updated specs/verifications/e12-verify.yaml, specs/security/REVIEW.md, added ADR-006, rewrote the four e12 story specs. All 12 epics in release-plan.yaml are now done, so the next step is planning a new release, not executing one."
+  last_step_completed: "Build&Ship cycle completed: 3 PRs merged (#39, #40, #41), CI repaired (missing uv install in release job), all pending work shipped as v0.12.1 through v0.12.3. Main is clean at 1f0bff6, 514 tests passing with zero warnings. All registry entries closed. One residual noted: orphan tag v0.12.2 (release job died after big-release tagged but before version commit)."
   open_decisions:
-    - gate: "post-epic review — HARD GATE (2 HIGH defects)"
-      decision: "Took the recommended path: fix both HIGH defects before declaring the epic closed, each with a failing regression test first."
-      reason: "CONVENTIONS.md Always Green / fix-or-log: a reproducible defect is never dismissed."
-    - gate: "missing tooling (scripts/land-branch.sh, scripts/lib/assert-epic-gate.sh, scripts/record-cycle-time.sh, trace-stories, check-stale-locks.sh, cleanup-worktrees.sh)"
-      decision: "WAIVED each with a note; ran the equivalent manual checks instead (git traceability grep, worktree/branch audit, Preflight)."
-      reason: "Scripts absent from the repo; the skill's own fallback paths cover the manual equivalent. Not silently skipped — recorded here and in the final report."
-    - gate: "epic close (execution-status.yaml / state.yaml)"
-      decision: "Marked e12 closed only after the third review pass found no new findings and Preflight was green."
-      reason: "Skill ordering requirement."
-    - gate: "e2e-session-transaction-warning (LOW)"
-      decision: "Deferred with reason recorded in specs/bugs/registry.yaml; status left open."
-      reason: "Warning-only, no functional impact; a focused reproduction needs its own session-lifecycle investigation. Logged, not dropped."
+    - gate: "build-ship-phase-1-triage"
+      decision: "Treated all pending work as 2 work items: (1) e2e-session-transaction-warning (open bug), (2) land 14-commit review branch. Not stashed; committed as conventional commits."
+      reason: "Scope is all pending work; 1 open bug + 1 unmerged branch."
+    - gate: "build-ship-phase-2-fix-workflow-uv-lock-drift"
+      decision: "Found and fixed recurring uv.lock drift (pyproject bumped but lockfile not). Root cause: release workflow stages pyproject.toml + CHANGELOG.md but never runs uv lock."
+      reason: "Discovered during the fix for the open bug; fix-or-log ladder requires it."
+    - gate: "build-ship-phase-3-workflow-regression-test"
+      decision: "Runtime assertion for uv.lock==pyproject version is unsound because uv sync rewrites the lock before tests execute. Replaced with a deterministic workflow guard (uv lock --check before uv sync)."
+      reason: "The fragile test would pass even when the drift exists. Better to guard in CI where it can fail."
+    - gate: "build-ship-phase-4-release-job-missing-uv"
+      decision: "PR #40 added uv lock to release job but the job never installed uv. First push after it failed CI on main (exit 127) after big-release had already published v0.12.2. Fixed in PR #41 by adding setup-uv to the release job. Orphan tag v0.12.2 left as-is (deleting/re-pointing tags is outside approval)."
+      reason: "Phase 5 CI repair; same-failure 3-attempt limit not reached (2 attempts)."
+    - gate: "build-ship-phase-5-verify"
+      decision: "All phases ended green: clean tree, no unmerged work, main==origin/main, Preflight green (514 passed, 0 warnings)."
+      reason: "Standing gate requirement."
   required_reading:
-    - specs/release-plan.yaml
-    - specs/execution-status.yaml
-    - specs/verifications/e12-verify.yaml
+    - specs/state.yaml
     - specs/bugs/registry.yaml
+    - specs/release-plan.yaml
+    - specs/verifications/e12-verify.yaml
   next_skill: survey-context
   next_action: >
-    All 12 epics are done, so there is no WSJF-ordered epic left to build. Run
-    survey-context, then scope-work for the next release (no specs/product/SCOPE_LATEST.yaml
-    exists yet), then slice-tasks and plan-work.
+    All 12 epics are done and all pending work is shipped. The next step is
+    planning a new release: run survey-context, then scope-work for the next
+    release (no specs/product/SCOPE_LATEST.yaml exists yet), then slice-tasks
+    and plan-work.
   next_command: "survey-context"
