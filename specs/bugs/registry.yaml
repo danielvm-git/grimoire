@@ -1314,7 +1314,7 @@ bugs:
     severity: high
     status: fixed
     found_in: build-and-ship cycle (2026-11-06)
-    fixed_in: "pending"
+    fixed_in: "957381a"
     description: >
       PR #40 added `uv lock` to the release job's sync step but the job never installed uv
       (only the test and build jobs do). The next push to main therefore failed in the release
