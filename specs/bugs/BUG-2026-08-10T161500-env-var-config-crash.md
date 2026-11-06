@@ -1,6 +1,6 @@
 ---
 bug_id: BUG-2026-08-10T161500
-status: open
+status: fixed
 severity: high
 scope: config
 title: Unset optional env placeholder in config.yaml crashes app boot

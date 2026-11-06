@@ -1,6 +1,6 @@
 ---
 bug_id: BUG-2026-11-03T000000
-status: open
+status: fixed
 severity: high
 scope: checks
 title: Check output reports "[exit code None]" due to unawaited subprocess reaping
@@ -67,4 +67,6 @@ NONE — no exploit path. This is a reporting race in output formatting.
 
 ## Resolution
 
-<!-- filled in by validate-fix -->
+- **Fixed by:** `src/grimoire/script.py` — both `read_output_capped` and `read_stdout_stderr_capped` now drain streams concurrently via `asyncio.gather` and `await proc.wait()` before returning, guaranteeing `returncode` is populated.
+- **Verification:** `uv run pytest tests/test_script.py tests/test_checks/test_engine.py -q` (all pass). Full suite `just check` 514 passed.
+- **Concurrency fix:** `read_stdout_stderr_capped` uses `asyncio.gather` for stdout+stderr instead of sequential reads (avoids deadlock on large stderr).
