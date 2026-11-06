@@ -1254,7 +1254,7 @@ bugs:
     severity: low
     status: fixed
     found_in: e12 post-epic review (second pass)
-    fixed_in: "this-commit"
+    fixed_in: "294b01a"
     description: >
       overall_status is a three-level conditional expression, and run_repo_checks builds the
       same five-key summary dict in two branches (CheckConflictError and success) with a nested
