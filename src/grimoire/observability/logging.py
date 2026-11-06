@@ -21,6 +21,12 @@ class JsonFormatter(logging.Formatter):
             "attributes": getattr(record, "attributes", {}),
         }
 
+        # logger.exception() carries exc_info; without this the traceback is lost
+        # and every ERROR line is undebuggable. Provenance: registry.yaml
+        # json-formatter-drops-tracebacks.
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+
         # Add trace context if available
         try:
             from opentelemetry import trace

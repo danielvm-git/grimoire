@@ -1,24 +1,139 @@
 epic_id: e12
 title: "MCP Server & Query Layer"
-verified_at: "2026-11-06T13:05:00-03:00"
-branch: feat/e12-mcp-server
+verified_at: "2026-11-06T18:00:00-03:00"
+branch: fix/e12-post-epic-review
 verdict: PASS
+scope: post-epic review (full epic diff, not just the last story)
+epic_diff: "f5587fa^..826acb6 (src/grimoire/mcp/, checks/queries.py, config.py, app.py, tests/test_mcp/, docs/)"
+
 mechanical_gates:
   format: PASS (uv run ruff format)
   lint: PASS (uv run ruff check)
   typecheck: PASS (uv run pyright src — 0 errors)
   vulture: PASS (uv run vulture src --min-confidence 80)
   codespell: PASS (uv run codespell src)
-  tests: PASS (501 passed in 41.95s)
-terminal_verdict:
+  tests: PASS (510 passed)
+  terminal_verdict:
+    command: "just check"
+    exit_code: 0
+
+baseline:
   command: "just check"
-  exit_code: 0
+  result: "501 passed, ✓ All checks passed"
+  note: >
+    Green, but carrying 44 warnings including repeated
+    PytestUnhandledThreadExceptionWarning (aiosqlite "Event loop is closed").
+    Recorded as a defect (action-router-tests-leak-engines), not dismissed.
+
 coverage:
-  grimoire.checks.queries: 100%
-  grimoire.mcp.tools: 100%
-  grimoire.mcp.server: 100%
-stories:
-  e12s01: PASS
-  e12s02: PASS
-  e12s03: PASS
-  e12s04: PASS
+  overall: 88%
+  gate: ">=80% overall, >=95% business logic"
+  modules:
+    grimoire.mcp.server: 100%
+    grimoire.mcp.tools: 100%
+    grimoire.checks.queries: 100%
+
+cold_start_smoke:
+  config: "GRIMOIRE_MCP_TOKEN=smoke-token-123, uvicorn grimoire.app:create_app --factory"
+  health: "GET /health -> 200"
+  sse_without_token: "GET /mcp/sse -> 401"
+  sse_with_token: "GET /mcp/sse -> 200, streams 'event: endpoint / data: /mcp/messages/?session_id=...'"
+  disconnect_assertion_errors: 0
+  json_log_traceback: "present ('exception': 'Traceback (most recent call last)...')"
+  startup_log: "MCP server mounted at /mcp (token auth: enabled)"
+
+story_traceability:
+  e12s01: "tests/test_checks/test_queries.py"
+  e12s02: "tests/test_mcp/test_tools.py"
+  e12s03: "tests/test_mcp/test_server.py"
+  e12s04: "tests/test_mcp/test_e2e.py"
+  dark_stories: none
+  tags_correct: true
+
+task_verify_commands:
+  e12s01: PASS (3 passed; just check)
+  e12s02: PASS (10 passed; grimoire.mcp.tools 100%)
+  e12s03: PASS (6 passed; grimoire.mcp.server 100%)
+  e12s04: PASS (3 passed; just check)
+
+findings:
+  high: 2
+  medium: 4
+  low: 6
+  open: 1
+  registry: 'specs/bugs/registry.yaml (found_in: "e12 post-epic review")'
+  detail:
+    - id: mcp-auth-middleware-breaks-sse-stream
+      severity: high
+      status: fixed
+      fixed_in: a8dadc2
+    - id: check-backlog-ignores-branch
+      severity: high
+      status: fixed
+      fixed_in: 6e5b09c
+    - id: mcp-tools-report-vacuous-success
+      severity: medium
+      status: fixed
+      fixed_in: 006c232
+    - id: mcp-list-checks-missing-targets
+      severity: medium
+      status: fixed
+      fixed_in: 3c56dab
+    - id: json-formatter-drops-tracebacks
+      severity: medium
+      status: fixed
+      fixed_in: 1116052
+    - id: mcp-missing-adr
+      severity: medium
+      status: fixed
+      fixed_in: 01cb4d7
+    - id: mcp-spec-names-stale
+      severity: low
+      status: fixed
+      fixed_in: bbb384e
+    - id: mcp-tool-tests-assert-nothing
+      severity: low
+      status: fixed
+      fixed_in: 41fe0ad
+    - id: action-router-tests-leak-engines
+      severity: low
+      status: fixed
+      fixed_in: a76c2b4
+    - id: e12-story-specs-are-stubs
+      severity: low
+      status: fixed
+      fixed_in: 8a842bb
+    - id: check-latest-results-redundant-filter
+      severity: low
+      status: fixed
+      fixed_in: a76c2b4
+    - id: mcp-duplicated-refresh-block
+      severity: low
+      status: fixed
+      fixed_in: 006c232
+    - id: mcp-tools-nested-conditionals
+      severity: low
+      status: fixed
+      fixed_in: a76c2b4
+    - id: e2e-session-transaction-warning
+      severity: low
+      status: open
+      reason: >
+        Warning-only, no functional impact. A focused reproduction needs its own
+        session-lifecycle investigation (replicating the app lifespan alone does not
+        trigger it). Logged with the deferral reason, not dropped.
+
+review_passes:
+  - pass: 1
+    new_findings: 12
+  - pass: 2
+    new_findings: 1
+    note: "mcp-tools-nested-conditionals"
+  - pass: 3
+    new_findings: 0
+
+artifacts:
+  adr: specs/adr/ADR-006-mcp-server-sse-token-auth.md
+  security_review: specs/security/REVIEW.md (refreshed for e12)
+  threat_model: specs/security/epics/e12/THREAT_MODEL.md
+  story_specs: "specs/epics/archive/e12-mcp-server/e12s0*.md rewritten with real criteria"

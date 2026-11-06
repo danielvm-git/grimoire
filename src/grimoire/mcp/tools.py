@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from grimoire.checks.loader import CheckDefinition
-    from grimoire.models import TrackedRepository
+    from grimoire.models import CheckResult, TrackedRepository
     from grimoire.workspace.manager import WorkspaceManager
 
 _REPO_REGEX = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
@@ -37,6 +37,46 @@ def validate_check_slug(slug: str) -> None:
         )
 
 
+def require_tracked_repo(repo: str, repos: list[TrackedRepository]) -> None:
+    """Reject a repository that Grimoire does not track.
+
+    Format validation alone is not enough: ChecksEngine narrows an untracked
+    ``specific_repo`` to an empty target list, which used to surface as a
+    successful run with zero results.
+    """
+    if any(candidate.full_name == repo for candidate in repos):
+        return
+
+    tracked = ", ".join(sorted(candidate.full_name for candidate in repos)) or "none"
+    raise ValueError(
+        f"Repository '{repo}' is not tracked by Grimoire. "
+        f"Tracked repositories: {tracked}. "
+        f"Add it under 'repositories:' in config.yaml, then reload Grimoire."
+    )
+
+
+def _overall_status(passing: int, failing: int) -> str:
+    """Summarise per-result counts as passing, failing or unknown."""
+    if failing:
+        return "failing"
+    if passing:
+        return "passing"
+    return "unknown"
+
+
+def _execution_detail(
+    check: CheckDefinition, results: list[CheckResult], error: str | None
+) -> dict[str, Any]:
+    """Describe one check execution attempt."""
+    return {
+        "check_slug": check.slug,
+        "check_name": check.name,
+        "results_count": len(results),
+        "passed": bool(results) and all(r.passed for r in results),
+        "error": error,
+    }
+
+
 class MCPToolHandlers:
     """Tool handlers bound to application state."""
 
@@ -52,6 +92,21 @@ class MCPToolHandlers:
         self.repos = repos
         self.workspace = workspace
 
+    async def _refresh_checks_for_repo(self, repo: str) -> None:
+        """Re-run every check for one repository, tolerating concurrent runs."""
+        for check in self.checks:
+            try:
+                await run_check_for_all_targets(
+                    check=check,
+                    repos=self.repos,
+                    workspace=self.workspace,
+                    engine=self.engine,
+                    triggered_by="api",
+                    specific_repo=repo,
+                )
+            except CheckConflictError:
+                continue
+
     async def list_repositories(self) -> list[dict[str, Any]]:
         """List all tracked repositories in Grimoire."""
         return [
@@ -65,13 +120,14 @@ class MCPToolHandlers:
         ]
 
     async def list_checks(self) -> list[dict[str, Any]]:
-        """List all loaded check definitions."""
+        """List all loaded check definitions, including the scope each one targets."""
         return [
             {
                 "slug": c.slug,
                 "name": c.name,
                 "description": c.description,
                 "severity": c.severity,
+                "targets": c.targets.model_dump(),
             }
             for c in self.checks
         ]
@@ -81,20 +137,10 @@ class MCPToolHandlers:
     ) -> dict[str, Any]:
         """Query overall check passing/failing status for a repository."""
         validate_repo(repo)
+        require_tracked_repo(repo, self.repos)
 
         if refresh:
-            for check in self.checks:
-                try:
-                    await run_check_for_all_targets(
-                        check=check,
-                        repos=self.repos,
-                        workspace=self.workspace,
-                        engine=self.engine,
-                        triggered_by="api",
-                        specific_repo=repo,
-                    )
-                except CheckConflictError:
-                    continue
+            await self._refresh_checks_for_repo(repo)
 
         async with AsyncSession(self.engine) as session:
             results = await get_latest_check_results(session, repo_full_name=repo)
@@ -104,9 +150,7 @@ class MCPToolHandlers:
 
         return {
             "repository": repo,
-            "overall_status": "passing"
-            if failing_count == 0 and len(results) > 0
-            else ("failing" if failing_count > 0 else "unknown"),
+            "overall_status": _overall_status(passing_count, failing_count),
             "total_executed_checks": len(results),
             "passing": passing_count,
             "failing": failing_count,
@@ -127,20 +171,10 @@ class MCPToolHandlers:
     ) -> dict[str, Any]:
         """Get list of failing or unexecuted checks (backlog) for a repository."""
         validate_repo(repo)
+        require_tracked_repo(repo, self.repos)
 
         if refresh:
-            for check in self.checks:
-                try:
-                    await run_check_for_all_targets(
-                        check=check,
-                        repos=self.repos,
-                        workspace=self.workspace,
-                        engine=self.engine,
-                        triggered_by="api",
-                        specific_repo=repo,
-                    )
-                except CheckConflictError:
-                    continue
+            await self._refresh_checks_for_repo(repo)
 
         async with AsyncSession(self.engine) as session:
             return await get_check_backlog(
@@ -154,48 +188,42 @@ class MCPToolHandlers:
     ) -> dict[str, Any]:
         """Trigger execution of checks for a repository on demand."""
         validate_repo(repo)
-        if check_slug:
-            validate_check_slug(check_slug)
+        require_tracked_repo(repo, self.repos)
 
         target_checks = self.checks
         if check_slug:
+            validate_check_slug(check_slug)
             target_checks = [c for c in self.checks if c.slug == check_slug]
             if not target_checks:
                 raise ValueError(f"Check with slug '{check_slug}' not found.")
 
-        executed_summary = []
-        for check in target_checks:
-            try:
-                results = await run_check_for_all_targets(
-                    check=check,
-                    repos=self.repos,
-                    workspace=self.workspace,
-                    engine=self.engine,
-                    triggered_by="api",
-                    specific_repo=repo,
-                )
-            except CheckConflictError:
-                executed_summary.append(
-                    {
-                        "check_slug": check.slug,
-                        "check_name": check.name,
-                        "results_count": 0,
-                        "passed": False,
-                        "error": "already running",
-                    }
-                )
-                continue
-            executed_summary.append(
-                {
-                    "check_slug": check.slug,
-                    "check_name": check.name,
-                    "results_count": len(results),
-                    "passed": all(r.passed for r in results) if results else True,
-                }
-            )
-
+        details = [await self._execute_check(check, repo) for check in target_checks]
         return {
             "repository": repo,
-            "executed_checks_count": len(executed_summary),
-            "details": executed_summary,
+            "executed_checks_count": len(details),
+            "details": details,
         }
+
+    async def _execute_check(self, check: CheckDefinition, repo: str) -> dict[str, Any]:
+        """Run one check for one repository and describe the outcome."""
+        try:
+            results = await run_check_for_all_targets(
+                check=check,
+                repos=self.repos,
+                workspace=self.workspace,
+                engine=self.engine,
+                triggered_by="api",
+                specific_repo=repo,
+            )
+        except CheckConflictError:
+            return _execution_detail(check, [], "already running")
+
+        if results:
+            return _execution_detail(check, results, None)
+
+        return _execution_detail(
+            check,
+            results,
+            f"Check '{check.slug}' resolved no targets for '{repo}'. "
+            f"Add the repository to the check's targets in data/checks/.",
+        )

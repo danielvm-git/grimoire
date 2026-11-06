@@ -190,3 +190,63 @@ class TestLifespanResilience:
                 data = resp.json()
                 # App should be ok even with workspace failure
                 assert data["status"] in ("ok", "degraded")
+
+
+@pytest.mark.asyncio
+async def test_lifespan_cancels_background_refresh_on_shutdown(
+    mock_config: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The background initial refresh must not outlive the lifespan.
+
+    Regression for specs/bugs/registry.yaml e2e-session-transaction-warning:
+    asyncio.create_task(_initial_refresh()) was fire-and-forget, so shutdown
+    returned while the task was still issuing queries against a closing engine.
+    That surfaced as an SAWarning about a connection already in a transaction and
+    as a spurious "Background initial refresh failed" ERROR on every shutdown.
+    """
+    import asyncio
+
+    from grimoire import app as app_module
+
+    refresh_started = asyncio.Event()
+
+    async def never_finishing_refresh(*_args: object, **_kwargs: object) -> tuple:
+        refresh_started.set()
+        await asyncio.sleep(60)
+        return [], []
+
+    with (
+        patch("grimoire.app.GitHubClient") as client_cls,
+        patch("grimoire.app.AsyncIOScheduler"),
+        patch("grimoire.app.WorkspaceManager") as ws_cls,
+        patch("grimoire.app.load_stats_from_db", new_callable=AsyncMock) as load_db,
+        patch("grimoire.app.refresh_all_stats", side_effect=never_finishing_refresh),
+    ):
+        client_cls.return_value.close = AsyncMock()
+        ws = MagicMock()
+        ws.setup = AsyncMock()
+        ws.sync_all = AsyncMock()
+        ws.workspace_dir = mock_config.parent / "workspace"
+        ws_cls.return_value = ws
+        # No cached data forces the background refresh path.
+        load_db.return_value = ([], [])
+
+        app = create_app()
+        caplog.set_level("INFO")
+        async with app.router.lifespan_context(app):
+            await asyncio.wait_for(refresh_started.wait(), timeout=5)
+            task = getattr(app.state, "initial_refresh_task", None)
+            assert task is not None, "lifespan must track the background refresh task"
+            assert not task.done()
+
+        assert task.done(), (
+            "background refresh must be finished before shutdown returns"
+        )
+        assert not any(
+            "Background initial refresh failed" in record.message
+            for record in caplog.records
+        ), "a cancelled refresh must not be logged as a failure"
+
+    # The task must not still be scheduled on the loop after shutdown.
+    assert all(t.done() for t in asyncio.all_tasks() if "initial_refresh" in str(t))
+    assert app_module  # keep the module import used for clarity

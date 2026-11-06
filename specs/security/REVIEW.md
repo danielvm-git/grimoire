@@ -17,13 +17,16 @@ transport mount, the bearer-token auth middleware, and the MCP tool handlers.
 - **Authentication on `/mcp`** — PASS. `MCPAuthMiddleware` accepts either `X-MCP-Token` or
   `Authorization: Bearer <token>` and compares with `secrets.compare_digest` (constant-time,
   no timing oracle). Missing or wrong token returns 401 before the SSE app is reached.
+  The guard is a **pure ASGI middleware**, not a `BaseHTTPMiddleware`: the latter buffers the
+  response and asserted on every SSE client disconnect, crashing the ASGI app
+  (`specs/bugs/registry.yaml` `mcp-auth-middleware-breaks-sse-stream`, fixed in `a8dadc2`).
   When `mcp.token` is empty the endpoint mounts unauthenticated and emits an explicit
-  startup warning (`server.py:127`) rather than failing silently.
+  startup warning (`server.py`) rather than failing silently.
 - **Injection / command execution** — PASS. `run_repo_checks` and `get_repo_checks_status`
   validate inputs with anchored regexes (`^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$` for repos,
-  `^[a-zA-Z0-9_-]+$` for check slugs) before any database or subprocess invocation.
-  Check execution reuses the existing `checks/engine` path, which does not interpolate
-  user input into a shell string.
+  `^[a-zA-Z0-9_-]+$` for check slugs) before any database or subprocess invocation, and
+  `require_tracked_repo` rejects repositories Grimoire does not track. Check execution reuses
+  the existing `checks/engine` path, which does not interpolate user input into a shell string.
 - **DoS / concurrency** — PASS. `run_check_for_all_targets` surfaces `CheckConflictError`
   on concurrent runs instead of spawning unbounded subprocesses.
 - **Information disclosure** — PASS. Check output is truncated at the 64 KB cap consistent
@@ -44,4 +47,14 @@ transport mount, the bearer-token auth middleware, and the MCP tool handlers.
 ## Conclusion
 
 Zero unresolved HIGH or CRITICAL severity findings. Constant-time token comparison landed in
-`631e614`. Clean for merge to main.
+`631e614`; the streaming-safe pure ASGI middleware landed in `a8dadc2` during the e12
+post-epic review. Clean for merge to main.
+
+## Post-epic review (2026-11-06)
+
+Re-reviewed as part of the e12 post-epic pass. One security-relevant defect was found and
+fixed: the `BaseHTTPMiddleware` auth guard broke the SSE stream on every client disconnect
+(unhandled ASGI exception per reconnect). No credential handling, validation or trust-boundary
+change was introduced by the review fixes. Findings: `specs/bugs/registry.yaml`
+`mcp-auth-middleware-breaks-sse-stream`, `mcp-tools-report-vacuous-success`,
+`mcp-list-checks-missing-targets`. Decision record: `specs/adr/ADR-006-mcp-server-sse-token-auth.md`.

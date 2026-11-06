@@ -171,3 +171,54 @@ async def test_get_check_backlog_comprehensive(tmp_path: Path) -> None:
         )
         assert empty_backlog["all_passed"] is True
         assert empty_backlog["summary"]["total_checks"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_check_backlog_reports_failing_branch(tmp_path: Path) -> None:
+    """A failing branch must not be hidden by a passing branch of the same repo.
+
+    Regression for specs/bugs/registry.yaml check-backlog-ignores-branch: results were
+    collapsed by check slug alone, so only the last branch's row survived and a red
+    ``main`` reported as all_passed=True.
+    """
+    db_engine = await get_engine(str(tmp_path / "branches.db"))
+    await create_tables(db_engine)
+    ts = datetime(2026, 11, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    async with AsyncSession(db_engine) as session:
+        session.add(
+            CheckResultRecord(
+                check_slug="lint",
+                check_name="Linting",
+                repo_full_name="acme/repo1",
+                branch="main",
+                passed=False,
+                timestamp=ts,
+                output="main is broken",
+            )
+        )
+        session.add(
+            CheckResultRecord(
+                check_slug="lint",
+                check_name="Linting",
+                repo_full_name="acme/repo1",
+                branch="release",
+                passed=True,
+                timestamp=ts,
+                output="release is clean",
+            )
+        )
+        await session.commit()
+
+    async with AsyncSession(db_engine) as session:
+        backlog = await get_check_backlog(
+            session=session,
+            repo_full_name="acme/repo1",
+            check_definitions=[_make_check()],
+        )
+
+    assert backlog["all_passed"] is False
+    assert [c["branch"] for c in backlog["failing_checks"]] == ["main"]
+    assert backlog["failing_checks"][0]["output"] == "main is broken"
+    assert [c["branch"] for c in backlog["passing_checks"]] == ["release"]
+    await db_engine.dispose()

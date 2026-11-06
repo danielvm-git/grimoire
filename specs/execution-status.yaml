@@ -111,3 +111,18 @@ development_status:
     status: done
     started_at: "2026-11-06T13:01:00-03:00"
     completed_at: "2026-11-06T13:03:00-03:00"
+
+# Post-epic review gate — an epic is only truly closed once a full review pass
+# finds no new findings. Evidence: specs/verifications/<epic>-verify.yaml
+post_epic_reviews:
+  e12:
+    reviewed_at: "2026-11-06"
+    verdict: PASS
+    review_passes: 3
+    findings_total: 13
+    findings_fixed: 12
+    findings_open: 1
+    open_findings:
+      - e2e-session-transaction-warning
+    evidence: specs/verifications/e12-verify.yaml
+    registry: specs/bugs/registry.yaml

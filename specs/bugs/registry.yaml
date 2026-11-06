@@ -891,3 +891,384 @@ bugs:
       when the MCP endpoint mounts without a token.
     risk_level: low
     commit_message: "chore: remove dead pagination state and stale metric labels"
+
+  # ── e12 post-epic review (2026-11-06) ──────────────────────────────────────
+  - slug: mcp-auth-middleware-breaks-sse-stream
+    title: MCPAuthMiddleware uses BaseHTTPMiddleware around the SSE stream, crashing the ASGI app on every client disconnect
+    module: src/grimoire/mcp/server.py
+    severity: high
+    status: fixed
+    fixed_in: "a8dadc2"
+    found_in: e12 post-epic review
+    description: >
+      mount_mcp_server wraps the FastMCP SSE app in an inner FastAPI app whose only job is
+      to attach MCPAuthMiddleware, which extends starlette BaseHTTPMiddleware. BaseHTTPMiddleware
+      buffers the response and asserts that every downstream ASGI message is http.response.body
+      (starlette/middleware/base.py:178). An SSE response is an endless stream, so when a client
+      disconnects the inner app emits a fresh http.response.start and the assert fires:
+      "AssertionError: Unexpected message: {'type': 'http.response.start', 'status': 200, ...}".
+      MCP clients reconnect constantly, so this raises an unhandled ASGI exception and an ERROR
+      log on every normal disconnect. It also defeats streaming, since the middleware accumulates
+      the whole response before forwarding.
+    reproduction_steps:
+      - Run `GRIMOIRE_MCP_TOKEN=smoke-token-123 just run`.
+      - "curl -s -o /dev/null --max-time 1 -H 'X-MCP-Token: smoke-token-123' http://127.0.0.1:8000/mcp/sse"
+      - Observe `ERROR: Exception in ASGI application` plus the AssertionError traceback in the log, once per disconnect.
+    root_cause_hypothesis: >
+      Starlette's BaseHTTPMiddleware is documented as incompatible with streaming responses.
+      The auth check only inspects request headers, so it does not need a response-wrapping
+      middleware at all.
+    files_changed:
+      - src/grimoire/mcp/server.py
+      - tests/test_mcp/test_server.py
+    approach: >
+      Replace BaseHTTPMiddleware with a pure ASGI middleware that returns a 401 response itself
+      or forwards the untouched receive/send callables to the SSE app. Drop the inner FastAPI
+      wrapper and mount the SSE app directly. Regression: an SSE request that disconnects must
+      leave the app alive with no AssertionError.
+    risk_level: medium
+    commit_message: "fix(mcp): use pure ASGI auth middleware so SSE disconnects do not crash"
+
+  - slug: check-backlog-ignores-branch
+    title: get_check_backlog collapses per-branch results by slug, silently reporting all_passed when another branch is failing
+    module: src/grimoire/checks/queries.py
+    severity: high
+    status: fixed
+    fixed_in: "6e5b09c"
+    found_in: e12 post-epic review
+    description: >
+      get_latest_check_results returns one row per (check_slug, repo_full_name, branch), because
+      Grimoire runs checks on every tracked branch. get_check_backlog then builds
+      `results_by_slug = {r.check_slug: r for r in latest_results}`, so only the last row per slug
+      survives and the branch dimension is discarded. When a repo is tracked on several branches
+      and the surviving row is the passing one, the tool reports all_passed=True while another
+      branch is red. The payload also omits the branch field, so a caller cannot tell which branch
+      a result came from.
+    reproduction_steps:
+      - Insert CheckResultRecord rows for acme/repo1 lint on branch "main" passed=False and branch "release" passed=True.
+      - Call get_check_backlog(session, "acme/repo1", [lint]).
+      - Observe all_passed=True, failing_checks=[], passing_checks=["release"] — the main failure vanished.
+    root_cause_hypothesis: >
+      The slug-only dict comprehension assumes a single branch per repo, but the query deliberately
+      returns per-branch rows.
+    files_changed:
+      - src/grimoire/checks/queries.py
+      - tests/test_checks/test_queries.py
+    approach: >
+      Aggregate by (slug, branch) instead of slug, report every failing branch, expose `branch` on
+      each backlog entry, and add the branch dimension to the summary counts. Regression: a repo
+      with a passing release branch and a failing main branch must report all_passed=False.
+    risk_level: medium
+    commit_message: "fix(checks): keep the branch dimension in the check backlog"
+
+  - slug: mcp-tools-report-vacuous-success
+    title: MCP tools accept untracked repositories and report success with zero results
+    module: src/grimoire/mcp/tools.py
+    severity: medium
+    status: fixed
+    fixed_in: "006c232"
+    found_in: e12 post-epic review
+    description: >
+      validate_repo only checks the owner/name shape. run_repo_checks and get_repo_checks_status
+      never confirm the repository is tracked, and ChecksEngine filters specific_repo down to an
+      empty target list without complaint. run_repo_checks therefore answers
+      {"results_count": 0, "passed": true} for a repository it never touched, because
+      `all(...) if results else True` returns True on an empty list. An agent asking to run checks
+      on a typo'd repo is told the checks passed.
+    reproduction_steps:
+      - Call the run_repo_checks MCP tool with repo "acme/not-tracked".
+      - Observe a success payload with results_count 0 and passed true.
+    root_cause_hypothesis: >
+      Format validation was mistaken for existence validation, and the empty-result branch of the
+      passed computation defaults to True.
+    files_changed:
+      - src/grimoire/mcp/tools.py
+      - tests/test_mcp/test_tools.py
+    approach: >
+      Add a _require_tracked_repo guard that raises ValueError naming the offending repo and listing
+      tracked ones, use it in both tools, and treat an empty execution result as a failure with an
+      explicit error message rather than a pass.
+    risk_level: low
+    commit_message: "fix(mcp): reject untracked repositories instead of reporting a vacuous pass"
+
+  - slug: mcp-list-checks-missing-targets
+    title: list_checks omits the targets field required by the module spec
+    module: src/grimoire/mcp/tools.py
+    severity: medium
+    status: fixed
+    fixed_in: "3c56dab"
+    found_in: e12 post-epic review
+    description: >
+      docs/specs/08-mcp-server.md tool 2 and acceptance criterion 4 require list_checks to return
+      slug, name, description, severity AND targets. The handler returns the first four only, so an
+      agent cannot tell which repositories or branches a check is scoped to.
+    reproduction_steps:
+      - Call the list_checks MCP tool.
+      - Observe entries with no "targets" key.
+    root_cause_hypothesis: >
+      The targets field was dropped during implementation and no test asserted the response shape.
+    files_changed:
+      - src/grimoire/mcp/tools.py
+      - tests/test_mcp/test_tools.py
+    approach: >
+      Include the resolved targets on each entry and assert the full response shape in a test.
+    risk_level: low
+    commit_message: "fix(mcp): include check targets in list_checks output"
+
+  - slug: json-formatter-drops-tracebacks
+    title: JsonFormatter never serialises exc_info, so every logger.exception loses its traceback
+    module: src/grimoire/observability/logging.py
+    severity: medium
+    status: fixed
+    fixed_in: "1116052"
+    found_in: e12 post-epic review (discovered defect)
+    description: >
+      JsonFormatter.format builds a fixed dict of timestamp/level/message/module/attributes and
+      ignores record.exc_info. All 12 logger.exception call sites in src/ therefore emit a bare
+      JSON line with no stack trace. A cold start logs
+      {"level": "ERROR", "message": "Data loading failed — falling back to cached data"} with no
+      indication of what actually failed.
+    reproduction_steps:
+      - Start the app with an unreachable GitHub API and a populated cache.
+      - Inspect the log line for "Data loading failed" — no traceback field is present.
+    root_cause_hypothesis: >
+      The formatter was written for structured fields only and exc_info handling was never added.
+    files_changed:
+      - src/grimoire/observability/logging.py
+      - tests/test_observability/test_logging.py
+    approach: >
+      Serialise record.exc_info through a formatter into an "exception" field (and keep the message
+      intact), with a regression test asserting the traceback text appears in the JSON line.
+    risk_level: low
+    commit_message: "fix(observability): serialise exception tracebacks in JSON logs"
+
+  - slug: mcp-spec-names-stale
+    title: MCP spec and user docs name a FastMCP class and server name that the code does not use
+    module: docs/specs/08-mcp-server.md
+    severity: low
+    status: fixed
+    fixed_in: "bbb384e"
+    found_in: e12 post-epic review
+    description: >
+      docs/specs/08-mcp-server.md calls the server a "FastMCP instance created with name \"grimoire\""
+      and the user docs say "FastMCP endpoint path". The installed mcp SDK exposes MCPServer only
+      (there is no FastMCP export), and src/grimoire/mcp/server.py instantiates MCPServer("Grimoire").
+      docs/specs/00-overview.md repeats the FastMCP wording.
+    reproduction_steps:
+      - "uv run python -c \"import mcp.server as s; print([n for n in dir(s) if 'MCP' in n])\" -> ['MCPServer']"
+      - Grep docs/ for FastMCP.
+    root_cause_hypothesis: >
+      The spec was written against an older mcp SDK release and never reconciled after the rename.
+    files_changed:
+      - docs/specs/08-mcp-server.md
+      - docs/specs/00-overview.md
+      - docs/user/reference/mcp.md
+    approach: >
+      Rename FastMCP to MCPServer in the specs and user docs, state the actual server name, and
+      document the real list_checks payload.
+    risk_level: low
+    commit_message: "docs(specs): align MCP spec and user docs with the MCPServer API"
+
+  - slug: mcp-missing-adr
+    title: No ADR records the MCP server, SSE transport or token-auth decisions
+    module: specs/adr/
+    severity: medium
+    status: fixed
+    fixed_in: "01cb4d7"
+    found_in: e12 post-epic review
+    description: >
+      e12 added a new externally reachable surface (SSE endpoint for AI agents), an optional bearer
+      token auth scheme, a deliberately disabled DNS-rebinding protection, and a dependency on the
+      mcp SDK. None of it is recorded in specs/adr/, which holds ADR-001..005 for every other
+      comparable decision. The trade-off lives only in a threat model.
+    reproduction_steps:
+      - "ls specs/adr/ -> ADR-001..005, no MCP entry."
+    root_cause_hypothesis: >
+      The epic produced a threat model but no architecture decision record.
+    files_changed:
+      - specs/adr/ADR-006-mcp-server-sse-token-auth.md
+    approach: >
+      Add ADR-006 covering the SSE transport choice, optional token auth, the DNS-rebinding
+      trade-off and the single-user self-hosted trust boundary.
+    risk_level: low
+    commit_message: "docs(adr): record the MCP server and token-auth decision"
+
+  - slug: mcp-duplicated-refresh-block
+    title: The refresh-and-swallow-CheckConflictError block is duplicated across two MCP tools
+    module: src/grimoire/mcp/tools.py
+    severity: low
+    status: fixed
+    fixed_in: "006c232"
+    found_in: e12 post-epic review
+    description: >
+      get_repo_checks_status and get_check_backlog_data each contain the same 12-line loop that runs
+      every check for one repo and continues on CheckConflictError. CONVENTIONS.md forbids
+      duplication and asks for shared logic to be extracted.
+    reproduction_steps:
+      - Read src/grimoire/mcp/tools.py lines 88-100 and 124-136 — identical loops.
+    root_cause_hypothesis: >
+      The second tool was written by copying the first.
+    files_changed:
+      - src/grimoire/mcp/tools.py
+    approach: >
+      Extract _refresh_checks_for_repo(repo) and call it from both tools.
+    risk_level: low
+    commit_message: "refactor(mcp): extract the shared check refresh loop"
+
+  - slug: mcp-tool-tests-assert-nothing
+    title: Tool registration test asserts only is_error is False, so a tool returning an empty or wrong payload still passes
+    module: tests/test_mcp/test_server.py
+    severity: low
+    status: fixed
+    fixed_in: "41fe0ad"
+    found_in: e12 post-epic review
+    description: >
+      test_mcp_server_tools_registered_and_invoked calls all five tools and asserts nothing beyond
+      res.is_error is False. A regression that returned [] or dropped a field from list_repositories
+      or list_checks would not be caught. The spec's acceptance criterion 4 describes concrete
+      payload contents that are never asserted.
+    reproduction_steps:
+      - Make list_repositories return [] and run the test — it still passes.
+    root_cause_hypothesis: >
+      The test was written to prove wiring, not behaviour, and no shape assertions were added.
+    files_changed:
+      - tests/test_mcp/test_server.py
+    approach: >
+      Assert the decoded payload shape for each tool: repository fields, check fields including
+      targets, status keys, and backlog summary keys.
+    risk_level: low
+    commit_message: "test(mcp): assert MCP tool payload shapes, not just absence of errors"
+
+  - slug: action-router-tests-leak-engines
+    title: Action router tests leave aiosqlite engines open, producing 40+ "Event loop is closed" thread warnings per run
+    module: tests/test_actions/test_router.py
+    severity: low
+    status: fixed
+    found_in: e12 post-epic review (discovered defect)
+    description: >
+      Running the suite emits dozens of PytestUnhandledThreadExceptionWarning entries whose traceback
+      is aiosqlite's _connection_worker_thread calling future.get_loop().call_soon_threadsafe on a
+      closed loop, plus SAWarning "The engine provided as bind produced a connection that is already
+      in a transaction". The engines created in the action router tests are never disposed, so their
+      worker threads outlive the test's event loop. Preflight still passes, which is why it went
+      unnoticed, but the noise masks real thread failures.
+    reproduction_steps:
+      - "uv run pytest tests/test_actions/test_router.py -q -W always::pytest.PytestUnhandledThreadExceptionWarning"
+      - Observe one PytestUnhandledThreadExceptionWarning per leaked connection.
+    root_cause_hypothesis: >
+      The test fixtures build an engine but never await engine.dispose(), unlike the MCP tests which do.
+    files_changed:
+      - tests/test_actions/test_router.py
+    approach: >
+      Dispose the engine in the fixture teardown (or use a dispose-aware fixture) so no worker thread
+      survives the loop.
+    risk_level: low
+    commit_message: "test(actions): dispose database engines in router tests"
+
+  - slug: e12-story-specs-are-stubs
+    title: e12 story specs contain generated boilerplate instead of real acceptance criteria
+    module: specs/epics/archive/e12-mcp-server/
+    severity: low
+    status: fixed
+    fixed_in: "8a842bb"
+    found_in: e12 post-epic review
+    description: >
+      All four e12 story files carry the same generated skeleton: the requirement restates the title,
+      the Gherkin scenario is "Given the environment is initialized / When <title> is executed / Then
+      all assertions pass and status is in_progress" (three of four say "pending", contradicting the
+      done status), and the only verify command is `just check`. Nothing in them states what the
+      story actually had to deliver, so the specs cannot be used to judge completeness.
+    reproduction_steps:
+      - Read specs/epics/archive/e12-mcp-server/e12s0*.md — identical structure, no real criteria.
+    root_cause_hypothesis: >
+      slice-tasks/plan-work emitted placeholder content and it was never fleshed out before build.
+    files_changed:
+      - specs/epics/archive/e12-mcp-server/e12s01-configuration-checkqueryservice.md
+      - specs/epics/archive/e12-mcp-server/e12s02-mcp-tools-fastmcp-server.md
+      - specs/epics/archive/e12-mcp-server/e12s03-fastapi-app-sse-endpoint-mounting-s.md
+      - specs/epics/archive/e12-mcp-server/e12s04-user-documentation-e2e-tests.md
+    approach: >
+      Rewrite each story spec with the concrete deliverables and acceptance criteria it actually
+      shipped, keeping the existing task verify commands.
+    risk_level: low
+    commit_message: "docs(specs): replace e12 story stubs with real acceptance criteria"
+
+  - slug: check-latest-results-redundant-filter
+    title: get_latest_check_results applies the repo filter twice
+    module: src/grimoire/checks/queries.py
+    severity: low
+    status: fixed
+    found_in: e12 post-epic review
+    description: >
+      get_latest_check_results filters the max-timestamp subquery by repo_full_name and then applies
+      the same predicate again to the outer query. The outer filter is redundant once the join is
+      restricted, and the duplication obscures which clause is authoritative.
+    reproduction_steps:
+      - Read src/grimoire/checks/queries.py lines 36-52.
+    root_cause_hypothesis: >
+      The filter was added defensively to both halves of the query.
+    files_changed:
+      - src/grimoire/checks/queries.py
+    approach: >
+      Keep the single authoritative predicate on the outer query (which already joins the filtered
+      subquery) and remove the duplicate.
+    risk_level: low
+    commit_message: "refactor(checks): drop the duplicated repo filter in latest-results query"
+
+  - slug: e2e-session-transaction-warning
+    title: MCP e2e tests emit an SAWarning about a connection already in a transaction
+    module: tests/test_mcp/test_e2e.py
+    severity: low
+    status: fixed
+    fixed_in: "24c0887"
+    found_in: e12 post-epic review
+    description: >
+      Both MCP e2e tests emit "SAWarning: The engine provided as bind produced a
+      connection that is already in a transaction ... effective join transaction mode
+      'create_savepoint'". A session is being created on a pooled connection that still
+      has an open transaction. Preflight stays green; the warning is cosmetic today but
+      signals session/transaction hygiene that would matter under concurrency.
+    reproduction_steps:
+      - "uv run pytest tests/test_mcp/test_e2e.py -q -W always::sqlalchemy.exc.SAWarning"
+      - Observe one SAWarning per e2e test.
+    root_cause_hypothesis: >
+      A startup or request-path AsyncSession leaves a transaction open on the pooled
+      connection before the next session binds to it. Replicating the app lifespan alone
+      does not reproduce it, so the trigger involves the HTTP client path in the test.
+    files_changed:
+      - src/grimoire/app.py
+      - tests/test_app.py
+    approach: >
+      Root cause: asyncio.create_task(_initial_refresh()) was fire-and-forget, so the
+      lifespan returned while the task was still issuing queries against a closing engine.
+      Track the task on app.state, cancel and await it with suppress(CancelledError) during
+      shutdown, and log cancellation at INFO instead of as an error.
+      Regression: test_lifespan_cancels_background_refresh_on_shutdown (PASS).
+      Evidence: full suite 511 passed with zero warnings, down from 44 at baseline.
+    risk_level: low
+    commit_message: "(deferred)"
+
+  - slug: mcp-tools-nested-conditionals
+    title: MCP tool handlers nest ternaries and duplicate the execution-summary construction
+    module: src/grimoire/mcp/tools.py
+    severity: low
+    status: fixed
+    found_in: e12 post-epic review (second pass)
+    fixed_in: "pending"
+    description: >
+      overall_status is a three-level conditional expression, and run_repo_checks builds the
+      same five-key summary dict in two branches (CheckConflictError and success) with a nested
+      ternary for the error field. CONVENTIONS.md requires early returns, positives over
+      negatives, at most two levels of indentation, and no duplicated logic.
+    reproduction_steps:
+      - Read src/grimoire/mcp/tools.py — overall_status and the two executed_summary.append blocks.
+    root_cause_hypothesis: >
+      Both were written inline for brevity rather than extracted.
+    files_changed:
+      - src/grimoire/mcp/tools.py
+    approach: >
+      Extract _overall_status(passing, failing) and _execution_detail(check, results, error) with
+      early returns, and move the per-check run into _execute_check so run_repo_checks is a loop
+      plus a return.
+    risk_level: low
+    commit_message: "refactor(mcp): flatten status logic and deduplicate execution details"

@@ -32,6 +32,25 @@ epic_cycle:
     - 8
   audit_result: PASS
   fast_mode: false
+  post_epic_review:
+    epic: e12
+    date: "2026-11-06"
+    verdict: PASS
+    review_passes: 3
+    findings:
+      high: 2
+      medium: 4
+      low: 6
+      open: 1
+    evidence: specs/verifications/e12-verify.yaml
+    registry: specs/bugs/registry.yaml
+    note: >
+      Full epic diff reviewed (f5587fa^..826acb6), not just the last story. Three
+      passes; the third found nothing new. Two HIGH defects found and fixed: the
+      BaseHTTPMiddleware auth guard crashed the ASGI app on every SSE disconnect, and
+      the check backlog collapsed per-branch results so a failing branch could report
+      as all_passed. One LOW finding deferred with its reason recorded
+      (e2e-session-transaction-warning).
 
 release:
   target_version: "0.12.0"
@@ -41,15 +60,44 @@ release:
   ci_run: 42253926602
   changelog_entry: true
 
+# Post-release work awaiting landing. main is clean and green; this branch holds the
+# e12 post-epic review fixes and is NOT merged (push/PR is outward-facing — needs the user).
+pending_landing:
+  branch: fix/e12-post-epic-review
+  base: main
+  commits: 12
+  preflight: PASS (510 passed)
+  requires: "user approval to push/PR/merge (outward-facing)"
+
 git:
-  branch: main
-  hash: "9b05d02"
-  pushed: true
+  branch: fix/e12-post-epic-review
+  base_branch: main
+  hash: "99abcff"
+  pushed: false
 
 handoff:
-  last_step_completed: "Completed epic e12 end-to-end (e12s01-e12s04, verify-work, audit-code, dual-blind review, respond-review), archived capsule to specs/epics/archive/e12-mcp-server, landed branch onto main, and verified release v0.12.0 (tag + changelog + CI run 42253926602 green). Stale feat/e12-mcp-server branch deleted; specs/security/REVIEW.md refreshed for e12."
-  open_decisions: []
+  last_step_completed: "Closed epic e12 after a full post-epic review: 3 review passes over the whole epic diff, 13 findings logged (2 HIGH, 4 MEDIUM, 7 LOW), 12 fixed with tests, 1 deferred with reason. Updated specs/verifications/e12-verify.yaml, specs/security/REVIEW.md, added ADR-006, rewrote the four e12 story specs. All 12 epics in release-plan.yaml are now done, so the next step is planning a new release, not executing one."
+  open_decisions:
+    - gate: "post-epic review — HARD GATE (2 HIGH defects)"
+      decision: "Took the recommended path: fix both HIGH defects before declaring the epic closed, each with a failing regression test first."
+      reason: "CONVENTIONS.md Always Green / fix-or-log: a reproducible defect is never dismissed."
+    - gate: "missing tooling (scripts/land-branch.sh, scripts/lib/assert-epic-gate.sh, scripts/record-cycle-time.sh, trace-stories, check-stale-locks.sh, cleanup-worktrees.sh)"
+      decision: "WAIVED each with a note; ran the equivalent manual checks instead (git traceability grep, worktree/branch audit, Preflight)."
+      reason: "Scripts absent from the repo; the skill's own fallback paths cover the manual equivalent. Not silently skipped — recorded here and in the final report."
+    - gate: "epic close (execution-status.yaml / state.yaml)"
+      decision: "Marked e12 closed only after the third review pass found no new findings and Preflight was green."
+      reason: "Skill ordering requirement."
+    - gate: "e2e-session-transaction-warning (LOW)"
+      decision: "Deferred with reason recorded in specs/bugs/registry.yaml; status left open."
+      reason: "Warning-only, no functional impact; a focused reproduction needs its own session-lifecycle investigation. Logged, not dropped."
   required_reading:
     - specs/release-plan.yaml
     - specs/execution-status.yaml
+    - specs/verifications/e12-verify.yaml
+    - specs/bugs/registry.yaml
   next_skill: survey-context
+  next_action: >
+    All 12 epics are done, so there is no WSJF-ordered epic left to build. Run
+    survey-context, then scope-work for the next release (no specs/product/SCOPE_LATEST.yaml
+    exists yet), then slice-tasks and plan-work.
+  next_command: "survey-context"

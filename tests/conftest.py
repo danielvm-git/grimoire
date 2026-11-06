@@ -54,3 +54,32 @@ async def async_client() -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture(autouse=True)
+async def dispose_test_engines(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
+    """Dispose every async engine a test creates.
+
+    An engine left open keeps an aiosqlite worker thread alive past the test's
+    event loop; the thread then dies with "Event loop is closed" and pytest reports
+    a PytestUnhandledThreadExceptionWarning against an unrelated test. Tracking at
+    ``create_async_engine`` (the one chokepoint behind ``get_engine``) covers every
+    test module without touching them. Provenance: specs/bugs/registry.yaml
+    action-router-tests-leak-engines.
+    """
+    from sqlalchemy.ext.asyncio import AsyncEngine
+
+    import grimoire.database as database
+
+    created: list[AsyncEngine] = []
+    real_create_async_engine = database.create_async_engine
+
+    def tracking_create_async_engine(*args: object, **kwargs: object) -> AsyncEngine:
+        engine = real_create_async_engine(*args, **kwargs)  # type: ignore[arg-type]
+        created.append(engine)
+        return engine
+
+    monkeypatch.setattr(database, "create_async_engine", tracking_create_async_engine)
+    yield
+    for engine in created:
+        await engine.dispose()

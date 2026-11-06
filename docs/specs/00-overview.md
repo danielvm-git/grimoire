@@ -178,7 +178,7 @@ log_file: "./grimoire.log"
 | `GET` | `/api/actions/{slug}/runs/{id}` | Get specific run details + logs |
 | `POST` | `/api/actions/{slug}/run` | Trigger action (optional `?repo=`); 409 if running |
 | `GET` | `/health` | Health check (for Docker HEALTHCHECK / k8s probes) |
-| `GET/POST` | `/mcp` | FastMCP SSE protocol endpoint for LLM agents |
+| `GET/POST` | `/mcp` | MCP SSE protocol endpoint for LLM agents |
 
 Auto-generated OpenAPI docs are available at `/docs` (Swagger UI) and `/redoc`.
 

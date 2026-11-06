@@ -75,8 +75,13 @@ async def action_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
     app.include_router(router, prefix="/api")
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+    finally:
+        # Leaving the engine open keeps an aiosqlite worker thread alive past the
+        # test's event loop, which then raises "Event loop is closed".
+        await engine.dispose()
 
 
 @pytest.fixture
@@ -97,8 +102,11 @@ async def action_client_with_engine(
     app.include_router(router, prefix="/api")
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client, engine
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client, engine
+    finally:
+        await engine.dispose()
 
 
 # ---------------------------------------------------------------------------
