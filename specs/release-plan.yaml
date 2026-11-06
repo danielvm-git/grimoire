@@ -1,36 +1,79 @@
 # Grimoire — Release Plan
-# Migrated from docs/specs/00–07 on 2026-07-08
-# All epics are done — this is a retrospective release index.
+# Sequenced with WSJF ordering and BCP baselines
 
 release:
-  codename: "initial"
+  codename: "fleet-intelligence"
+  version: "0.11.6"
   bump_hint: minor
-  version: "0.1.8"  # mirror from pyproject.toml — not authoritative (git tags are)
+  status: planning
+  semantic_release: true
+  baseline:
+    total_epics: 12
+    total_bcps: 212
+    completed_bcps: 212
+    test_baseline: "493 passing tests"
+    coverage_baseline: "85%"
 
 epics:
-  - id: e01
-    title: "Project Scaffolding & Configuration"
-    file: specs/epics/e01-scaffolding/epic.yaml
-    wsjf: 80
-    bcps: 16
-    status: done
-
   - id: e02
     title: "GitHub Data Service"
+    capsule_dir: specs/epics/e02-github-service
     file: specs/epics/e02-github-service/epic.yaml
     wsjf: 95
     bcps: 30
     status: done
 
-  - id: e03
-    title: "Repository Workspace Manager"
-    file: specs/epics/e03-workspace/epic.yaml
-    wsjf: 60
-    bcps: 11
+  - id: e12
+    title: "MCP Server & Query Layer"
+    capsule_dir: specs/epics/e12-mcp-server
+    file: specs/epics/e12-mcp-server/epic.yaml
+    wsjf: 95
+    bcps: 20
+    status: done
+
+  - id: e06
+    title: "Web Application"
+    capsule_dir: specs/epics/e06-web-application
+    file: specs/epics/e06-web-application/epic.yaml
+    wsjf: 90
+    bcps: 31
+    status: done
+
+  - id: e10
+    title: "CI/CD v3 Migration"
+    capsule_dir: specs/epics/e10-ci-v3-migration
+    file: specs/epics/e10-ci-v3-migration/epic.yaml
+    wsjf: 90
+    bcps: 5
+    status: done
+
+  - id: e09
+    title: "Fleet Check Portfolio"
+    capsule_dir: specs/epics/e09-fleet-checks
+    file: specs/epics/e09-fleet-checks/epic.yaml
+    wsjf: 85
+    bcps: 8
+    status: done
+
+  - id: e11
+    title: "End-to-End Browser Testing"
+    capsule_dir: specs/epics/archive/e11-e2e-browser-testing
+    file: specs/epics/archive/e11-e2e-browser-testing/epic.yaml
+    wsjf: 82
+    bcps: 37
+    status: done
+
+  - id: e01
+    title: "Project Scaffolding & Configuration"
+    capsule_dir: specs/epics/e01-scaffolding
+    file: specs/epics/e01-scaffolding/epic.yaml
+    wsjf: 80
+    bcps: 16
     status: done
 
   - id: e04
     title: "Checks Engine"
+    capsule_dir: specs/epics/e04-checks-engine
     file: specs/epics/e04-checks-engine/epic.yaml
     wsjf: 75
     bcps: 22
@@ -38,57 +81,39 @@ epics:
 
   - id: e05
     title: "Actions Engine"
+    capsule_dir: specs/epics/e05-actions-engine
     file: specs/epics/e05-actions-engine/epic.yaml
     wsjf: 70
     bcps: 16
     status: done
 
-  - id: e06
-    title: "Web Application"
-    file: specs/epics/e06-web-application/epic.yaml
-    wsjf: 90
-    bcps: 31
+  - id: e03
+    title: "Repository Workspace Manager"
+    capsule_dir: specs/epics/e03-workspace
+    file: specs/epics/e03-workspace/epic.yaml
+    wsjf: 60
+    bcps: 11
+    status: done
+
+  - id: e08
+    title: "Test Hardening"
+    capsule_dir: specs/epics/archive/e08-test-hardening
+    file: specs/epics/archive/e08-test-hardening/epic.yaml
+    wsjf: 60
+    bcps: 14
     status: done
 
   - id: e07
     title: "Observability & DevOps"
+    capsule_dir: specs/epics/e07-observability
     file: specs/epics/e07-observability/epic.yaml
     wsjf: 55
     bcps: 12
     status: done
 
-  - id: e09
-    title: "Fleet Check Portfolio"
-    file: specs/epics/e09-fleet-checks/epic.yaml
-    wsjf: 85
-    bcps: 8
-    status: done
-
-  - id: e08
-    title: "Test Hardening"
-    file: specs/epics/e08-test-hardening/epic.yaml
-    wsjf: 60
-    bcps: 14
-    status: done
-
-  - id: e10
-    title: "CI/CD v3 Migration"
-    file: specs/epics/e10-ci-v3-migration/epic.yaml
-    wsjf: 90
-    bcps: 5
-    status: done
-
-  - id: e11
-    title: "End-to-End Browser Testing"
-    file: specs/epics/archive/e11-e2e-browser-testing/epic.yaml
-    wsjf: 82  # weighted avg of story WSJFs (95,90,65,45,75,68,70,55,50,40); harness+smoke lead
-    bcps: 37
-    status: done
-
-  - id: e12
-    title: "MCP Server & Query Layer"
-    file: specs/epics/e12-mcp-server/epic.yaml
-    wsjf: 95
-    bcps: 20
-    status: done
-
+bugs:
+  total: 15
+  fixed: 15
+  deferred: 0
+  wontfix: 0
+  registry: specs/bugs/registry.yaml

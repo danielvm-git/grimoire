@@ -1,3 +1,4 @@
+# story: e08s01
 """Tests for app.py lifespan orchestration."""
 
 from __future__ import annotations

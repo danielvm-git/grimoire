@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# pre-push: guard-git branch protection
+# Blocks direct push to main/master unless GIT_BIGPOWERS_LAND=1
+set -euo pipefail
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  case "$remote_ref" in
+    refs/heads/main|refs/heads/master)
+      if [[ "${GIT_BIGPOWERS_LAND:-0}" != "1" ]]; then
+        echo "guard-git: Direct push to '$remote_ref' is forbidden without GIT_BIGPOWERS_LAND=1." >&2
+        echo "Use a feature branch and land-branch.sh instead." >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+exit 0

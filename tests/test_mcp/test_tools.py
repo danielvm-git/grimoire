@@ -1,3 +1,4 @@
+# story: e12s02
 """Unit tests for MCP tool handlers."""
 
 from __future__ import annotations

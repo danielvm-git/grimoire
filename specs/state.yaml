@@ -1,61 +1,33 @@
 # Grimoire — Session State
-# QA Audit — Full codebase bug sweep
-
+bigpowers_version: "2.3.0"
 workflow_mode: solo-git
 
 active_flow: idle
-active_epic_id: e11
+active_epic: e12
+active_epic_id: e12
 active_story_id: null
-completed_epic: true
+completed_epic: false
 
-epic_cycle:
-  current_step: 8
-  next_skill: survey-context
-  story_bcps: 37
-  completed_steps:
-    - 0
+project_cycle:
+  current_phase: 4
+  completed_phases:
     - 1
     - 2
     - 3
-    - 4
-    - 5
-    - 6
-    - 7
-    - 8
+
+epic_cycle:
+  current_step: 0
+  next_skill: kickoff-branch
+  story_bcps: 1
+  completed_steps: []
   audit_result: PASS
   fast_mode: false
 
-bug_cycle:
-  current_step: 5
-  completed_steps:
-    - investigate-bug
-    - diagnose-root
-    - develop-tdd
-    - validate-fix
-    - release-branch
-  audit_source: specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
-  resolution_commit: 44d5e4f
-  scope:
-    - run-lifecycle-terminality
-    - check-admission-guard
-    - archived-cache-roundtrip
-    - workflow-conclusion-mapping
-    - workspace-partial-bare
-    - subprocess-cancellation-leak
-    - config-refresh-idempotency
-    - dead-code-observability
-
 release:
-  target_version: "0.11.6"
+  target_version: "0.12.0"
   last_tag: "v0.11.6"
   last_publish: null
   ci_verified: true
-
-metrics:
-  story_start: "2026-07-30T12:00:00Z"
-  story_end: "2026-08-02T12:34:00Z"
-  cycle_minutes: null
-  bcp_per_hour: null
 
 git:
   branch: main
@@ -63,16 +35,10 @@ git:
   pushed: true
 
 handoff:
-  last_step_completed: >
-    release-branch: merged fix/audit-gaps into main, pushed origin, CI green
-    (test/build/release); big-release published v0.11.6. just check green
-    (493 passed, 85% coverage). Release automation then aligned with the
-    big-release guide: initialVersion/commitTypes, validate + dry-run in CI,
-    Node.js setup removed, manual just release/bump replaced by
-    release-validate/release-dry-run. CI green; no version bump (ci commit).
+  last_step_completed: "Bigpowers pre-implementation readiness gates verified; planning spine complete; ready for kickoff-branch."
   open_decisions: []
   required_reading:
-    - specs/bugs/AUDIT-2026-11-04-hidden-state-machines.md
-    - specs/bugs/BUG-2026-11-04T000000-run-lifecycle-terminality.md
-  next_skill: survey-context
-
+    - specs/epics/e12-mcp-server/e12s01-configuration-checkqueryservice.md
+    - specs/tech-architecture/tech-stack.md
+    - specs/tech-architecture/e12-TEST_PLAN_LATEST.md
+  next_skill: kickoff-branch

@@ -1,3 +1,4 @@
+# story: e04s05
 """Tests for TargetSpec validation and resolve_targets."""
 
 from __future__ import annotations

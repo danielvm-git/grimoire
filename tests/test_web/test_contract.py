@@ -1,3 +1,4 @@
+# story: e06s02
 """API schema contract tests (e08s04).
 
 Validates that real API responses conform to their declared Pydantic response models.

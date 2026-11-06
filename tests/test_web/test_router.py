@@ -1,3 +1,4 @@
+# story: e06s01
 """Tests for the web page routes and HTMX partials."""
 
 from __future__ import annotations

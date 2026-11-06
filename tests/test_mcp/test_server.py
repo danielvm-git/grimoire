@@ -1,3 +1,4 @@
+# story: e12s01
 """Integration tests for MCPServer mounting and security middleware."""
 
 from __future__ import annotations

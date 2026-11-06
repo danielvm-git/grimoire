@@ -1,3 +1,4 @@
+# story: e05s02
 """Tests for stale 'running' action run records and startup recovery (bug #1).
 
 Bug #1 (action-stale-running-lockout): if the app crashes while an action is

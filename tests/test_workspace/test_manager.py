@@ -1,3 +1,4 @@
+# story: e03s01
 """Tests for the workspace manager."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# story: e07s03
 """Tests for structured JSON logging."""
 
 from __future__ import annotations

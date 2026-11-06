@@ -1,3 +1,4 @@
+# story: e01s02
 """Tests for configuration loading and validation."""
 
 from __future__ import annotations
