@@ -1,9 +1,13 @@
 story_id: e12s04
-title: User Documentation & E2E Tests
-status: pending
+title: "User Documentation & E2E Tests"
+status: done
 bcps: 1
 tasks:
-- id: 1
-  description: Implement User Documentation & E2E Tests
-  verify: just check
-  status: pending
+  - id: 1
+    description: "Write end-to-end integration tests for FastAPI app lifespan mounting and docs verification"
+    verify: "uv run pytest tests/test_mcp/test_e2e.py -v"
+    status: done
+  - id: 2
+    description: "Run full test suite and verify preflight"
+    verify: "just check"
+    status: done

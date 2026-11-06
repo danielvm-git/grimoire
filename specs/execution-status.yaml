@@ -94,7 +94,7 @@ development_status:
   e11s10: done
 
   # Active Epic Queue (WSJF highest priority pending epic)
-  e12: in_progress
+  e12: done
   e12s01:
     status: done
     started_at: "2026-11-06T12:49:00-03:00"
@@ -107,4 +107,7 @@ development_status:
     status: done
     started_at: "2026-11-06T12:58:00-03:00"
     completed_at: "2026-11-06T12:59:00-03:00"
-  e12s04: pending
+  e12s04:
+    status: done
+    started_at: "2026-11-06T13:01:00-03:00"
+    completed_at: "2026-11-06T13:03:00-03:00"

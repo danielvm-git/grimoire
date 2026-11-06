@@ -5,8 +5,8 @@ workflow_mode: solo-git
 active_flow: build_epic
 active_epic: e12
 active_epic_id: e12
-active_story_id: e12s03
-completed_epic: false
+active_story_id: e12s04
+completed_epic: true
 
 project_cycle:
   current_phase: 4
@@ -16,14 +16,15 @@ project_cycle:
     - 3
 
 epic_cycle:
-  current_step: 4
-  next_skill: develop-tdd
-  story_bcps: 1
+  current_step: 5
+  next_skill: verify-work
+  story_bcps: 20
   completed_steps:
     - 0
     - 1
     - 2
     - 3
+    - 4
   audit_result: PASS
   fast_mode: false
 
@@ -39,9 +40,9 @@ git:
   pushed: false
 
 handoff:
-  last_step_completed: "Completed e12s03 (FastAPI App SSE Endpoint Mounting & Security tests with 100% coverage); advancing to e12s04."
+  last_step_completed: "Completed all e12 stories (e12s01-e12s04) with full TDD, 100% coverage on mcp modules, and green preflight. Advancing to verify-work."
   open_decisions: []
   required_reading:
     - specs/security/epics/e12/THREAT_MODEL.md
-    - specs/epics/e12-mcp-server/e12s04-user-documentation-e2e-tests.md
-  next_skill: develop-tdd
+    - docs/user/reference/mcp.md
+  next_skill: verify-work

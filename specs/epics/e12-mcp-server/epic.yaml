@@ -1,7 +1,7 @@
 id: e12
 title: "MCP Server & Query Layer"
 spec: docs/specs/08-mcp-server.md
-status: pending
+status: done
 wsjf: 95
 bcps: 20
 stories:
@@ -22,6 +22,6 @@ stories:
     tasks: e12s03-tasks.yaml
   - id: e12s04
     title: "User Documentation & E2E Tests"
-    status: pending
+    status: done
     spec: e12s04-user-documentation-e2e-tests.md
     tasks: e12s04-tasks.yaml
