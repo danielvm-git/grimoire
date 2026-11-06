@@ -50,6 +50,7 @@ nav:
       - Checks: reference/checks.md
       - Actions: reference/actions.md
       - REST API: reference/api.md
+      - MCP Integration: reference/mcp.md
   - Explanation:
       - Architecture: explanation/architecture.md
 

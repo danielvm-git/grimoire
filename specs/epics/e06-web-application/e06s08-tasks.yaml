@@ -1,0 +1,9 @@
+story_id: e06s08
+title: HTMX partials for real-time updates
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: Implement HTMX partials for real-time updates
+  verify: grep -c 'partials/' src/grimoire/web/router.py | grep -v ':0$'
+  status: done

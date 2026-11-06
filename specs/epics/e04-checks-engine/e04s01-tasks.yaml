@@ -1,0 +1,9 @@
+story_id: e04s01
+title: Check definition YAML loader
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: Implement Check definition YAML loader
+  verify: python -c 'from grimoire.checks.loader import load_checks, CheckDefinition'
+  status: done

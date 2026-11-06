@@ -1,0 +1,67 @@
+title: Actions Engine
+status: done
+depends_on:
+- e01
+- e03
+- e04
+source: docs/specs/05-actions-engine.md
+stories:
+- id: e05s01
+  title: Action definition YAML loader
+  status: done
+  bcps: 2
+  description: "Load YAML action definitions from {data_dir}/actions/. Derive slug\
+    \ from filename. ActionDefinition: name, slug, description, targets (optional\
+    \ \u2014 None = global), script, schedule, enabled. Duplicate slug detection."
+  verify:
+  - python -c 'from grimoire.actions.loader import load_actions, ActionDefinition'
+  spec: e05s01-action-definition-yaml-loader.md
+  tasks: e05s01-tasks.yaml
+- id: e05s02
+  title: Action execution engine
+  status: done
+  bcps: 6
+  description: run_action() creates ActionRunRecord, resolves targets, executes sequentially
+    per repo+branch. sync_repo() + reset_workdir() before each execution. Global actions
+    (targets=None) run once in workspace_dir with full env. Concurrent run guard via
+    DB check. ActionProgress tracks progress. Timeout 600s, output cap 64KB.
+  verify:
+  - python -c 'from grimoire.actions.engine import run_action, is_action_running,
+    ActionConflictError'
+  spec: e05s02-action-execution-engine.md
+  tasks: e05s02-tasks.yaml
+- id: e05s03
+  title: Action result persistence
+  status: done
+  bcps: 2
+  description: "ActionRunRepoRecord per repo+branch result with run_id foreign key.\
+    \ ActionRunRecord status: running \u2192 completed. update_action_metrics() sets\
+    \ ACTION_DURATION histogram."
+  verify:
+  - python -c 'from grimoire.database import ActionRunRecord, ActionRunRepoRecord'
+  spec: e05s03-action-result-persistence.md
+  tasks: e05s03-tasks.yaml
+- id: e05s04
+  title: Action scheduling
+  status: done
+  bcps: 2
+  description: register_actions() registers cron-scheduled actions with APScheduler.
+    Actions without schedule are manual-only. Per-action enabled flag.
+  verify:
+  - python -c 'from grimoire.actions.scheduler import register_actions'
+  spec: e05s04-action-scheduling.md
+  tasks: e05s04-tasks.yaml
+- id: e05s05
+  title: Action REST API
+  status: done
+  bcps: 4
+  description: "GET /api/actions \u2192 list definitions with target counts. GET /api/actions/{slug}/runs\
+    \ \u2192 run history. GET /api/actions/{slug}/runs/{id} \u2192 run detail with\
+    \ per-repo results. POST /api/actions/{slug}/run \u2192 trigger (409 if running,\
+    \ 400 if repo param on global action). POST /api/actions/{slug}/toggle \u2192\
+    \ enable/disable. GET /api/actions/{slug}/status \u2192 running state."
+  verify:
+  - curl -s http://localhost:8000/api/actions | python -c 'import json,sys; d=json.load(sys.stdin);
+    assert isinstance(d, list)'
+  spec: e05s05-action-rest-api.md
+  tasks: e05s05-tasks.yaml

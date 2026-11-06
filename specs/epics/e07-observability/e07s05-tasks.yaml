@@ -1,0 +1,9 @@
+story_id: e07s05
+title: justfile with complete command set
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement justfile with complete command set
+  verify: just --list | grep -q 'check'
+  status: done

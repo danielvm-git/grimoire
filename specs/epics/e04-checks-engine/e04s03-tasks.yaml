@@ -1,0 +1,9 @@
+story_id: e04s03
+title: Check execution engine
+status: done
+bcps: 5
+tasks:
+- id: 1
+  description: Implement Check execution engine
+  verify: python -c 'from grimoire.checks.engine import run_check, run_check_for_all_targets'
+  status: done

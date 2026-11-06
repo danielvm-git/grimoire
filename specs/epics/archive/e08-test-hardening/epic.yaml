@@ -1,0 +1,77 @@
+title: Test Hardening
+status: done
+depends_on:
+- e06
+source: change-request from test suite review session
+stories:
+- id: e08s01
+  title: Extract and test app.py lifespan steps
+  status: todo
+  bcps: 5
+  description: "`app.py` lifespan is 110 lines at 31% coverage \u2014 the biggest\
+    \ blind spot.\nExtract orchestration into testable functions: `setup_database()`,\n\
+    `setup_scheduler()`, `refresh_data()`. Write unit tests for each.\nBackfill tests\
+    \ for the three-tier data freshness logic (fresh cache,\nstale cache, no cache).\
+    \ Mock GitHub client and workspace.\n"
+  verify:
+  - uv run pytest tests/test_app.py -q | grep -E '[0-9]+ passed' | grep -v '0 passed'
+  - uv run pytest --cov=src/grimoire/app --cov-report=term-missing -q | grep 'app.py'
+    | awk '{print $4}' | sed 's/%//' | xargs -I{} test {} -ge 60
+  spec: e08s01-lifespan-tests.md
+  tasks: e08s01-tasks.yaml
+- id: e08s02
+  title: Test scheduler registration
+  status: todo
+  bcps: 2
+  description: '`checks/scheduler.py` (29%) and `actions/scheduler.py` (29%) have
+    no
+
+    scheduler tests. Mock APScheduler, verify that enabled checks/actions
+
+    with cron schedules are registered with correct job IDs and triggers,
+
+    and that disabled items are skipped. ~30 lines each, straightforward.
+
+    '
+  verify:
+  - uv run pytest tests/test_checks/test_scheduler.py -v | grep -c PASSED | xargs
+    -I{} test {} -ge 3
+  - uv run pytest --cov=src/grimoire/checks/scheduler --cov-report=term-missing -q
+  spec: e08s02-scheduler-tests.md
+  tasks: e08s02-tasks.yaml
+- id: e08s03
+  title: Failure-mode tests for engine edge cases
+  status: todo
+  bcps: 4
+  description: "Add tests for: disk-full during workspace setup (simulated via read-only\
+    \ tmpdir),\nSQLite corruption (truncated file), GitHub API returning malformed\
+    \ JSON,\nconcurrent action run race condition (two triggers at same time).\nExisting\
+    \ coverage for timeout and exit codes is good \u2014 this fills the\nremaining\
+    \ resilience gaps.\n"
+  verify:
+  - uv run pytest tests/test_checks/test_engine.py tests/test_actions/test_engine.py
+    -v -k 'disk or corrupt or malformed or race' | grep -c PASSED | xargs -I{} test
+    {} -ge 4
+  spec: e08s03-failure-modes.md
+  tasks: e08s03-tasks.yaml
+- id: e08s04
+  title: API schema contract tests
+  status: todo
+  bcps: 3
+  description: 'Validate API responses against Pydantic response models. For each
+    major
+
+    endpoint (GET /api/repos, GET /api/repos/{}/{}, GET /api/checks,
+
+    GET /api/checks/{}/results, GET /api/actions, GET /api/actions/{}/runs/{id}),
+
+    populate cache with known data and assert response validates against the
+
+    declared response_model. Catches missing fields in schema changes.
+
+    '
+  verify:
+  - uv run pytest tests/test_web/test_router.py -v -k 'contract or schema or response_model'
+    | grep -c PASSED | xargs -I{} test {} -ge 5
+  spec: e08s04-contract-tests.md
+  tasks: e08s04-tasks.yaml

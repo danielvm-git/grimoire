@@ -1,0 +1,41 @@
+story_id: e08s01
+title: "Extract and test app.py lifespan steps"
+status: passing
+bcps: 5
+risk: P0
+tasks:
+  - id: 1
+    description: "Extract setup_database(config) → engine function"
+    verify: "uv run python -c 'import asyncio; from grimoire.database import get_engine, create_tables'"
+    risk: P0
+    status: passing
+
+  - id: 2
+    description: "Extract setup_workspace(config, repos) → workspace function"
+    verify: "uv run pytest tests/test_app.py -v -k 'workspace' | grep -c PASSED"
+    risk: P1
+    status: passing
+
+  - id: 3
+    description: "Extract three-tier freshness logic into pure function"
+    verify: "uv run pytest tests/test_app.py -v -k 'freshness' | grep -c PASSED | xargs -I{} test {} -ge 3"
+    risk: P1
+    status: passing
+
+  - id: 4
+    description: "Add mock-based lifespan orchestration tests"
+    verify: "uv run pytest tests/test_app.py -v | grep -c PASSED | xargs -I{} test {} -ge 8"
+    risk: P0
+    status: passing
+
+  - id: 5
+    description: "Add shutdown test (scheduler.shutdown + client.close called)"
+    verify: "uv run pytest tests/test_app.py -v -k 'shutdown' | grep -c PASSED | xargs -I{} test {} -ge 1"
+    risk: P1
+    status: passing
+
+  - id: 6
+    description: "Verify app.py coverage ≥ 60%"
+    verify: "uv run pytest tests/test_app.py --cov=src/grimoire/app --cov-report=term -q 2>&1 | grep 'app.py' | awk '{print $4}' | sed 's/%//' | xargs -I{} test {} -ge 60"
+    risk: P0
+    status: passing

@@ -1,0 +1,10 @@
+story_id: e02s07
+title: 'DB persistence: save, load, prune'
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: 'Implement DB persistence: save, load, prune'
+  verify: python -c 'from grimoire.github.service import save_stats_to_db, load_stats_from_db,
+    prune_removed_repos'
+  status: done

@@ -1,0 +1,39 @@
+version: "1"
+initiative: "Grimoire — Self-hostable GitHub repository monitoring dashboard"
+north_star: "Empower engineering leads and developers with real-time, zero-friction visibility across GitHub repository fleets, combining live CI monitoring, stale debt triage, and automated checks in a single lightweight service."
+
+problem: |
+  Managing multi-repository organizations often leaves critical failures unnoticed: broken CI runs on default branches,
+  lingering stale PRs and issues, tech debt markers, and missing compliance policies. Existing commercial dashboards are
+  heavyweight, costly, require extensive cloud permissions, or fail to support custom bash-level checks against live code.
+
+users:
+  - id: tech-lead
+    role: "Engineering Lead / Solo Architect"
+    need: "High-level fleet health overview, prioritized backlog scoring, and confidence that CI/security standards are green across all tracked repos."
+  - id: software-engineer
+    role: "Full-Stack Software Engineer"
+    need: "Instant visibility into failing runs, check output logs, and the ability to trigger automated remediation actions directly from the dashboard."
+  - id: devops-platform
+    role: "DevOps / SRE Engineer"
+    need: "Self-hostable, low-resource Docker container with Prometheus metrics, health endpoints, and zero external database dependencies."
+
+success_criteria:
+  - "Sub-second dashboard loading via HTMX partials and cached SQLite persistence."
+  - "Zero false positives on rate-limit exhaustion via ETag caching and intelligent backoff."
+  - "Automated check and action execution with strict timeouts (300s/600s) and bounded worktree disk usage."
+  - "100% test pass rate on Preflight (`just check`) with high coverage (>85%)."
+  - "Full fleet observability via Prometheus metrics and structured JSON logging."
+
+in_scope:
+  - "Repository discovery via static config lists and GitHub team membership."
+  - "Live stats fetching: issues, PRs, workflow run conclusions, branch staleness."
+  - "YAML-defined checks and actions running in dedicated git worktrees."
+  - "HTMX + Tailwind/DaisyUI responsive dashboard with live polling."
+  - "WSJF-inspired backlog prioritization scoring."
+  - "Prometheus metrics export and OpenTelemetry tracing."
+
+out_of_scope:
+  - "Multi-user authentication, RBAC, and public multi-tenant SaaS hosting."
+  - "GitHub App authentication (personal access tokens only)."
+  - "GraphQL API batching (REST with ETags is sufficient)."

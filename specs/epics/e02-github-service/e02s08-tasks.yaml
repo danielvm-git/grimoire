@@ -1,0 +1,10 @@
+story_id: e02s08
+title: 'REST API: repos list, detail, refresh'
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: 'Implement REST API: repos list, detail, refresh'
+  verify: curl -s http://localhost:8000/api/repos | python -c 'import json,sys; d=json.load(sys.stdin);
+    assert "repositories" in d'
+  status: done

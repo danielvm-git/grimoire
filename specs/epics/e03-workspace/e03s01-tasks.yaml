@@ -1,0 +1,9 @@
+story_id: e03s01
+title: Bare clone + worktree layout
+status: done
+bcps: 5
+tasks:
+- id: 1
+  description: Implement Bare clone + worktree layout
+  verify: python -c 'from grimoire.workspace.manager import WorkspaceManager'
+  status: done

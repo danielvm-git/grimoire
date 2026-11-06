@@ -1,0 +1,9 @@
+story_id: e01s01
+title: pyproject.toml with all runtime and dev dependencies
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement pyproject.toml with all runtime and dev dependencies
+  verify: uv sync --frozen && echo OK
+  status: done

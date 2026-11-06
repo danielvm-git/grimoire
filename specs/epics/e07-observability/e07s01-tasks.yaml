@@ -1,0 +1,10 @@
+story_id: e07s01
+title: Health check endpoint
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: Implement Health check endpoint
+  verify: curl -s http://localhost:8000/health | python -c 'import json,sys; d=json.load(sys.stdin);
+    assert d["status"] in ("ok","degraded")'
+  status: done

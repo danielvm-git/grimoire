@@ -1,0 +1,9 @@
+story_id: e02s02
+title: ETag caching for conditional requests
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: Implement ETag caching for conditional requests
+  verify: python -c 'from grimoire.database import CachedETag'
+  status: done

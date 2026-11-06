@@ -1,0 +1,107 @@
+title: Web Application (Dashboard, Repo Detail, Backlog)
+status: done
+depends_on:
+- e02
+- e04
+- e05
+source: docs/specs/06-web-application.md
+stories:
+- id: e06s01
+  title: FastAPI app factory and router wiring
+  status: done
+  bcps: 4
+  description: "create_app() mounts all API routers (repos, checks, actions), web\
+    \ router, static files, health endpoint. lifespan() orchestrates config load,\
+    \ DB setup, workspace setup, check/action loading, scheduler registration, background\
+    \ refresh. Three-tier data freshness: serve cached DB \u2192 background refresh\
+    \ if stale \u2192 loading page if empty."
+  verify:
+  - python -c 'from grimoire.app import create_app; app=create_app(); assert app.title=="Grimoire"'
+  spec: e06s01-fastapi-app-factory-and-router-wiri.md
+  tasks: e06s01-tasks.yaml
+- id: e06s02
+  title: Loading page with progress polling
+  status: done
+  bcps: 2
+  description: GET / renders loading.html when no cache + refresh running. DaisyUI
+    progress bar. HTMX polls GET /partials/loading-status every 2s. HX-Redirect to
+    / on completion. Non-blocking startup via asyncio.create_task().
+  verify:
+  - grep -q 'loading.html' src/grimoire/web/router.py
+  spec: e06s02-loading-page-with-progress-polling.md
+  tasks: e06s02-tasks.yaml
+- id: e06s03
+  title: Dashboard page with sortable repo matrix
+  status: done
+  bcps: 5
+  description: 'GET / renders dashboard.html with RepoViewModel list. Sortable by
+    name, health, issues, PRs, branches, workflow_failures, check_failures, last_activity.
+    Three-tier health: error (red), warning (yellow), ok (green). Aggregate stats
+    bar. Global warnings. Refresh button with HTMX polling.'
+  verify:
+  - grep -q 'dashboard.html' src/grimoire/web/router.py
+  spec: e06s03-dashboard-page-with-sortable-repo-m.md
+  tasks: e06s03-tasks.yaml
+- id: e06s04
+  title: Repository detail page
+  status: done
+  bcps: 3
+  description: GET /repo/{owner}/{name} renders repository.html. Per-branch workflow
+    list, check results, issue/PR counts, warnings, last commit, branch list. Not-found
+    page for un tracked repos.
+  verify:
+  - grep -q 'repository.html' src/grimoire/web/router.py
+  spec: e06s04-repository-detail-page.md
+  tasks: e06s04-tasks.yaml
+- id: e06s05
+  title: Actions management page
+  status: done
+  bcps: 4
+  description: GET /actions renders actions.html with ActionViewModel list. Per-action
+    stats from DB (pass/fail/last_run). Inline run history expansion via HTMX. Individual
+    run output viewing. Run button with progress polling.
+  verify:
+  - grep -q 'actions.html' src/grimoire/web/router.py
+  spec: e06s05-actions-management-page.md
+  tasks: e06s05-tasks.yaml
+- id: e06s06
+  title: Checks management page
+  status: done
+  bcps: 4
+  description: GET /checks renders checks.html with CheckViewModel list. Per-check
+    stats (pass/fail/warn/last_run). Severity-aware display (error vs warning). Inline
+    results expansion via HTMX grouped by run. Individual result output viewing. Run
+    button with progress polling.
+  verify:
+  - grep -q 'checks.html' src/grimoire/web/router.py
+  spec: e06s06-checks-management-page.md
+  tasks: e06s06-tasks.yaml
+- id: e06s07
+  title: Backlog page with weighted scoring
+  status: done
+  bcps: 6
+  description: "GET /backlog renders prioritized problem list. WSJF-inspired scoring:\
+    \ category base weights \xD7 repository multipliers \xD7 workflow weights. Five\
+    \ categories (failing_workflow, failing_check_error, failing_check_warning, stale_pr,\
+    \ stale_issue). Four priority tiers (critical/high/medium/low). Filter by category,\
+    \ repo, min_score, search. Group by repo or type. Markdown export. Configurable\
+    \ weights save-back to config.yaml."
+  verify:
+  - grep -q 'backlog.html' src/grimoire/web/router.py
+  - python -c 'from grimoire.web.backlog import build_backlog_items, BacklogItem,
+    BacklogCategory'
+  spec: e06s07-backlog-page-with-weighted-scoring.md
+  tasks: e06s07-tasks.yaml
+- id: e06s08
+  title: HTMX partials for real-time updates
+  status: done
+  bcps: 3
+  description: Dashboard matrix/list partials for sort-switching. Refresh button status
+    polling with HX-Trigger:refreshCompleted. Check/action run button status polling
+    with HX-Trigger:checkRunCompleted/actionRunCompleted. Action run detail expansion,
+    action output viewing, check output viewing, check results expansion. Backlog
+    items filtered partial.
+  verify:
+  - grep -c 'partials/' src/grimoire/web/router.py | grep -v ':0$'
+  spec: e06s08-htmx-partials-for-real-time-updates.md
+  tasks: e06s08-tasks.yaml

@@ -1,0 +1,9 @@
+story_id: e02s05
+title: Per-repo stats fetching with staleness detection
+status: done
+bcps: 5
+tasks:
+- id: 1
+  description: Implement Per-repo stats fetching with staleness detection
+  verify: python -c 'from grimoire.github.service import fetch_repository_stats'
+  status: done

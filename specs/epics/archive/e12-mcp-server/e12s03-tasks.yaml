@@ -1,0 +1,13 @@
+story_id: e12s03
+title: "FastAPI App SSE Endpoint Mounting & Security"
+status: done
+bcps: 1
+tasks:
+  - id: 1
+    description: "Write tests for Bearer token auth and FastMCP tool registrations in MCPServer"
+    verify: "uv run pytest tests/test_mcp/test_server.py -v"
+    status: done
+  - id: 2
+    description: "Verify 100% test coverage for grimoire.mcp.server"
+    verify: "uv run pytest tests/test_mcp/test_server.py --cov=grimoire.mcp.server --cov-report=term-missing"
+    status: done

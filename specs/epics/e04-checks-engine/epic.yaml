@@ -1,0 +1,94 @@
+title: Checks Engine
+status: done
+depends_on:
+- e01
+- e03
+source: docs/specs/04-checks-engine.md
+stories:
+- id: e04s01
+  title: Check definition YAML loader
+  status: done
+  bcps: 3
+  description: 'Load YAML check definitions from {data_dir}/checks/. Derive slug from
+    filename. Validate via Pydantic: CheckDefinition (name, slug, description, targets,
+    script, schedule, enabled, severity). TargetSpec with exactly-one validation.
+    Duplicate slug detection.'
+  verify:
+  - python -c 'from grimoire.checks.loader import load_checks, CheckDefinition'
+  spec: e04s01-check-definition-yaml-loader.md
+  tasks: e04s01-tasks.yaml
+- id: e04s02
+  title: Shared targeting and script execution
+  status: done
+  bcps: 4
+  description: resolve_targets() resolves list/regex/script TargetSpec to (repo, branches)
+    pairs. _script_matches() evaluates per-branch with 30s timeout. target_env() builds
+    per-invocation environment. create_script_process() handles shebang scripts (temp
+    file + chmod +x) vs /bin/sh fallback.
+  verify:
+  - python -c 'from grimoire.targeting import resolve_targets, target_env'
+  - python -c 'from grimoire.script import create_script_process'
+  spec: e04s02-shared-targeting-and-script-executi.md
+  tasks: e04s02-tasks.yaml
+- id: e04s03
+  title: Check execution engine
+  status: done
+  bcps: 5
+  description: run_check() resets workdir, runs script via create_script_process(),
+    captures stdout/stderr, enforces 300s timeout, caps output at 64KB. run_check_for_all_targets()
+    resolves targets, creates CheckRunRecord, runs concurrently with Semaphore(5),
+    marks completed. CheckProgress tracks per-check progress. is_check_running() and
+    get_check_progress() for polling.
+  verify:
+  - python -c 'from grimoire.checks.engine import run_check, run_check_for_all_targets'
+  spec: e04s03-check-execution-engine.md
+  tasks: e04s03-tasks.yaml
+- id: e04s04
+  title: Check result persistence
+  status: done
+  bcps: 2
+  description: _persist_result() creates CheckResult domain model + CheckResultRecord
+    DB row with run_id foreign key. update_check_metrics() sets Prometheus gauges
+    (CHECK_STATUS, CHECK_DURATION).
+  verify:
+  - python -c 'from grimoire.database import CheckRunRecord, CheckResultRecord'
+  spec: e04s04-check-result-persistence.md
+  tasks: e04s04-tasks.yaml
+- id: e04s05
+  title: Check scheduling
+  status: done
+  bcps: 2
+  description: register_checks() registers cron-scheduled checks with APScheduler.
+    Checks without schedule run on data-refresh cycle (app.py _do_refresh). Per-check
+    enabled flag honored.
+  verify:
+  - python -c 'from grimoire.checks.scheduler import register_checks'
+  spec: e04s05-check-scheduling.md
+  tasks: e04s05-tasks.yaml
+- id: e04s06
+  title: Check REST API
+  status: done
+  bcps: 4
+  description: "GET /api/checks \u2192 list definitions. GET /api/checks/{slug}/results\
+    \ \u2192 latest per-repo+branch. GET /api/checks/{slug}/runs \u2192 run history.\
+    \ GET /api/checks/{slug}/runs/{id} \u2192 run detail with per-repo results. POST\
+    \ /api/checks/{slug}/run \u2192 trigger (409 if running). POST /api/checks/{slug}/toggle\
+    \ \u2192 enable/disable with DB persistence. GET /api/checks/{slug}/status \u2192\
+    \ running state."
+  verify:
+  - curl -s http://localhost:8000/api/checks | python -c 'import json,sys; d=json.load(sys.stdin);
+    assert isinstance(d, list)'
+  spec: e04s06-check-rest-api.md
+  tasks: e04s06-tasks.yaml
+- id: e04s07
+  title: 'Severity: error vs warning'
+  status: done
+  bcps: 2
+  description: "CheckDefinition.severity field: 'error' (default, red, affects health)\
+    \ or 'warning' (yellow, informational only). Dashboard health tiers: error-severity\
+    \ failures \u2192 'error' health, warning-severity failures \u2192 'warning' health."
+  verify:
+  - python -c 'from grimoire.checks.loader import CheckDefinition; c=CheckDefinition(name="t",slug="t",description="d",targets={"list":["a/b"]},script="echo",severity="warning");
+    assert c.severity=="warning"'
+  spec: e04s07-severity-error-vs-warning.md
+  tasks: e04s07-tasks.yaml

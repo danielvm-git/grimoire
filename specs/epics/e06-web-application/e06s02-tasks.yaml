@@ -1,0 +1,9 @@
+story_id: e06s02
+title: Loading page with progress polling
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement Loading page with progress polling
+  verify: grep -q 'loading.html' src/grimoire/web/router.py
+  status: done

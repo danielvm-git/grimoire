@@ -1,0 +1,27 @@
+id: e12
+title: "MCP Server & Query Layer"
+spec: docs/specs/08-mcp-server.md
+status: done
+wsjf: 95
+bcps: 20
+stories:
+  - id: e12s01
+    title: "Configuration & CheckQueryService"
+    status: done
+    spec: e12s01-configuration-checkqueryservice.md
+    tasks: e12s01-tasks.yaml
+  - id: e12s02
+    title: "MCP Tools & FastMCP Server"
+    status: done
+    spec: e12s02-mcp-tools-fastmcp-server.md
+    tasks: e12s02-tasks.yaml
+  - id: e12s03
+    title: "FastAPI App SSE Endpoint Mounting & Security"
+    status: done
+    spec: e12s03-fastapi-app-sse-endpoint-mounting-s.md
+    tasks: e12s03-tasks.yaml
+  - id: e12s04
+    title: "User Documentation & E2E Tests"
+    status: done
+    spec: e12s04-user-documentation-e2e-tests.md
+    tasks: e12s04-tasks.yaml

@@ -1,0 +1,9 @@
+story_id: e03s03
+title: Worktree reset and sync operations
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: Implement Worktree reset and sync operations
+  verify: grep -q 'reset --hard' src/grimoire/workspace/manager.py
+  status: done

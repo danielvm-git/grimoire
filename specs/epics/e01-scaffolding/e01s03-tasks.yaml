@@ -1,0 +1,10 @@
+story_id: e01s03
+title: SQLite database models with SQLModel + aiosqlite
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement SQLite database models with SQLModel + aiosqlite
+  verify: python -c 'from grimoire.database import get_engine, create_tables; import
+    asyncio; asyncio.run(get_engine(":memory:"))'
+  status: done

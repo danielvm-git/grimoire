@@ -1,0 +1,9 @@
+story_id: e06s04
+title: Repository detail page
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: Implement Repository detail page
+  verify: grep -q 'repository.html' src/grimoire/web/router.py
+  status: done

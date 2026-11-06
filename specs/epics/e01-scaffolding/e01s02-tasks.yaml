@@ -1,0 +1,10 @@
+story_id: e01s02
+title: YAML configuration schema with Pydantic v2 validation
+status: done
+bcps: 5
+tasks:
+- id: 1
+  description: Implement YAML configuration schema with Pydantic v2 validation
+  verify: python -c 'from grimoire.config import load_config; c=load_config()'  (with
+    valid config.yaml)
+  status: done

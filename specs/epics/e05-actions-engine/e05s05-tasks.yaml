@@ -1,0 +1,10 @@
+story_id: e05s05
+title: Action REST API
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement Action REST API
+  verify: curl -s http://localhost:8000/api/actions | python -c 'import json,sys;
+    d=json.load(sys.stdin); assert isinstance(d, list)'
+  status: done

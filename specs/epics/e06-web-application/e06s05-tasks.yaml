@@ -1,0 +1,9 @@
+story_id: e06s05
+title: Actions management page
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement Actions management page
+  verify: grep -q 'actions.html' src/grimoire/web/router.py
+  status: done

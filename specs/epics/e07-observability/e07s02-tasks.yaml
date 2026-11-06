@@ -1,0 +1,9 @@
+story_id: e07s02
+title: Prometheus metrics
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement Prometheus metrics
+  verify: curl -s http://localhost:8000/metrics | grep -q 'grimoire_repositories_total'
+  status: done

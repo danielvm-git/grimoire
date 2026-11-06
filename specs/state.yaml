@@ -3,10 +3,10 @@ bigpowers_version: "2.3.0"
 workflow_mode: solo-git
 
 active_flow: idle
-active_epic: e12
-active_epic_id: e12
+active_epic: null
+active_epic_id: null
 active_story_id: null
-completed_epic: false
+completed_epic: true
 
 project_cycle:
   current_phase: 4
@@ -14,12 +14,22 @@ project_cycle:
     - 1
     - 2
     - 3
+    - 4
 
 epic_cycle:
-  current_step: 0
-  next_skill: kickoff-branch
-  story_bcps: 1
-  completed_steps: []
+  current_step: 8
+  next_skill: survey-context
+  story_bcps: 20
+  completed_steps:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
   audit_result: PASS
   fast_mode: false
 
@@ -31,14 +41,13 @@ release:
 
 git:
   branch: main
-  hash: 1b5c088
-  pushed: true
+  hash: null
+  pushed: false
 
 handoff:
-  last_step_completed: "Bigpowers pre-implementation readiness gates verified; planning spine complete; ready for kickoff-branch."
+  last_step_completed: "Completed epic e12 end-to-end (e12s01-e12s04, verify-work, audit-code, dual-blind review, respond-review), archived capsule to specs/epics/archive/e12-mcp-server, and landed branch onto main."
   open_decisions: []
   required_reading:
-    - specs/epics/e12-mcp-server/e12s01-configuration-checkqueryservice.md
-    - specs/tech-architecture/tech-stack.md
-    - specs/tech-architecture/e12-TEST_PLAN_LATEST.md
-  next_skill: kickoff-branch
+    - specs/release-plan.yaml
+    - specs/execution-status.yaml
+  next_skill: survey-context
