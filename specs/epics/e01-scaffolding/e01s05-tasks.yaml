@@ -1,0 +1,9 @@
+story_id: e01s05
+title: CLI entrypoint via uvicorn
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: Implement CLI entrypoint via uvicorn
+  verify: python -c 'from grimoire.__main__ import main'
+  status: done

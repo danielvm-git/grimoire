@@ -1,0 +1,9 @@
+story_id: e02s01
+title: Async GitHub REST API client with httpx
+status: done
+bcps: 6
+tasks:
+- id: 1
+  description: Implement Async GitHub REST API client with httpx
+  verify: python -c 'from grimoire.github.client import GitHubClient'
+  status: done

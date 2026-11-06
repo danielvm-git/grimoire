@@ -1,0 +1,35 @@
+story_id: e08s03
+title: "Failure-mode tests for engine edge cases"
+status: passing
+bcps: 4
+risk: P1
+tasks:
+  - id: 1
+    description: "Disk-full test for check engine"
+    verify: "uv run pytest tests/test_checks/test_engine.py -v -k 'disk_full' | grep -c PASSED | xargs -I{} test {} -ge 1"
+    risk: P1
+    status: passing
+
+  - id: 2
+    description: "SQLite corruption test for check engine"
+    verify: "uv run pytest tests/test_checks/test_engine.py -v -k 'corrupt' | grep -c PASSED | xargs -I{} test {} -ge 1"
+    risk: P1
+    status: passing
+
+  - id: 3
+    description: "Malformed JSON test for GitHub service"
+    verify: "uv run pytest tests/test_github/test_service.py -v -k 'malformed' | grep -c PASSED | xargs -I{} test {} -ge 1"
+    risk: P1
+    status: passing
+
+  - id: 4
+    description: "Concurrent action run race test"
+    verify: "uv run pytest tests/test_actions/test_engine.py -v -k 'race' | grep -c PASSED | xargs -I{} test {} -ge 1"
+    risk: P1
+    status: passing
+
+  - id: 5
+    description: "Action engine workspace failure test"
+    verify: "uv run pytest tests/test_actions/test_engine.py -v -k 'workspace_failure' | grep -c PASSED | xargs -I{} test {} -ge 1"
+    risk: P1
+    status: passing

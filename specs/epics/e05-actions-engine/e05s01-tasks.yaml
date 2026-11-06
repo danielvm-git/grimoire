@@ -1,0 +1,9 @@
+story_id: e05s01
+title: Action definition YAML loader
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement Action definition YAML loader
+  verify: python -c 'from grimoire.actions.loader import load_actions, ActionDefinition'
+  status: done

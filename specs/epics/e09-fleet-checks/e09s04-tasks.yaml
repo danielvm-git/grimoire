@@ -1,0 +1,9 @@
+story_id: e09s04
+title: 'no-secrets: gitleaks credential scan'
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: 'Implement no-secrets: gitleaks credential scan'
+  verify: test -f data/checks/no-secrets.yaml
+  status: done

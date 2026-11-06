@@ -1,0 +1,9 @@
+story_id: e02s04
+title: Repository resolution from static lists and teams
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement Repository resolution from static lists and teams
+  verify: python -c 'from grimoire.github.service import resolve_repositories'
+  status: done

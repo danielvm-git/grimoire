@@ -1,0 +1,9 @@
+story_id: e09s05
+title: 'lint-passes: language-aware linter check'
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: 'Implement lint-passes: language-aware linter check'
+  verify: test -f data/checks/lint-passes.yaml
+  status: done

@@ -1,0 +1,9 @@
+story_id: e09s06
+title: 'license-exists: LICENSE file presence'
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: 'Implement license-exists: LICENSE file presence'
+  verify: test -f data/checks/license-exists.yaml
+  status: done

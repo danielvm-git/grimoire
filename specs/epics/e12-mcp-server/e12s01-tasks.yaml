@@ -1,0 +1,13 @@
+story_id: e12s01
+title: "Configuration & CheckQueryService"
+status: done
+bcps: 1
+tasks:
+  - id: 1
+    description: "Write failing test (RED) for CheckQueryService response contract"
+    verify: "uv run pytest tests/test_checks/test_queries.py -v"
+    status: done
+  - id: 2
+    description: "Implement Configuration & CheckQueryService"
+    verify: "just check"
+    status: done

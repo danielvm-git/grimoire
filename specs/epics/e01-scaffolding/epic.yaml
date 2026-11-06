@@ -1,0 +1,76 @@
+title: Project Scaffolding & Configuration
+status: done
+depends_on: []
+source: docs/specs/01-scaffolding-and-configuration.md
+stories:
+- id: e01s01
+  title: pyproject.toml with all runtime and dev dependencies
+  status: done
+  bcps: 2
+  description: Set up project metadata, dependency declarations (fastapi, uvicorn,
+    jinja2, httpx, pyyaml, pydantic, sqlmodel, aiosqlite, apscheduler, prometheus-client,
+    opentelemetry), dev dependencies (ruff, pyright, codespell, vulture, pytest, pytest-asyncio,
+    respx), and hatchling build backend.
+  verify:
+  - uv sync --frozen && echo OK
+  spec: e01s01-pyproject-toml-with-all-runtime-and.md
+  tasks: e01s01-tasks.yaml
+- id: e01s02
+  title: YAML configuration schema with Pydantic v2 validation
+  status: done
+  bcps: 5
+  description: Parse config.yaml with Pydantic v2. Support ${ENV_VAR} resolution via
+    regex. Define GitHubConfig, GitConfig, SigningConfig, WorkflowFilter, StaticRepoSource,
+    TeamRepoSource, StalenessConfig, BacklogConfig models. Support XDG config paths
+    via dataconfy.
+  verify:
+  - python -c 'from grimoire.config import load_config; c=load_config()'  (with valid
+    config.yaml)
+  - python -c 'from grimoire.config import resolve_env_vars; assert resolve_env_vars("\${TEST}")
+    == "value"'  (with TEST=value)
+  spec: e01s02-yaml-configuration-schema-with-pyda.md
+  tasks: e01s02-tasks.yaml
+- id: e01s03
+  title: SQLite database models with SQLModel + aiosqlite
+  status: done
+  bcps: 4
+  description: Define CheckRunRecord, CheckResultRecord, CheckToggleRecord, ActionToggleRecord,
+    ActionRunRecord, ActionRunRepoRecord, CachedRepository, CachedIssue, CachedPullRequest,
+    CachedWorkflowStatus, CachedETag. Provide get_engine, create_tables, get_session
+    helpers. Implement cleanup_stale_runs for crash recovery.
+  verify:
+  - python -c 'from grimoire.database import get_engine, create_tables; import asyncio;
+    asyncio.run(get_engine(":memory:"))'
+  spec: e01s03-sqlite-database-models-with-sqlmode.md
+  tasks: e01s03-tasks.yaml
+- id: e01s04
+  title: Domain models (Pydantic, not DB)
+  status: done
+  bcps: 2
+  description: "TrackedRepository, WorkflowStatus, IssueDetail, PullRequestDetail,\
+    \ RepositoryStats, CheckResult, ActionRepoResult, ActionRun \u2014 shared domain\
+    \ vocabulary used across all modules."
+  verify:
+  - python -c 'from grimoire.models import TrackedRepository, RepositoryStats'
+  spec: e01s04-domain-models-pydantic-not-db.md
+  tasks: e01s04-tasks.yaml
+- id: e01s05
+  title: CLI entrypoint via uvicorn
+  status: done
+  bcps: 1
+  description: 'grimoire.__main__:main() runs uvicorn with app factory. Command: ''grimoire''
+    or ''uv run uvicorn grimoire.app:create_app --factory''.'
+  verify:
+  - python -c 'from grimoire.__main__ import main'
+  spec: e01s05-cli-entrypoint-via-uvicorn.md
+  tasks: e01s05-tasks.yaml
+- id: e01s06
+  title: 'Dev toolchain: ruff, pyright, codespell, vulture, just'
+  status: done
+  bcps: 2
+  description: Configure ruff (line-length 99, Google pydocstyle), pyright (strict),
+    codespell, vulture. Wire justfile with format, lint, test, check, dev, run commands.
+  verify:
+  - just --list | grep -q check
+  spec: e01s06-dev-toolchain-ruff-pyright-codespel.md
+  tasks: e01s06-tasks.yaml

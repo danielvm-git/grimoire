@@ -1,0 +1,53 @@
+title: Repository Workspace Manager
+status: done
+depends_on:
+- e01
+- e02
+source: docs/specs/03-workspace-manager.md
+stories:
+- id: e03s01
+  title: Bare clone + worktree layout
+  status: done
+  bcps: 5
+  description: WorkspaceManager clones repos as bare clones ({workspace_dir}/{owner}/{repo}/.bare/),
+    creates worktrees per branch ({workspace_dir}/{owner}/{repo}/{branch}/). Fetch
+    refspec configured to populate refs/remotes/origin/*. Per-repo asyncio.Lock prevents
+    race conditions during concurrent worktree creation.
+  verify:
+  - python -c 'from grimoire.workspace.manager import WorkspaceManager'
+  spec: e03s01-bare-clone-worktree-layout.md
+  tasks: e03s01-tasks.yaml
+- id: e03s02
+  title: Git identity and commit signing configuration
+  status: done
+  bcps: 2
+  description: Configure user.name and user.email in bare repos from config.git. Set
+    up GPG or SSH commit signing (commit.gpgsign, gpg.format, user.signingkey). Export
+    GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL, GIT_SSH_COMMAND env vars.
+  verify:
+  - grep -q 'user.name' src/grimoire/workspace/manager.py
+  spec: e03s02-git-identity-and-commit-signing-con.md
+  tasks: e03s02-tasks.yaml
+- id: e03s03
+  title: Worktree reset and sync operations
+  status: done
+  bcps: 3
+  description: 'reset_workdir(): checkout branch, reset --hard origin/{branch}, clean
+    -fdx. sync_repo(): fetch origin, reset all existing worktrees. sync_all(): concurrent
+    fetch+reset across all repos with Semaphore(10). safe.bareRepository=all for git
+    >=2.38.'
+  verify:
+  - grep -q 'reset --hard' src/grimoire/workspace/manager.py
+  spec: e03s03-worktree-reset-and-sync-operations.md
+  tasks: e03s03-tasks.yaml
+- id: e03s04
+  title: Environment variable injection for subprocesses
+  status: done
+  bcps: 1
+  description: get_env() exports GH_TOKEN, GITHUB_TOKEN, git identity vars, GIT_SSH_COMMAND.
+    target_env() adds per-invocation REPO_OWNER, REPO_NAME, REPO_FULL_NAME, BRANCH,
+    DEFAULT_BRANCH.
+  verify:
+  - grep -q 'GH_TOKEN' src/grimoire/workspace/manager.py
+  spec: e03s04-environment-variable-injection-for-.md
+  tasks: e03s04-tasks.yaml

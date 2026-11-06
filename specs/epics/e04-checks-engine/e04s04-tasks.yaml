@@ -1,0 +1,9 @@
+story_id: e04s04
+title: Check result persistence
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement Check result persistence
+  verify: python -c 'from grimoire.database import CheckRunRecord, CheckResultRecord'
+  status: done

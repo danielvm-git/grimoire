@@ -1,0 +1,9 @@
+story_id: e06s03
+title: Dashboard page with sortable repo matrix
+status: done
+bcps: 5
+tasks:
+- id: 1
+  description: Implement Dashboard page with sortable repo matrix
+  verify: grep -q 'dashboard.html' src/grimoire/web/router.py
+  status: done

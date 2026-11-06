@@ -1,0 +1,10 @@
+story_id: e05s02
+title: Action execution engine
+status: done
+bcps: 6
+tasks:
+- id: 1
+  description: Implement Action execution engine
+  verify: python -c 'from grimoire.actions.engine import run_action, is_action_running,
+    ActionConflictError'
+  status: done

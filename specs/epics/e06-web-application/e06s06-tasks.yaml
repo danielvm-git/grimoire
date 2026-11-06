@@ -1,0 +1,9 @@
+story_id: e06s06
+title: Checks management page
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement Checks management page
+  verify: grep -q 'checks.html' src/grimoire/web/router.py
+  status: done

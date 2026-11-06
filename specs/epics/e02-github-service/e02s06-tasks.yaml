@@ -1,0 +1,9 @@
+story_id: e02s06
+title: Concurrent refresh with Semaphore(10)
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement Concurrent refresh with Semaphore(10)
+  verify: python -c 'from grimoire.github.service import refresh_all_stats, is_refresh_running'
+  status: done

@@ -1,0 +1,100 @@
+title: GitHub Data Service
+status: done
+depends_on:
+- e01
+source: docs/specs/02-github-data-service.md
+stories:
+- id: e02s01
+  title: Async GitHub REST API client with httpx
+  status: done
+  bcps: 6
+  description: 'Build GitHubClient wrapping httpx.AsyncClient with Authorization header,
+    pagination via Link rel=next, per_page=100. Typed exceptions: GitHubAPIError,
+    RateLimitError, NotFoundError. Retry 3x with exponential backoff (1s, 2s, 4s)
+    for transient 5xx/network errors.'
+  verify:
+  - python -c 'from grimoire.github.client import GitHubClient'
+  spec: e02s01-async-github-rest-api-client-with-h.md
+  tasks: e02s01-tasks.yaml
+- id: e02s02
+  title: ETag caching for conditional requests
+  status: done
+  bcps: 3
+  description: Persist ETag and Last-Modified per endpoint URL in CachedETag table.
+    Send If-None-Match/If-Modified-Since on subsequent requests. 304 responses skip
+    parsing and don't count against rate limit.
+  verify:
+  - python -c 'from grimoire.database import CachedETag'
+  spec: e02s02-etag-caching-for-conditional-reques.md
+  tasks: e02s02-tasks.yaml
+- id: e02s03
+  title: Rate limit tracking and degraded mode
+  status: done
+  bcps: 3
+  description: Track X-RateLimit-Remaining and X-RateLimit-Reset from response headers.
+    Expose remaining/reset as Prometheus metrics. is_rate_limited and is_degraded
+    (<10%) properties. API request counter by normalized endpoint+status.
+  verify:
+  - python -c 'from grimoire.observability.metrics import API_REQUESTS, RATE_LIMIT_REMAINING'
+  spec: e02s03-rate-limit-tracking-and-degraded-mo.md
+  tasks: e02s03-tasks.yaml
+- id: e02s04
+  title: Repository resolution from static lists and teams
+  status: done
+  bcps: 4
+  description: 'resolve_repositories() processes config.repositories list. StaticRepoSource:
+    get_repo() to validate, skip archived. TeamRepoSource: get_team_repos(), exclude
+    set, skip archived. Deduplicate by full_name; merge branch lists.'
+  verify:
+  - python -c 'from grimoire.github.service import resolve_repositories'
+  spec: e02s04-repository-resolution-from-static-l.md
+  tasks: e02s04-tasks.yaml
+- id: e02s05
+  title: Per-repo stats fetching with staleness detection
+  status: done
+  bcps: 5
+  description: 'fetch_repository_stats() returns RepositoryStats: open/stale issues,
+    open/stale PRs, workflow statuses, branch count, last commit. Staleness: issues
+    >365d no comment, PRs >30d no push/comment. Workflow include/exclude via fnmatch.
+    304 fallback to previous values.'
+  verify:
+  - python -c 'from grimoire.github.service import fetch_repository_stats'
+  spec: e02s05-per-repo-stats-fetching-with-stalen.md
+  tasks: e02s05-tasks.yaml
+- id: e02s06
+  title: Concurrent refresh with Semaphore(10)
+  status: done
+  bcps: 2
+  description: refresh_all_stats() resolves repos, fetches stats concurrently with
+    asyncio.Semaphore(10), persists to DB. RefreshProgress tracks completed/total.
+    is_refresh_running() and get_refresh_progress() for polling.
+  verify:
+  - python -c 'from grimoire.github.service import refresh_all_stats, is_refresh_running'
+  spec: e02s06-concurrent-refresh-with-semaphore-1.md
+  tasks: e02s06-tasks.yaml
+- id: e02s07
+  title: 'DB persistence: save, load, prune'
+  status: done
+  bcps: 4
+  description: save_stats_to_db() clears old cached data per repo, writes fresh CachedRepository,
+    CachedIssue, CachedPullRequest, CachedWorkflowStatus. load_stats_from_db() reconstructs
+    TrackedRepository + RepositoryStats from DB. prune_removed_repos() and prune_stale_data()
+    clean up removed repos and excluded workflows.
+  verify:
+  - python -c 'from grimoire.github.service import save_stats_to_db, load_stats_from_db,
+    prune_removed_repos'
+  spec: e02s07-db-persistence-save-load-prune.md
+  tasks: e02s07-tasks.yaml
+- id: e02s08
+  title: 'REST API: repos list, detail, refresh'
+  status: done
+  bcps: 3
+  description: "GET /api/repos \u2192 RepoListResponse with summaries. GET /api/repos/{owner}/{name}\
+    \ \u2192 RepoDetailResponse with workflows. POST /api/refresh \u2192 trigger background\
+    \ refresh. GET /api/refresh/status \u2192 progress polling. In-memory cache updated\
+    \ by refresh callback."
+  verify:
+  - curl -s http://localhost:8000/api/repos | python -c 'import json,sys; d=json.load(sys.stdin);
+    assert "repositories" in d'
+  spec: e02s08-rest-api-repos-list-detail-refresh.md
+  tasks: e02s08-tasks.yaml

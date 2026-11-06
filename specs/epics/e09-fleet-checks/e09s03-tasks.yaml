@@ -1,0 +1,9 @@
+story_id: e09s03
+title: 'no-todo-fixme: tech debt marker scan'
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: 'Implement no-todo-fixme: tech debt marker scan'
+  verify: test -f data/checks/no-todo-fixme.yaml
+  status: done

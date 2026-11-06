@@ -1,0 +1,10 @@
+story_id: e04s07
+title: 'Severity: error vs warning'
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: 'Implement Severity: error vs warning'
+  verify: python -c 'from grimoire.checks.loader import CheckDefinition; c=CheckDefinition(name="t",slug="t",description="d",targets={"list":["a/b"]},script="echo",severity="warning");
+    assert c.severity=="warning"'
+  status: done

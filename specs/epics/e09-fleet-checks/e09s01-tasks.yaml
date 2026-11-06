@@ -1,0 +1,9 @@
+story_id: e09s01
+title: 'ci-green: default-branch CI health check'
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: 'Implement ci-green: default-branch CI health check'
+  verify: test -f data/checks/ci-green.yaml
+  status: done

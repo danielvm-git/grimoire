@@ -1,0 +1,9 @@
+story_id: e09s07
+title: 'uv-lock-fresh: upgrade severity to error'
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: 'Implement uv-lock-fresh: upgrade severity to error'
+  verify: 'grep -q ''severity: error'' data/checks/uv-lock-fresh.yaml'
+  status: done

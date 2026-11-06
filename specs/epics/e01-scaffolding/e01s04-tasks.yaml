@@ -1,0 +1,9 @@
+story_id: e01s04
+title: Domain models (Pydantic, not DB)
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement Domain models (Pydantic, not DB)
+  verify: python -c 'from grimoire.models import TrackedRepository, RepositoryStats'
+  status: done

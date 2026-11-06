@@ -2,10 +2,10 @@
 bigpowers_version: "2.3.0"
 workflow_mode: solo-git
 
-active_flow: idle
+active_flow: build_epic
 active_epic: e12
 active_epic_id: e12
-active_story_id: null
+active_story_id: e12s01
 completed_epic: false
 
 project_cycle:
@@ -16,10 +16,11 @@ project_cycle:
     - 3
 
 epic_cycle:
-  current_step: 0
-  next_skill: kickoff-branch
-  story_bcps: 1
-  completed_steps: []
+  current_step: 1
+  next_skill: develop-tdd
+  story_bcps: 2
+  completed_steps:
+    - 0
   audit_result: PASS
   fast_mode: false
 
@@ -30,15 +31,14 @@ release:
   ci_verified: true
 
 git:
-  branch: main
-  hash: 1b5c088
-  pushed: true
+  branch: feat/e12-mcp-server
+  hash: d38c525
+  pushed: false
 
 handoff:
-  last_step_completed: "Bigpowers pre-implementation readiness gates verified; planning spine complete; ready for kickoff-branch."
+  last_step_completed: "Step 0 (security-review) complete for e12; kickoff-branch created; executing e12s01 via develop-tdd."
   open_decisions: []
   required_reading:
+    - specs/security/epics/e12/THREAT_MODEL.md
     - specs/epics/e12-mcp-server/e12s01-configuration-checkqueryservice.md
-    - specs/tech-architecture/tech-stack.md
-    - specs/tech-architecture/e12-TEST_PLAN_LATEST.md
-  next_skill: kickoff-branch
+  next_skill: develop-tdd

@@ -1,0 +1,51 @@
+# Grimoire — Domain Glossary / Ubiquitous Language
+terms:
+  - term: TrackedRepository
+    definition: "A GitHub repository explicitly configured or resolved via team membership for automated monitoring by Grimoire."
+    aliases: ["Repo", "MonitoredRepo"]
+    context: "github / config"
+
+  - term: RepositoryStats
+    definition: "Snapshot of a tracked repository's operational health, including open/stale PRs, open/stale issues, branch counts, and workflow run conclusions."
+    aliases: ["Stats", "RepoSnapshot"]
+    context: "github / web"
+
+  - term: Check
+    definition: "An idempotent, read-only script executed in a git worktree against targeted repos and branches on a cron schedule or refresh cycle."
+    aliases: ["FleetCheck", "RepoCheck"]
+    context: "checks"
+
+  - term: CheckSeverity
+    definition: "The criticality level of a check failure: 'error' flips repository health to failure/red, while 'warning' surfaces yellow informational status without degrading repo health."
+    aliases: ["Severity"]
+    context: "checks / web"
+
+  - term: Action
+    definition: "A potentially stateful, sequential script executed in a git worktree to automate remediations across repositories (e.g. updating branch configs, dependency bumps)."
+    aliases: ["AutomatedAction", "FleetAction"]
+    context: "actions"
+
+  - term: WorkspaceManager
+    definition: "Service managing a single bare git clone per repository and dynamically provisioning lightweight worktrees per targeted branch."
+    aliases: ["Workspace", "WorktreePool"]
+    context: "workspace"
+
+  - term: BacklogScore
+    definition: "A WSJF-derived weighted numerical score prioritizing repositories based on stale issues, stale PRs, failing workflows, and check errors."
+    aliases: ["HealthScore", "PriorityScore"]
+    context: "web / backlog"
+
+  - term: Lifespan
+    definition: "The FastAPI async context manager that orchestrates system startup (config validation, DB table setup, workspace sync, check loading, scheduler startup) and graceful shutdown."
+    aliases: ["StartupLifecycle"]
+    context: "app / lifespan"
+
+  - term: StalenessConfig
+    definition: "Configurable time-decay thresholds determining when open issues (>365 days inactive) and PRs (>30 days inactive) are classified as stale."
+    aliases: ["StaleThresholds"]
+    context: "github / config"
+
+  - term: RateLimitTracker
+    definition: "Internal state tracking GitHub HTTP rate limits (`X-RateLimit-Remaining`, `X-RateLimit-Reset`) providing backoff and graceful degradation before exhaustion."
+    aliases: ["RateLimiter"]
+    context: "github / client"

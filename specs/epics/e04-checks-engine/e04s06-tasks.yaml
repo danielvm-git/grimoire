@@ -1,0 +1,10 @@
+story_id: e04s06
+title: Check REST API
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement Check REST API
+  verify: curl -s http://localhost:8000/api/checks | python -c 'import json,sys; d=json.load(sys.stdin);
+    assert isinstance(d, list)'
+  status: done

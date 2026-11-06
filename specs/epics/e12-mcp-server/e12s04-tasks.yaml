@@ -1,0 +1,9 @@
+story_id: e12s04
+title: User Documentation & E2E Tests
+status: pending
+bcps: 1
+tasks:
+- id: 1
+  description: Implement User Documentation & E2E Tests
+  verify: just check
+  status: pending

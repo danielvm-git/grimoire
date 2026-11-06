@@ -1,0 +1,9 @@
+story_id: e01s06
+title: 'Dev toolchain: ruff, pyright, codespell, vulture, just'
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: 'Implement Dev toolchain: ruff, pyright, codespell, vulture, just'
+  verify: just --list | grep -q check
+  status: done

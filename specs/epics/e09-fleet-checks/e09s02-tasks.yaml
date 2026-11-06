@@ -1,0 +1,9 @@
+story_id: e09s02
+title: 'has-readme: README.md presence check'
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: 'Implement has-readme: README.md presence check'
+  verify: test -f data/checks/has-readme.yaml
+  status: done

@@ -1,0 +1,9 @@
+story_id: e12s02
+title: MCP Tools & FastMCP Server
+status: pending
+bcps: 1
+tasks:
+- id: 1
+  description: Implement MCP Tools & FastMCP Server
+  verify: just check
+  status: pending

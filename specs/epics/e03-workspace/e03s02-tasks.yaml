@@ -1,0 +1,9 @@
+story_id: e03s02
+title: Git identity and commit signing configuration
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement Git identity and commit signing configuration
+  verify: grep -q 'user.name' src/grimoire/workspace/manager.py
+  status: done

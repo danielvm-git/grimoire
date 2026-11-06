@@ -1,0 +1,10 @@
+story_id: e06s01
+title: FastAPI app factory and router wiring
+status: done
+bcps: 4
+tasks:
+- id: 1
+  description: Implement FastAPI app factory and router wiring
+  verify: python -c 'from grimoire.app import create_app; app=create_app(); assert
+    app.title=="Grimoire"'
+  status: done

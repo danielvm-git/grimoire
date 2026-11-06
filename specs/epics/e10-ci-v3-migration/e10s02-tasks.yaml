@@ -1,0 +1,9 @@
+story_id: e10s02
+title: 'Docs pair renamed: test-build-release-docs + deploy-docs'
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: 'Implement Docs pair renamed: test-build-release-docs + deploy-docs'
+  verify: test -f .github/workflows/test-build-release-docs.yml
+  status: done

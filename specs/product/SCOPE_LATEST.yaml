@@ -1,0 +1,246 @@
+# Grimoire — Scope
+# Auto-generated from docs/specs/00–07 during migration on 2026-07-08
+# Source framework: custom (numbered module specs)
+
+initiative: "Self-hostable GitHub repository monitoring dashboard"
+vision_ref: specs/product/VISION_LATEST.yaml
+
+problem: |
+  Managing multi-repository organizations often leaves critical failures unnoticed: broken CI runs on default branches,
+  lingering stale PRs and issues, tech debt markers, and missing compliance policies. Existing commercial dashboards are
+  heavyweight, costly, require extensive cloud permissions, or fail to support custom bash-level checks against live code.
+
+users:
+  - id: tech-lead
+    role: "Engineering Lead / Solo Architect"
+    need: "High-level fleet health overview, prioritized backlog scoring, and confidence that CI/security standards are green across all tracked repos."
+  - id: software-engineer
+    role: "Full-Stack Software Engineer"
+    need: "Instant visibility into failing runs, check output logs, and the ability to trigger automated remediation actions directly from the dashboard."
+  - id: devops-platform
+    role: "DevOps / SRE Engineer"
+    need: "Self-hostable, low-resource Docker container with Prometheus metrics, health endpoints, and zero external database dependencies."
+
+success_criteria:
+  - "Sub-second dashboard loading via HTMX partials and cached SQLite persistence."
+  - "Zero false positives on rate-limit exhaustion via ETag caching and intelligent backoff."
+  - "Automated check and action execution with strict timeouts (300s/600s) and bounded worktree disk usage."
+  - "100% test pass rate on Preflight (`just check`) with high coverage (>85%)."
+  - "Full fleet observability via Prometheus metrics and structured JSON logging."
+
+in_scope:
+  # --- Module 1: Scaffolding & Configuration ---
+  - id: REQ-001
+    description: "YAML configuration file with Pydantic v2 validation and ${ENV_VAR} resolution"
+    source: "docs/specs/01-scaffolding-and-configuration.md §1.2"
+  - id: REQ-002
+    description: "SQLite database with SQLModel ORM (async via aiosqlite) for caching GitHub data, check results, and action runs"
+    source: "docs/specs/01-scaffolding-and-configuration.md §1.3"
+  - id: REQ-003
+    description: "CLI entrypoint via uvicorn with FastAPI app factory pattern"
+    source: "docs/specs/01-scaffolding-and-configuration.md §1.5"
+  - id: REQ-004
+    description: "Ruff (formatter+linter), pyright (type checking), codespell, vulture dev toolchain with just command runner"
+    source: "docs/specs/01-scaffolding-and-configuration.md §1.7"
+
+  # --- Module 2: GitHub Data Service ---
+  - id: REQ-005
+    description: "Async GitHub REST API client with httpx, ETag caching, rate-limit tracking, retry with backoff"
+    source: "docs/specs/02-github-data-service.md §2.1"
+  - id: REQ-006
+    description: "Paginated API calls with Link header following and per_page=100"
+    source: "docs/specs/02-github-data-service.md §2.1"
+  - id: REQ-007
+    description: "Repository resolution from static lists and GitHub team memberships with archived repo exclusion"
+    source: "docs/specs/02-github-data-service.md §2.2"
+  - id: REQ-008
+    description: "Per-repo stats fetching: open/stale issues, open/stale PRs, workflow statuses, branch counts, last commit"
+    source: "docs/specs/02-github-data-service.md §2.3"
+  - id: REQ-009
+    description: "Concurrent stats refresh with asyncio.Semaphore(10) bounding"
+    source: "docs/specs/02-github-data-service.md §2.3"
+  - id: REQ-010
+    description: "DB persistence layer: save fetched stats to SQLite, load cached data on startup, prune removed repos"
+    source: "docs/specs/02-github-data-service.md §2.4"
+  - id: REQ-011
+    description: "Workflow include/exclude filtering via fnmatch glob patterns"
+    source: "docs/specs/02-github-data-service.md §2.3"
+  - id: REQ-012
+    description: "Staleness detection: issues >365d no comment, PRs >30d no push/comment"
+    source: "docs/specs/02-github-data-service.md §2.3"
+
+  # --- Module 3: Workspace Manager ---
+  - id: REQ-013
+    description: "Bare clone + git worktree layout for disk-efficient multi-branch checkouts"
+    source: "docs/specs/03-workspace-manager.md §3.1"
+  - id: REQ-014
+    description: "Git identity configuration (user.name, user.email) and optional GPG/SSH commit signing"
+    source: "docs/specs/03-workspace-manager.md §3.1"
+  - id: REQ-015
+    description: "Worktree reset: checkout → reset --hard origin/{branch} → clean -fdx before each check/action"
+    source: "docs/specs/03-workspace-manager.md §3.1"
+  - id: REQ-016
+    description: "GH_TOKEN/GITHUB_TOKEN environment export for subprocess scripts"
+    source: "docs/specs/03-workspace-manager.md §3.1"
+
+  # --- Module 4: Checks Engine ---
+  - id: REQ-017
+    description: "YAML-defined checks with name, description, script, schedule, enabled, severity fields"
+    source: "docs/specs/04-checks-engine.md §4.1"
+  - id: REQ-018
+    description: "Target resolution: list (exact repo match), regex (pattern match), script (per-branch include filter)"
+    source: "docs/specs/04-checks-engine.md §4.1"
+  - id: REQ-019
+    description: "Check execution engine: run script in worktree, capture stdout/stderr, enforce timeout (300s), cap output (64KB)"
+    source: "docs/specs/04-checks-engine.md §4.2"
+  - id: REQ-020
+    description: "Check run grouping: one CheckRunRecord per execution, per-repo CheckResultRecord children"
+    source: "docs/specs/04-checks-engine.md §4.2"
+  - id: REQ-021
+    description: "Check persistence: results stored in SQLite, latest results queryable by repo+branch"
+    source: "docs/specs/04-checks-engine.md §4.2"
+  - id: REQ-022
+    description: "Check scheduling: cron-scheduled checks via APScheduler, refresh-driven checks on data-refresh cycle"
+    source: "docs/specs/04-checks-engine.md §4.4"
+  - id: REQ-023
+    description: "Check REST API: list, run, toggle enabled/disabled, get results, get run history/detail, status polling"
+    source: "docs/specs/04-checks-engine.md §4.3"
+  - id: REQ-024
+    description: "Check severity: 'error' (red, affects health) and 'warning' (yellow, informational only)"
+    source: "docs/specs/04-checks-engine.md §4.1"
+  - id: REQ-025
+    description: "Shebang support: scripts starting with #! run via the specified interpreter (bash, python3, etc.)"
+    source: "docs/specs/04-checks-engine.md §4.1"
+
+  # --- Module 5: Actions Engine ---
+  - id: REQ-026
+    description: "YAML-defined actions with name, description, script, schedule, enabled fields"
+    source: "docs/specs/05-actions-engine.md §5.1"
+  - id: REQ-027
+    description: "Global actions: targets=null runs script once (not per-repo), suitable for cross-cutting tasks"
+    source: "docs/specs/05-actions-engine.md §5.1"
+  - id: REQ-028
+    description: "Action execution engine: sync repo, reset worktree, run script, capture output, timeout (600s)"
+    source: "docs/specs/05-actions-engine.md §5.2"
+  - id: REQ-029
+    description: "Concurrent run guard: 409 Conflict if action is already running (sequential per-action)"
+    source: "docs/specs/05-actions-engine.md §5.2"
+  - id: REQ-030
+    description: "Action persistence: ActionRunRecord + ActionRunRepoRecord in SQLite, full run history"
+    source: "docs/specs/05-actions-engine.md §5.2"
+  - id: REQ-031
+    description: "Action REST API: list, run, toggle, get runs, get run detail, status polling"
+    source: "docs/specs/05-actions-engine.md §5.3"
+  - id: REQ-032
+    description: "Action scheduling: cron-scheduled via APScheduler, manual-only when no schedule"
+    source: "docs/specs/05-actions-engine.md §5.4"
+
+  # --- Module 6: Web Application ---
+  - id: REQ-033
+    description: "Dashboard page (/) with sortable repo matrix, health tiers (error/warning/ok), aggregate stats bar"
+    source: "docs/specs/06-web-application.md §6.3"
+  - id: REQ-034
+    description: "Repository detail page showing per-branch workflows, checks, issues, PRs, warnings"
+    source: "docs/specs/06-web-application.md §6.4"
+  - id: REQ-035
+    description: "Loading page with DaisyUI progress bar and HTMX polling for initial data refresh"
+    source: "docs/specs/06-web-application.md §6.2"
+  - id: REQ-036
+    description: "Actions page listing all action definitions with run history, inline expansion, output viewing"
+    source: "docs/specs/06-web-application.md §6.5"
+  - id: REQ-037
+    description: "Checks page listing all check definitions with results, inline expansion, output viewing"
+    source: "docs/specs/06-web-application.md §6.6"
+  - id: REQ-038
+    description: "Backlog page: prioritized problem list with WSJF-inspired weighted scoring, filtering, grouping, markdown export"
+    source: "docs/specs/06-web-application.md §6.7"
+  - id: REQ-039
+    description: "HTMX partials for refresh status, check run status, action run status with HX-Trigger auto-refresh"
+    source: "docs/specs/06-web-application.md §6.3–6.7"
+  - id: REQ-040
+    description: "Configurable backlog weights save-back to config.yaml via REST API"
+    source: "docs/specs/06-web-application.md §6.7"
+  - id: REQ-041
+    description: "Jinja2 + HTMX + Tailwind/DaisyUI frontend (no JavaScript build step, single deployment unit)"
+    source: "docs/specs/06-web-application.md §6.1"
+
+  # --- Module 7: Observability & DevOps ---
+  - id: REQ-042
+    description: "Health endpoint (GET /health) with status, cache age, version, tracked repo count"
+    source: "docs/specs/07-observability-and-devops.md §7.1"
+  - id: REQ-043
+    description: "Prometheus metrics: repo health gauges, age distribution histograms, check/action duration, API counters, rate limit"
+    source: "docs/specs/07-observability-and-devops.md §7.2"
+  - id: REQ-044
+    description: "Structured JSON logging with custom JsonFormatter, stdout + file, OTel trace context injection"
+    source: "docs/specs/07-observability-and-devops.md §7.3"
+  - id: REQ-045
+    description: "Docker container with python:3.13-slim base, git/gpg/ssh/gh system deps, uv package install"
+    source: "docs/specs/07-observability-and-devops.md §7.4"
+  - id: REQ-046
+    description: "Docker HEALTHCHECK via curl to /health endpoint"
+    source: "docs/specs/07-observability-and-devops.md §7.4"
+  - id: REQ-047
+    description: "justfile with run, dev, check (format+lint+test), build, docker-build, docs, release commands"
+    source: "docs/specs/07-observability-and-devops.md §7.5"
+
+out_of_scope:
+  - id: REQ-OUT-001
+    description: "GraphQL API batching — deferred for future optimization (REST with ETags is sufficient)"
+    source: "docs/specs/02-github-data-service.md §2.1"
+  - id: REQ-OUT-002
+    description: "Multi-user auth, RBAC — self-hosted, single-user by design; app should never be exposed to untrusted users"
+    source: "docs/specs/00-overview.md"
+  - id: REQ-OUT-003
+    description: "GitHub App authentication — currently only personal access tokens supported"
+    source: "docs/specs/02-github-data-service.md §2.1"
+
+  # --- e09: Fleet Check Portfolio ---
+  - id: REQ-048
+    description: "ci-green check: detect failing CI on default branch via gh run list, severity error"
+    source: "specs/epics/e09-fleet-checks/epic.yaml#e09s01"
+  - id: REQ-049
+    description: "has-readme check: verify README.md exists in every tracked repo, severity warning"
+    source: "specs/epics/e09-fleet-checks/epic.yaml#e09s02"
+  - id: REQ-050
+    description: "no-todo-fixme check: scan for TODO/FIXME/HACK markers in source, severity warning"
+    source: "specs/epics/e09-fleet-checks/epic.yaml#e09s03"
+  - id: REQ-051
+    description: "no-secrets check: gitleaks credential scan across all repos, severity error"
+    source: "specs/epics/e09-fleet-checks/epic.yaml#e09s04"
+  - id: REQ-052
+    description: "lint-passes check: language-aware linter dispatch (ruff, golangci-lint, eslint, cargo clippy, swiftlint, shellcheck)"
+    source: "specs/epics/e09-fleet-checks/epic.yaml#e09s05"
+  - id: REQ-053
+    description: "license-exists check: verify LICENSE file presence, severity warning"
+    source: "specs/epics/e09-fleet-checks/epic.yaml#e09s06"
+  - id: REQ-054
+    description: "uv-lock-fresh check: upgrade existing check severity from warning to error"
+    source: "specs/epics/e09-fleet-checks/epic.yaml#e09s07"
+
+  # --- e08: Test Hardening ---
+  - id: REQ-055
+    description: "Extract and test app.py lifespan orchestration steps for testability"
+    source: "specs/epics/e08-test-hardening/epic.yaml#e08s01"
+  - id: REQ-056
+    description: "Test coverage for check and action scheduler registration"
+    source: "specs/epics/e08-test-hardening/epic.yaml#e08s02"
+  - id: REQ-057
+    description: "Failure-mode tests: disk full, SQLite corruption, malformed API responses"
+    source: "specs/epics/e08-test-hardening/epic.yaml#e08s03"
+  - id: REQ-058
+    description: "API response schema contract tests against Pydantic response models"
+    source: "specs/epics/e08-test-hardening/epic.yaml#e08s04"
+
+constraints:
+  - "Python 3.13+ only (strict requirement)"
+  - "SQLite only (no PostgreSQL/MySQL support)"
+  - "Single deployment unit (no separate frontend build step)"
+  - "Self-hosted, user-provided scripts — no sandboxing beyond Docker container boundary"
+  - "No schema migrations — SQLModel definitions updated directly, grimoire.db deleted to recreate"
+
+metadata:
+  source_framework: "custom (numbered module specs)"
+  migrated_at: "2026-07-08"
+  total_requirements: 47
+  auto_generated_ids: 47  # all IDs auto-generated; source had no REQ-/FR-/UJ- IDs

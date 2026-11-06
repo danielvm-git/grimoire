@@ -1,0 +1,9 @@
+story_id: e04s05
+title: Check scheduling
+status: done
+bcps: 2
+tasks:
+- id: 1
+  description: Implement Check scheduling
+  verify: python -c 'from grimoire.checks.scheduler import register_checks'
+  status: done

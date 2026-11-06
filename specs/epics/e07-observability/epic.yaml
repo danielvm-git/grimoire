@@ -1,0 +1,69 @@
+title: Observability & DevOps
+status: done
+depends_on:
+- e02
+- e04
+- e05
+- e06
+source: docs/specs/07-observability-and-devops.md
+stories:
+- id: e07s01
+  title: Health check endpoint
+  status: done
+  bcps: 1
+  description: 'GET /health returns JSON: status (ok/degraded), cache_age_seconds
+    (int), version (str), tracked_repos (int). Docker HEALTHCHECK curls this endpoint.
+    Returns 200 always (even degraded); 503 only if app is truly down.'
+  verify:
+  - curl -s http://localhost:8000/health | python -c 'import json,sys; d=json.load(sys.stdin);
+    assert d["status"] in ("ok","degraded")'
+  spec: e07s01-health-check-endpoint.md
+  tasks: e07s01-tasks.yaml
+- id: e07s02
+  title: Prometheus metrics
+  status: done
+  bcps: 4
+  description: 'GET /metrics exposes Prometheus text format. Repo health gauges: repos_total,
+    open_issues, stale_issues, open_prs, stale_prs, total_branches, workflow_status,
+    workflow_failures, check_status, last_commit_timestamp, data_fetched_timestamp,
+    oldest_issue_age, oldest_pr_age. Age distribution histograms: issue_age_seconds,
+    pr_age_seconds. Performance: check_run_duration_seconds, action_run_duration_seconds,
+    data_refresh_duration_seconds. GitHub API: api_requests_total, rate_limit_remaining,
+    rate_limit_reset. Metrics documented in METRICS.md.'
+  verify:
+  - curl -s http://localhost:8000/metrics | grep -q 'grimoire_repositories_total'
+  spec: e07s02-prometheus-metrics.md
+  tasks: e07s02-tasks.yaml
+- id: e07s03
+  title: Structured JSON logging with OTel
+  status: done
+  bcps: 2
+  description: 'Custom JsonFormatter: timestamp, level, message, module, attributes.
+    OTel trace_id and span_id injected when span context is valid. Logs to stdout
+    and file. setup_logging() configured in lifespan startup.'
+  verify:
+  - python -c 'from grimoire.observability.logging import JsonFormatter, setup_logging'
+  spec: e07s03-structured-json-logging-with-otel.md
+  tasks: e07s03-tasks.yaml
+- id: e07s04
+  title: Docker packaging
+  status: done
+  bcps: 3
+  description: 'Dockerfile: python:3.13-slim base, apt install git/gpg/ssh/curl/gh,
+    uv install, copy src + pyproject.toml + uv.lock. docker-entrypoint.sh. HEALTHCHECK
+    via curl /health. docker-compose.yml for local dev with volume mounts.'
+  verify:
+  - docker build -t grimoire . --quiet && echo OK
+  spec: e07s04-docker-packaging.md
+  tasks: e07s04-tasks.yaml
+- id: e07s05
+  title: justfile with complete command set
+  status: done
+  bcps: 2
+  description: 'Recipes: run, dev (auto-reload), check (format+lint+test), format,
+    lint, test, coverage, build, docker-build, docker-run, docs, docs-build, clean,
+    bump, publish, publish-docker, release, lock, scan, venv.'
+  verify:
+  - just --list | grep -q 'check'
+  spec: e07s05-justfile-with-complete-command-set.md
+  tasks: e07s05-tasks.yaml

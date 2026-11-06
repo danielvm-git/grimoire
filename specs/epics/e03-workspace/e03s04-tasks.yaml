@@ -1,0 +1,9 @@
+story_id: e03s04
+title: Environment variable injection for subprocesses
+status: done
+bcps: 1
+tasks:
+- id: 1
+  description: Implement Environment variable injection for subprocesses
+  verify: grep -q 'GH_TOKEN' src/grimoire/workspace/manager.py
+  status: done

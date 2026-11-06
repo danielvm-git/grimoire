@@ -1,0 +1,9 @@
+story_id: e06s07
+title: Backlog page with weighted scoring
+status: done
+bcps: 6
+tasks:
+- id: 1
+  description: Implement Backlog page with weighted scoring
+  verify: grep -q 'backlog.html' src/grimoire/web/router.py
+  status: done

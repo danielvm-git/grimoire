@@ -1,0 +1,23 @@
+story_id: e08s02
+title: "Test scheduler registration"
+status: passing
+bcps: 2
+risk: P2
+tasks:
+  - id: 1
+    description: "Write check scheduler tests (enabled+scheduled, disabled, no-schedule)"
+    verify: "uv run pytest tests/test_checks/test_scheduler.py -v | grep -c PASSED | xargs -I{} test {} -ge 3"
+    risk: P2
+    status: passing
+
+  - id: 2
+    description: "Write action scheduler tests"
+    verify: "uv run pytest tests/test_actions/test_scheduler.py -v 2>/dev/null | grep -c PASSED | xargs -I{} test {} -ge 2"
+    risk: P2
+    status: passing
+
+  - id: 3
+    description: "Verify check scheduler coverage ≥ 80%"
+    verify: "uv run pytest tests/test_checks/test_scheduler.py --cov=src/grimoire/checks/scheduler --cov-report=term -q 2>&1 | grep 'scheduler.py' | awk '{print $4}' | sed 's/%//' | xargs -I{} test {} -ge 80"
+    risk: P2
+    status: passing
