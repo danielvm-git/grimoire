@@ -3,7 +3,7 @@
 
 release:
   codename: "fleet-intelligence"
-  version: "0.11.6"
+  version: "0.12.0"
   bump_hint: minor
   status: done
   semantic_release: true
@@ -11,8 +11,14 @@ release:
     total_epics: 12
     total_bcps: 212
     completed_bcps: 212
-    test_baseline: "501 passing tests"
-    coverage_baseline: "85%"
+    test_baseline: "510 passing tests"
+    coverage_baseline: "88%"
+  released_at: "2026-11-06"
+  tag: "v0.12.0"
+  note: >
+    All 12 epics complete and released. e12 passed a full post-epic review
+    (specs/verifications/e12-verify.yaml) before being closed. The next release needs
+    scope-work: there is no WSJF-ordered epic left in this plan.
 
 epics:
   - id: e02
