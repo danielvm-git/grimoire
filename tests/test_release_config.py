@@ -94,3 +94,34 @@ def test_test_job_guards_lockfile_freshness() -> None:
     assert lock_check_index < sync_index, (
         f"uv lock --check must run before uv sync (steps: {names})"
     )
+
+
+def test_release_job_can_regenerate_the_lockfile() -> None:
+    """The release job must install uv before it runs `uv lock`.
+
+    Regression: PR #40 added `uv lock` to the release sync step but the job never
+    installed uv, so the first release after it failed on main with
+    "/home/runner/work/_temp/....sh: line 6: uv: command not found" (exit 127),
+    after big-release had already published a tag. Provenance:
+    specs/bugs/registry.yaml release-job-missing-uv.
+    """
+    workflow = _load_yaml(REPO_ROOT / ".github/workflows/test-build-release.yml")
+    steps = workflow["jobs"]["release"]["steps"]
+
+    uses = [step.get("uses", "") for step in steps]
+    setup_uv_index = next(
+        (
+            index
+            for index, action in enumerate(uses)
+            if action.startswith("astral-sh/setup-uv")
+        ),
+        None,
+    )
+    assert setup_uv_index is not None, "the release job must install uv"
+
+    lock_index = next(
+        index
+        for index, step in enumerate(steps)
+        if "uv lock" in step.get("run", "") and "--check" not in step.get("run", "")
+    )
+    assert setup_uv_index < lock_index, "uv must be installed before `uv lock` runs"
