@@ -72,9 +72,6 @@ async def get_latest_check_results(
 
     query = select(CheckResultRecord).join(subq_alias, join_condition)
 
-    if repo_full_name:
-        query = query.where(CheckResultRecord.repo_full_name == repo_full_name)
-
     exec_res = await session.exec(query)
     return list(exec_res.all())
 

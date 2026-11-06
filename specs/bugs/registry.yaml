@@ -1204,3 +1204,30 @@ bugs:
       subquery) and remove the duplicate.
     risk_level: low
     commit_message: "refactor(checks): drop the duplicated repo filter in latest-results query"
+
+  - slug: e2e-session-transaction-warning
+    title: MCP e2e tests emit an SAWarning about a connection already in a transaction
+    module: tests/test_mcp/test_e2e.py
+    severity: low
+    status: open
+    found_in: e12 post-epic review
+    description: >
+      Both MCP e2e tests emit "SAWarning: The engine provided as bind produced a
+      connection that is already in a transaction ... effective join transaction mode
+      'create_savepoint'". A session is being created on a pooled connection that still
+      has an open transaction. Preflight stays green; the warning is cosmetic today but
+      signals session/transaction hygiene that would matter under concurrency.
+    reproduction_steps:
+      - "uv run pytest tests/test_mcp/test_e2e.py -q -W always::sqlalchemy.exc.SAWarning"
+      - Observe one SAWarning per e2e test.
+    root_cause_hypothesis: >
+      A startup or request-path AsyncSession leaves a transaction open on the pooled
+      connection before the next session binds to it. Replicating the app lifespan alone
+      does not reproduce it, so the trigger involves the HTTP client path in the test.
+    files_changed: []
+    approach: >
+      Deferred: warning-only with no functional impact, and a focused reproduction needs
+      a session-lifecycle investigation of its own. Tracked here so it is not silently
+      dropped. Next step is to trace with sqlalchemy event listeners on checkout/checkin.
+    risk_level: low
+    commit_message: "(deferred)"
