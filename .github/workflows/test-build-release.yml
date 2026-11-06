@@ -160,6 +160,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.13"
+
       - name: Install big-release
         run: |
           curl -sL https://github.com/danielvm-git/big-release/releases/latest/download/big-release-linux-amd64 -o big-release && chmod +x big-release && sudo mv big-release /usr/local/bin/ && big-release --version

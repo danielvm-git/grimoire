@@ -1307,3 +1307,34 @@ bugs:
       test_test_job_guards_lockfile_freshness (both PASS).
     risk_level: low
     commit_message: "fix(ci): keep uv.lock in sync with the released version"
+
+  - slug: release-job-missing-uv
+    title: The release job runs `uv lock` without installing uv, failing CI on main after tagging
+    module: .github/workflows/test-build-release.yml
+    severity: high
+    status: fixed
+    found_in: build-and-ship cycle (2026-11-06)
+    fixed_in: "pending"
+    description: >
+      PR #40 added `uv lock` to the release job's sync step but the job never installed uv
+      (only the test and build jobs do). The next push to main therefore failed in the release
+      job with "/home/runner/work/_temp/....sh: line 6: uv: command not found" and exit 127 —
+      AFTER big-release had already published tag v0.12.2. main was left with the tag present
+      but pyproject.toml and uv.lock still at 0.12.1.
+    reproduction_steps:
+      - Merge any release-producing change to main.
+      - Watch the release job: big-release publishes, then the sync step dies with exit 127.
+      - "git show origin/main:pyproject.toml | grep ^version  # still the old version"
+      - "git tag --sort=-v:refname | head -1                  # already advanced"
+    root_cause_hypothesis: >
+      The sync step grew a uv command while the release job's toolchain was not extended.
+    files_changed:
+      - .github/workflows/test-build-release.yml
+      - tests/test_release_config.py
+    approach: >
+      Add astral-sh/setup-uv@v5 to the release job before the sync step.
+      Regression: test_release_job_can_regenerate_the_lockfile (PASS).
+      Residual: tag v0.12.2 exists without a matching version commit; deleting or
+      re-pointing a tag is outside this run's approval, so it is reported instead.
+    risk_level: medium
+    commit_message: "fix(ci): install uv in the release job before regenerating the lockfile"
