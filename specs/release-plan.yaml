@@ -5,13 +5,13 @@ release:
   codename: "fleet-intelligence"
   version: "0.11.6"
   bump_hint: minor
-  status: planning
+  status: done
   semantic_release: true
   baseline:
     total_epics: 12
     total_bcps: 212
     completed_bcps: 212
-    test_baseline: "493 passing tests"
+    test_baseline: "501 passing tests"
     coverage_baseline: "85%"
 
 epics:
@@ -25,8 +25,8 @@ epics:
 
   - id: e12
     title: "MCP Server & Query Layer"
-    capsule_dir: specs/epics/e12-mcp-server
-    file: specs/epics/e12-mcp-server/epic.yaml
+    capsule_dir: specs/epics/archive/e12-mcp-server
+    file: specs/epics/archive/e12-mcp-server/epic.yaml
     wsjf: 95
     bcps: 20
     status: done

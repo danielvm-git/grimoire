@@ -2,10 +2,10 @@
 bigpowers_version: "2.3.0"
 workflow_mode: solo-git
 
-active_flow: build_epic
-active_epic: e12
-active_epic_id: e12
-active_story_id: e12s04
+active_flow: idle
+active_epic: null
+active_epic_id: null
+active_story_id: null
 completed_epic: true
 
 project_cycle:
@@ -14,10 +14,11 @@ project_cycle:
     - 1
     - 2
     - 3
+    - 4
 
 epic_cycle:
   current_step: 8
-  next_skill: release-branch
+  next_skill: survey-context
   story_bcps: 20
   completed_steps:
     - 0
@@ -39,16 +40,14 @@ release:
   ci_verified: true
 
 git:
-  branch: feat/e12-mcp-server
-  hash: 631e614
+  branch: main
+  hash: null
   pushed: false
 
 handoff:
-  last_step_completed: "Completed epic e12 end-to-end (e12s01-e12s04, verify-work, audit-code, dual-blind review and respond-review). Paused at release-branch decision gate."
-  open_decisions:
-    - "Ready for release-branch: merge feat/e12-mcp-server to main, push to remote, and delete feature branch."
+  last_step_completed: "Completed epic e12 end-to-end (e12s01-e12s04, verify-work, audit-code, dual-blind review, respond-review), archived capsule to specs/epics/archive/e12-mcp-server, and landed branch onto main."
+  open_decisions: []
   required_reading:
-    - specs/security/epics/e12/THREAT_MODEL.md
-    - docs/user/reference/mcp.md
-    - specs/verifications/e12-verify.yaml
-  next_skill: release-branch
+    - specs/release-plan.yaml
+    - specs/execution-status.yaml
+  next_skill: survey-context
