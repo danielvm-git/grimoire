@@ -1254,7 +1254,7 @@ bugs:
     severity: low
     status: fixed
     found_in: e12 post-epic review (second pass)
-    fixed_in: "294b01a"
+    fixed_in: "a76c2b4"
     description: >
       overall_status is a three-level conditional expression, and run_repo_checks builds the
       same five-key summary dict in two branches (CheckConflictError and success) with a nested
@@ -1278,7 +1278,7 @@ bugs:
     module: .github/workflows/test-build-release.yml
     severity: low
     status: fixed
-    fixed_in: "pending"
+    fixed_in: "294b01a"
     found_in: build-and-ship cycle (2026-11-06)
     description: >
       The release job's "Sync pyproject version and CHANGELOG" step rewrites pyproject.toml and
