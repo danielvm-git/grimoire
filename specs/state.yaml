@@ -35,17 +35,19 @@ epic_cycle:
 
 release:
   target_version: "0.12.0"
-  last_tag: "v0.11.6"
-  last_publish: null
+  last_tag: "v0.12.0"
+  last_publish: "v0.12.0"
   ci_verified: true
+  ci_run: 42253926602
+  changelog_entry: true
 
 git:
   branch: main
-  hash: null
-  pushed: false
+  hash: "9b05d02"
+  pushed: true
 
 handoff:
-  last_step_completed: "Completed epic e12 end-to-end (e12s01-e12s04, verify-work, audit-code, dual-blind review, respond-review), archived capsule to specs/epics/archive/e12-mcp-server, and landed branch onto main."
+  last_step_completed: "Completed epic e12 end-to-end (e12s01-e12s04, verify-work, audit-code, dual-blind review, respond-review), archived capsule to specs/epics/archive/e12-mcp-server, landed branch onto main, and verified release v0.12.0 (tag + changelog + CI run 42253926602 green). Stale feat/e12-mcp-server branch deleted; specs/security/REVIEW.md refreshed for e12."
   open_decisions: []
   required_reading:
     - specs/release-plan.yaml
