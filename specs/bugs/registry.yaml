@@ -1254,7 +1254,7 @@ bugs:
     severity: low
     status: fixed
     found_in: e12 post-epic review (second pass)
-    fixed_in: "pending"
+    fixed_in: "a76c2b4"
     description: >
       overall_status is a three-level conditional expression, and run_repo_checks builds the
       same five-key summary dict in two branches (CheckConflictError and success) with a nested
@@ -1272,3 +1272,38 @@ bugs:
       plus a return.
     risk_level: low
     commit_message: "refactor(mcp): flatten status logic and deduplicate execution details"
+
+  - slug: release-workflow-skips-uv-lock
+    title: The release workflow bumps pyproject.toml but never regenerates uv.lock
+    module: .github/workflows/test-build-release.yml
+    severity: low
+    status: fixed
+    fixed_in: "294b01a"
+    found_in: build-and-ship cycle (2026-11-06)
+    description: >
+      The release job's "Sync pyproject version and CHANGELOG" step rewrites pyproject.toml and
+      commits only pyproject.toml + CHANGELOG.md. uv.lock keeps the previous version, so every
+      release lands main with a lockfile that disagrees with pyproject.toml. Observed at 0.12.0
+      and again at 0.12.1. Because the Justfile exports UV_FROZEN=true, nothing auto-corrects it;
+      the next `uv sync` silently rewrites uv.lock and leaves the tree dirty.
+    reproduction_steps:
+      - Merge any release-producing commit to main and let the release job run.
+      - "grep -A1 'name = \"grimoire-dashboard\"' uv.lock  # shows the previous version"
+      - "grep -m1 '^version' pyproject.toml               # shows the new version"
+      - "uv sync && git status --short                     # uv.lock is now modified"
+    root_cause_hypothesis: >
+      The step stages pyproject.toml and CHANGELOG.md explicitly and never runs `uv lock`, so the
+      lockfile is not part of the release commit.
+    files_changed:
+      - .github/workflows/test-build-release.yml
+      - uv.lock
+      - tests/test_release_config.py
+    approach: >
+      Run `uv lock` in the release sync step and stage uv.lock with the other version files.
+      Added a `uv lock --check` guard to the test job BEFORE `uv sync`, because syncing
+      rewrites a stale lockfile in place and would hide the drift from any runtime assertion.
+      Committed the corrected uv.lock for 0.12.1.
+      Regression: test_release_workflow_keeps_lockfile_in_sync,
+      test_test_job_guards_lockfile_freshness (both PASS).
+    risk_level: low
+    commit_message: "fix(ci): keep uv.lock in sync with the released version"
