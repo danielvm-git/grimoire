@@ -12,6 +12,16 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.12.0] - 2026-11-06
+
+### Features
+
+- **mcp:** implement MCP server and query layer (e12) ([ff7825a](https://github.com/danielvm-git/grimoire/commit/ff7825afaf32e3194be9610eafa3f85fb367948f))
+
+### Bug Fixes
+
+- **mcp:** use constant-time token comparison and fix story traceability ([631e614](https://github.com/danielvm-git/grimoire/commit/631e61433455c23a8f7dbe3013d82f8a464c742f))
+
 ## [0.11.6] - 2026-11-04
 
 ### Fixed
