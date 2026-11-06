@@ -31,7 +31,7 @@ release:
 
 git:
   branch: main
-  hash: ab3c9a2
+  hash: 1b5c088
   pushed: true
 
 handoff:
