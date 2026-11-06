@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI
 from mcp.server import MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
-from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from grimoire.mcp.tools import MCPToolHandlers
 
@@ -25,15 +25,32 @@ if TYPE_CHECKING:
     from grimoire.workspace.manager import WorkspaceManager
 
 
-class MCPAuthMiddleware(BaseHTTPMiddleware):
-    """Middleware enforcing token authentication for the MCP SSE endpoint."""
+class MCPAuthMiddleware:
+    """Token authentication for the MCP SSE endpoint, as pure ASGI middleware.
 
-    def __init__(self, app: Any, required_token: str) -> None:
-        super().__init__(app)
+    Deliberately not a starlette ``BaseHTTPMiddleware``: that class buffers the response and
+    asserts every downstream message is ``http.response.body``, so wrapping the SSE stream
+    crashed the app with ``AssertionError: Unexpected message`` on every client disconnect.
+    Provenance: specs/bugs/registry.yaml mcp-auth-middleware-breaks-sse-stream.
+    """
+
+    def __init__(self, app: ASGIApp, required_token: str) -> None:
+        self.app = app
         self.required_token = required_token
 
-    async def dispatch(self, request: Request, call_next: Any) -> Response:
-        # Check X-MCP-Token header or Authorization: Bearer <token>
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or self._token_matches(Request(scope)):
+            await self.app(scope, receive, send)
+            return
+
+        unauthorized = JSONResponse(
+            status_code=401,
+            content={"detail": "Unauthorized: Invalid or missing MCP token."},
+        )
+        await unauthorized(scope, receive, send)
+
+    def _token_matches(self, request: Request) -> bool:
+        """Compare the supplied X-MCP-Token or Bearer credential in constant time."""
         auth_header = request.headers.get("Authorization", "")
         token_header = request.headers.get("X-MCP-Token", "").strip()
 
@@ -42,14 +59,7 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
             bearer_token = auth_header[7:].strip()
 
         provided_token = token_header or bearer_token
-
-        if not secrets.compare_digest(provided_token, self.required_token):
-            return JSONResponse(
-                status_code=401,
-                content={"detail": "Unauthorized: Invalid or missing MCP token."},
-            )
-
-        return await call_next(request)
+        return secrets.compare_digest(provided_token, self.required_token)
 
 
 def create_mcp_server(
@@ -119,11 +129,7 @@ def mount_mcp_server(
     sse_app = mcp.sse_app(transport_security=transport_security)
 
     if token:
-        # Wrap sse_app with auth middleware if a token is configured
-        auth_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-        auth_app.add_middleware(MCPAuthMiddleware, required_token=token)
-        auth_app.mount("/", sse_app)
-        app.mount(endpoint_path, auth_app)
+        app.mount(endpoint_path, MCPAuthMiddleware(app=sse_app, required_token=token))
     else:
         logger.warning(
             "MCP endpoint mounted at %s without authentication "

@@ -13,7 +13,11 @@ from httpx import ASGITransport, AsyncClient
 
 from grimoire.checks.loader import CheckDefinition
 from grimoire.database import create_tables, get_engine
-from grimoire.mcp.server import create_mcp_server, mount_mcp_server
+from grimoire.mcp.server import (
+    MCPAuthMiddleware,
+    create_mcp_server,
+    mount_mcp_server,
+)
 from grimoire.models import TrackedRepository
 from grimoire.targeting import TargetSpec
 from grimoire.workspace.manager import WorkspaceManager
@@ -190,3 +194,87 @@ def test_empty_token_warns(caplog: pytest.LogCaptureFixture) -> None:
         mount_mcp_server(app=app, mcp=fake, token=None)
 
     assert "without authentication" in caplog.text
+
+
+class _ReconnectingSseApp:
+    """ASGI app that emits a second response.start, as the SSE transport does after a disconnect."""
+
+    def __init__(self) -> None:
+        self.messages: list[dict[str, object]] = []
+
+    async def __call__(self, scope, receive, send) -> None:  # type: ignore[no-untyped-def]
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"", "more_body": True})
+        # The SSE stream ends with the client disconnecting, and the transport re-emits a start.
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 200,
+                "headers": [(b"content-length", b"0")],
+            }
+        )
+        await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+
+def _http_scope(headers: list[tuple[bytes, bytes]]) -> dict[str, object]:
+    return {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/mcp/sse",
+        "raw_path": b"/mcp/sse",
+        "root_path": "",
+        "query_string": b"",
+        "headers": headers,
+        "client": ("127.0.0.1", 12345),
+        "server": ("127.0.0.1", 80),
+    }
+
+
+@pytest.mark.asyncio
+async def test_auth_middleware_forwards_streaming_disconnect_messages() -> None:
+    """A streamed response that re-emits response.start must pass through untouched.
+
+    BaseHTTPMiddleware buffers the response and asserts every downstream message is
+    http.response.body, so wrapping the SSE transport crashed the app on every client
+    disconnect. Provenance: specs/bugs/registry.yaml mcp-auth-middleware-breaks-sse-stream.
+    """
+    inner = _ReconnectingSseApp()
+    guarded = MCPAuthMiddleware(app=inner, required_token="secret-token-123")
+    sent: list[dict[str, object]] = []
+
+    async def receive() -> dict[str, object]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, object]) -> None:
+        sent.append(message)
+
+    await guarded(
+        _http_scope([(b"x-mcp-token", b"secret-token-123")]),
+        receive,
+        send,
+    )
+
+    start_messages = [m for m in sent if m["type"] == "http.response.start"]
+    assert len(start_messages) == 2, "both response starts must be forwarded verbatim"
+
+
+@pytest.mark.asyncio
+async def test_auth_middleware_rejects_missing_token_without_calling_app() -> None:
+    """An unauthenticated request never reaches the SSE app."""
+    inner = _ReconnectingSseApp()
+    guarded = MCPAuthMiddleware(app=inner, required_token="secret-token-123")
+    sent: list[dict[str, object]] = []
+
+    async def receive() -> dict[str, object]:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: dict[str, object]) -> None:
+        sent.append(message)
+
+    await guarded(_http_scope([]), receive, send)
+
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 401
