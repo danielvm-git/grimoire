@@ -1241,3 +1241,28 @@ bugs:
       dropped. Next step is to trace with sqlalchemy event listeners on checkout/checkin.
     risk_level: low
     commit_message: "(deferred)"
+
+  - slug: mcp-tools-nested-conditionals
+    title: MCP tool handlers nest ternaries and duplicate the execution-summary construction
+    module: src/grimoire/mcp/tools.py
+    severity: low
+    status: fixed
+    found_in: e12 post-epic review (second pass)
+    fixed_in: "pending"
+    description: >
+      overall_status is a three-level conditional expression, and run_repo_checks builds the
+      same five-key summary dict in two branches (CheckConflictError and success) with a nested
+      ternary for the error field. CONVENTIONS.md requires early returns, positives over
+      negatives, at most two levels of indentation, and no duplicated logic.
+    reproduction_steps:
+      - Read src/grimoire/mcp/tools.py — overall_status and the two executed_summary.append blocks.
+    root_cause_hypothesis: >
+      Both were written inline for brevity rather than extracted.
+    files_changed:
+      - src/grimoire/mcp/tools.py
+    approach: >
+      Extract _overall_status(passing, failing) and _execution_detail(check, results, error) with
+      early returns, and move the per-check run into _execute_check so run_repo_checks is a loop
+      plus a return.
+    risk_level: low
+    commit_message: "refactor(mcp): flatten status logic and deduplicate execution details"

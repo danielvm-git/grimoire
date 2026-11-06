@@ -55,6 +55,28 @@ def require_tracked_repo(repo: str, repos: list[TrackedRepository]) -> None:
     )
 
 
+def _overall_status(passing: int, failing: int) -> str:
+    """Summarise per-result counts as passing, failing or unknown."""
+    if failing:
+        return "failing"
+    if passing:
+        return "passing"
+    return "unknown"
+
+
+def _execution_detail(
+    check: CheckDefinition, results: list[Any], error: str | None
+) -> dict[str, Any]:
+    """Describe one check execution attempt."""
+    return {
+        "check_slug": check.slug,
+        "check_name": check.name,
+        "results_count": len(results),
+        "passed": bool(results) and all(r.passed for r in results),
+        "error": error,
+    }
+
+
 class MCPToolHandlers:
     """Tool handlers bound to application state."""
 
@@ -128,9 +150,7 @@ class MCPToolHandlers:
 
         return {
             "repository": repo,
-            "overall_status": "passing"
-            if failing_count == 0 and len(results) > 0
-            else ("failing" if failing_count > 0 else "unknown"),
+            "overall_status": _overall_status(passing_count, failing_count),
             "total_executed_checks": len(results),
             "passing": passing_count,
             "failing": failing_count,
@@ -169,54 +189,41 @@ class MCPToolHandlers:
         """Trigger execution of checks for a repository on demand."""
         validate_repo(repo)
         require_tracked_repo(repo, self.repos)
-        if check_slug:
-            validate_check_slug(check_slug)
 
         target_checks = self.checks
         if check_slug:
+            validate_check_slug(check_slug)
             target_checks = [c for c in self.checks if c.slug == check_slug]
             if not target_checks:
                 raise ValueError(f"Check with slug '{check_slug}' not found.")
 
-        executed_summary = []
-        for check in target_checks:
-            try:
-                results = await run_check_for_all_targets(
-                    check=check,
-                    repos=self.repos,
-                    workspace=self.workspace,
-                    engine=self.engine,
-                    triggered_by="api",
-                    specific_repo=repo,
-                )
-            except CheckConflictError:
-                executed_summary.append(
-                    {
-                        "check_slug": check.slug,
-                        "check_name": check.name,
-                        "results_count": 0,
-                        "passed": False,
-                        "error": "already running",
-                    }
-                )
-                continue
-            executed_summary.append(
-                {
-                    "check_slug": check.slug,
-                    "check_name": check.name,
-                    "results_count": len(results),
-                    "passed": bool(results) and all(r.passed for r in results),
-                    "error": None
-                    if results
-                    else (
-                        f"Check '{check.slug}' resolved no targets for '{repo}'. "
-                        f"Add the repository to the check's targets in data/checks/."
-                    ),
-                }
-            )
-
+        details = [await self._execute_check(check, repo) for check in target_checks]
         return {
             "repository": repo,
-            "executed_checks_count": len(executed_summary),
-            "details": executed_summary,
+            "executed_checks_count": len(details),
+            "details": details,
         }
+
+    async def _execute_check(self, check: CheckDefinition, repo: str) -> dict[str, Any]:
+        """Run one check for one repository and describe the outcome."""
+        try:
+            results = await run_check_for_all_targets(
+                check=check,
+                repos=self.repos,
+                workspace=self.workspace,
+                engine=self.engine,
+                triggered_by="api",
+                specific_repo=repo,
+            )
+        except CheckConflictError:
+            return _execution_detail(check, [], "already running")
+
+        if results:
+            return _execution_detail(check, results, None)
+
+        return _execution_detail(
+            check,
+            results,
+            f"Check '{check.slug}' resolved no targets for '{repo}'. "
+            f"Add the repository to the check's targets in data/checks/.",
+        )
