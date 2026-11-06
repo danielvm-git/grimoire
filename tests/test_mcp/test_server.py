@@ -1,4 +1,4 @@
-# story: e12s01
+# story: e12s03
 """Integration tests for MCPServer mounting and security middleware."""
 
 from __future__ import annotations
@@ -119,11 +119,21 @@ async def test_mcp_server_token_auth(tmp_path: Path):
         )
         assert res_auth.status_code == 400
 
+        # Request with whitespace-padded X-MCP-Token should also pass auth middleware
+        res_padded_auth = await client.post(
+            "/mcp/messages/", headers={"X-MCP-Token": "  secret-token-123  "}
+        )
+        assert res_padded_auth.status_code == 400
+
         # Request with correct Bearer header should pass auth middleware
         res_bearer_auth = await client.post(
             "/mcp/messages/", headers={"Authorization": "Bearer secret-token-123"}
         )
         assert res_bearer_auth.status_code == 400
+
+        # Request to /mcp/sse without token should fail with 401
+        res_sse_unauth = await client.get("/mcp/sse")
+        assert res_sse_unauth.status_code == 401
 
     await db_engine.dispose()
 

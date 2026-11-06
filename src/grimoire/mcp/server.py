@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
@@ -34,7 +35,7 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         # Check X-MCP-Token header or Authorization: Bearer <token>
         auth_header = request.headers.get("Authorization", "")
-        token_header = request.headers.get("X-MCP-Token", "")
+        token_header = request.headers.get("X-MCP-Token", "").strip()
 
         bearer_token = ""
         if auth_header.lower().startswith("bearer "):
@@ -42,7 +43,7 @@ class MCPAuthMiddleware(BaseHTTPMiddleware):
 
         provided_token = token_header or bearer_token
 
-        if provided_token != self.required_token:
+        if not secrets.compare_digest(provided_token, self.required_token):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Unauthorized: Invalid or missing MCP token."},
@@ -119,7 +120,7 @@ def mount_mcp_server(
 
     if token:
         # Wrap sse_app with auth middleware if a token is configured
-        auth_app = FastAPI()
+        auth_app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
         auth_app.add_middleware(MCPAuthMiddleware, required_token=token)
         auth_app.mount("/", sse_app)
         app.mount(endpoint_path, auth_app)
