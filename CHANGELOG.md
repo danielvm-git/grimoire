@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.12.3] - 2026-11-06
+
+### Bug Fixes
+
+- **ci:** install uv in the release job before the lockfile step ([#41](https://github.com/danielvm-git/grimoire/issues/41)) ([68b4d16](https://github.com/danielvm-git/grimoire/commit/68b4d165d197ea7be13c9f11c0b95aae554ed3b2))
+
 ## [0.12.1] - 2026-11-06
 
 ### Bug Fixes
