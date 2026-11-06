@@ -85,3 +85,54 @@ def test_setup_logging_creates_file_handler(tmp_path: Path) -> None:
 
     # Clean up handlers
     test_logger.handlers.clear()
+
+
+def test_json_formatter_serialises_exception_traceback() -> None:
+    """logger.exception must keep its traceback in the JSON line.
+
+    Regression for specs/bugs/registry.yaml json-formatter-drops-tracebacks:
+    the formatter ignored record.exc_info, so all 12 logger.exception call sites
+    emitted an ERROR line with no indication of what actually failed.
+    """
+    from grimoire.observability.logging import JsonFormatter
+
+    formatter = JsonFormatter()
+    try:
+        raise RuntimeError("github api unreachable")
+    except RuntimeError:
+        record = logging.LogRecord(
+            name="grimoire.app",
+            level=logging.ERROR,
+            pathname="app.py",
+            lineno=185,
+            msg="Data loading failed — falling back to cached data",
+            args=(),
+            exc_info=__import__("sys").exc_info(),
+        )
+
+    parsed = json.loads(formatter.format(record))
+
+    assert parsed["level"] == "ERROR"
+    assert parsed["message"] == "Data loading failed — falling back to cached data"
+    assert "exception" in parsed
+    assert "RuntimeError: github api unreachable" in parsed["exception"]
+    assert "Traceback" in parsed["exception"]
+
+
+def test_json_formatter_omits_exception_when_absent() -> None:
+    """Records without exc_info must not grow an empty exception field."""
+    from grimoire.observability.logging import JsonFormatter
+
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=1,
+        msg="plain",
+        args=(),
+        exc_info=None,
+    )
+
+    parsed = json.loads(JsonFormatter().format(record))
+
+    assert "exception" not in parsed
