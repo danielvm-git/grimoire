@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
 
     from grimoire.checks.loader import CheckDefinition
-    from grimoire.models import TrackedRepository
+    from grimoire.models import CheckResult, TrackedRepository
     from grimoire.workspace.manager import WorkspaceManager
 
 _REPO_REGEX = re.compile(r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$")
@@ -65,7 +65,7 @@ def _overall_status(passing: int, failing: int) -> str:
 
 
 def _execution_detail(
-    check: CheckDefinition, results: list[Any], error: str | None
+    check: CheckDefinition, results: list[CheckResult], error: str | None
 ) -> dict[str, Any]:
     """Describe one check execution attempt."""
     return {
