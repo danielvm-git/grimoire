@@ -250,3 +250,71 @@ async def test_mcp_tool_run_repo_checks(
     assert run_conflict["executed_checks_count"] == 1
     assert run_conflict["details"][0]["passed"] is False
     assert run_conflict["details"][0]["error"] == "already running"
+
+
+@pytest.mark.asyncio
+async def test_run_repo_checks_rejects_untracked_repository(tmp_path: Path) -> None:
+    """A repo that is not tracked must be an error, never a vacuous pass.
+
+    Regression for specs/bugs/registry.yaml mcp-tools-report-vacuous-success:
+    ChecksEngine filtered specific_repo down to an empty target list and the tool
+    answered {"results_count": 0, "passed": true} for a repository it never touched.
+    """
+    db_engine = await get_engine(str(tmp_path / "test.db"))
+    await create_tables(db_engine)
+    handlers = MCPToolHandlers(
+        engine=db_engine,
+        checks=[_check()],
+        repos=[_repo("lucabello/grimoire")],
+        workspace=_workspace(tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="acme/not-tracked.*lucabello/grimoire"):
+        await handlers.run_repo_checks("acme/not-tracked")
+
+    await db_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_get_repo_checks_status_rejects_untracked_repository(
+    tmp_path: Path,
+) -> None:
+    """Status queries for an untracked repo are an error, not a silent "unknown"."""
+    db_engine = await get_engine(str(tmp_path / "test.db"))
+    await create_tables(db_engine)
+    handlers = MCPToolHandlers(
+        engine=db_engine,
+        checks=[_check()],
+        repos=[_repo("lucabello/grimoire")],
+        workspace=_workspace(tmp_path),
+    )
+
+    with pytest.raises(ValueError, match="not tracked"):
+        await handlers.get_repo_checks_status("acme/not-tracked")
+
+    await db_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_run_repo_checks_reports_check_without_matching_targets(
+    tmp_path: Path,
+) -> None:
+    """A tracked repo outside a check's targets must report a failure, not a pass."""
+    db_engine = await get_engine(str(tmp_path / "test.db"))
+    await create_tables(db_engine)
+    # The check targets a different repository, so it resolves zero targets here.
+    handlers = MCPToolHandlers(
+        engine=db_engine,
+        checks=[_check()],
+        repos=[_repo("lucabello/other")],
+        workspace=_workspace(tmp_path),
+    )
+
+    result = await handlers.run_repo_checks("lucabello/other")
+
+    detail = result["details"][0]
+    assert detail["results_count"] == 0
+    assert detail["passed"] is False
+    assert "resolved no targets" in detail["error"]
+
+    await db_engine.dispose()
