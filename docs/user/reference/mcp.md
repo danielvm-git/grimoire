@@ -33,6 +33,10 @@ Every tool validates its input. A repository that is not tracked is rejected wit
 `ValueError` that names the repository and lists the tracked ones — it never reports an empty
 success.
 
+List-returning tools (`list_repositories`, `list_checks`) emit **one text content block per
+element** rather than a single JSON array, which is how the MCP SDK serialises a list. A client
+therefore receives N blocks, each holding one JSON object.
+
 ---
 
 ## Connecting AI Clients

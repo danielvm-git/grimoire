@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -155,31 +156,51 @@ async def test_mcp_server_tools_registered_and_invoked(tmp_path: Path):
         workspace=wm,
     )
 
-    # 1. list_repositories
-    res_repos = await mcp.call_tool("list_repositories", {})
-    assert res_repos.is_error is False
+    async def payload(tool: str, args: dict[str, object]) -> object:
+        """Decode a tool result. The SDK emits one TextContent block per list element."""
+        result = await mcp.call_tool(tool, args)
+        assert result.is_error is False
+        decoded = [json.loads(block.text) for block in result.content]  # type: ignore[union-attr]
+        return decoded[0] if len(decoded) == 1 else decoded
 
-    # 2. list_checks
-    res_checks = await mcp.call_tool("list_checks", {})
-    assert res_checks.is_error is False
+    repos = await payload("list_repositories", {})
+    assert repos == {
+        "full_name": "lucabello/grimoire",
+        "default_branch": "main",
+        "branches": ["main"],
+        "source": "static",
+    }
 
-    # 3. get_repo_checks_status
-    res_status = await mcp.call_tool(
-        "get_repo_checks_status", {"repo": "lucabello/grimoire"}
-    )
-    assert res_status.is_error is False
+    checks = await payload("list_checks", {})
+    assert checks == {
+        "slug": "lint",
+        "name": "Linting",
+        "description": "Run linter",
+        "severity": "error",
+        "targets": {"list": ["lucabello/grimoire"], "regex": None, "script": None},
+    }
 
-    # 4. get_check_backlog
-    res_backlog = await mcp.call_tool(
-        "get_check_backlog", {"repo": "lucabello/grimoire"}
-    )
-    assert res_backlog.is_error is False
+    status = await payload("get_repo_checks_status", {"repo": "lucabello/grimoire"})
+    assert status["repository"] == "lucabello/grimoire"
+    assert status["overall_status"] == "unknown"
+    assert status["latest_results"] == []
 
-    # 5. run_repo_checks
-    res_run = await mcp.call_tool(
+    backlog = await payload("get_check_backlog", {"repo": "lucabello/grimoire"})
+    assert backlog["all_passed"] is False
+    assert backlog["summary"] == {
+        "total_checks": 1,
+        "passing": 0,
+        "failing": 0,
+        "unexecuted": 1,
+    }
+    assert backlog["unexecuted_checks"][0]["slug"] == "lint"
+
+    run = await payload(
         "run_repo_checks", {"repo": "lucabello/grimoire", "check_slug": "lint"}
     )
-    assert res_run.is_error is False
+    assert run["repository"] == "lucabello/grimoire"
+    assert run["executed_checks_count"] == 1
+    assert run["details"][0]["check_slug"] == "lint"
 
     await db_engine.dispose()
 
