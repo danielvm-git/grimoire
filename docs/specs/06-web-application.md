@@ -249,26 +249,38 @@ This pattern is shared across all long-running operations:
 - No card/shadow styling — sits flat on the page background.
 - Last activity is right-aligned.
 
+**2b. Pendencies (agent prompts)**
+- Card between the stats bar and the stale issues table. Header: title with count badge on the left; on the right `N errors · N warnings` (icons, singular/plural aware, zero counts omitted).
+- When there are no pendencies the card and "Copy prompt for all" are hidden and an "All clear. No failing checks, failing workflows or stale items." line (`#all-clear`, success color) is shown instead.
+- One row per pending problem: failing checks (error and warning severity), failing workflows, stale issues, stale PRs. Row: severity icon, title, branch (with branch icon), **Copy prompt** and **Preview** buttons. Preview uses an eye icon that becomes a chevron-up (with a highlighted button) when expanded (`aria-expanded`); the expanded prompt is indented under the title (`sm` and up) in a bordered code block, max height 11rem. On mobile the title and branch stack vertically. Below `sm` both buttons are icon-only with 44px touch targets and `aria-label`s.
+- The hero has a primary **Copy prompt for all** button that copies one combined prompt (errors first). It is the only filled primary button on the page.
+- Prompts are built server-side by `web/prompts.py` (`build_pendencies`, `build_repo_prompt`) from cached stats and stored check output (truncated to the last 2000 chars). They are embedded in `<template>` elements and copied client-side with `navigator.clipboard`; the button shows "Copied" for 1.5s.
+- Prompt content: repo, branch, problem description, failing output / run URL / issue link, task, and commit conventions. No external API is called.
+
 **3. Stale Issues Table**
-- Header shows icon-based indicators: `(fa-circle-dot) N total · (fa-clock) N stale (X%)`, with stale count highlighted in warning color when above threshold.
+- Header: title ("Stale issues") followed by the stale count in monospace, muted. The over-threshold warning color lives in the stats bar.
 - Table columns:
 
-| # | Title | Author | Last Activity |
+| # | Title | Author | Last activity |
 |---|-------|--------|---------------|
+
+Card titles are sentence case ("Stale issues", "Stale pull requests"). Last activity is right-aligned, relative (e.g. `34d ago`), warning-colored, with the absolute date in the `title` attribute.
 
 **4. Stale PRs Table**
-- Same header format as stale issues: `(fa-code-pull-request) N total · (fa-clock) N stale (X%)`.
+- Same header format as stale issues: "Stale pull requests" plus the stale count.
 - Table columns:
 
-| # | Title | Author | Last Activity |
+| # | Title | Author | Last activity |
 |---|-------|--------|---------------|
+
+Card titles are sentence case ("Stale issues", "Stale pull requests"). Last activity is right-aligned, relative (e.g. `34d ago`), warning-colored, with the absolute date in the `title` attribute.
 
 **5. Workflows & Checks (two-column card)**
 - Combined into a single card with a two-column grid layout (workflows left, checks right).
 - Each column has a header with a breakdown summary: `X passing · Y warning/pending · Z failing` (success → warnings → failures order), using status icons.
 - Flat list per column — one row per item with status icon, name, status text, and link.
 - Branch labels shown only when multiple branches are tracked.
-- Check rows include an "Output" button (HTMX `hx-get` to fetch full output on demand).
+- Check rows show a right-aligned monospace status (`pass` success, `warning` warning, `fail` error) and an "Output" button with a terminal icon (HTMX `hx-get` to fetch full output on demand).
 
 ## 6.5 — Actions Page
 

@@ -25,10 +25,18 @@
             {% endfor %}
         </div>
     </div>
+    <div class="flex items-center gap-2">
+    {% if repo_prompt %}
+    <button type="button" class="btn btn-primary btn-sm gap-2" data-copy-prompt="repo-prompt" id="copy-repo-prompt">
+        <i class="fa-regular fa-copy"></i> Copy prompt for all
+    </button>
+    <template id="repo-prompt">{{ repo_prompt }}</template>
+    {% endif %}
     <a href="https://github.com/{{ repo_name }}" target="_blank" rel="noopener" class="btn btn-outline btn-sm gap-2">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
         View on GitHub
     </a>
+    </div>
 </div>
 
 {# ── Warnings ──────────────────────────────────────────────────────── #}
@@ -49,7 +57,7 @@
 {# ── Compact Stats Bar ─────────────────────────────────────────────── #}
 {% set stale_issues_pct = (stats.stale_issues * 100 / stats.open_issues) if stats.open_issues > 0 else 0 %}
 {% set stale_prs_pct = (stats.stale_pull_requests * 100 / stats.open_pull_requests) if stats.open_pull_requests > 0 else 0 %}
-<div class="px-5 py-3 mb-6">
+<div class="px-5 py-3 mb-6 border-b border-base-300">
     <div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm font-mono-nums">
         <span class="opacity-70">
             <i class="fa-solid fa-circle-dot" style="font-size:12px"></i> <a href="https://github.com/{{ repo_name }}/issues" target="_blank" rel="noopener" class="hover:underline">{{ stats.open_issues }} issues</a>
@@ -79,16 +87,81 @@
     </div>
 </div>
 
+{# ── Pendencies (agent prompts) ────────────────────────────────────── #}
+{% if pendencies %}
+{% set pend_errors = pendencies | selectattr('severity', 'equalto', 'error') | list | length %}
+{% set pend_warnings = (pendencies | length) - pend_errors %}
+<div class="card bg-base-100 shadow mb-6" id="pendencies">
+    <div class="card-body">
+        <div class="flex items-center justify-between">
+            <h2 class="card-title text-lg">Pendencies <span class="badge badge-sm font-mono-nums">{{ pendencies | length }}</span></h2>
+            <span class="flex items-center gap-3 text-xs font-mono-nums">
+                {% if pend_errors %}<span class="text-error"><i class="fa-solid fa-circle-xmark"></i> {{ pend_errors }} error{{ "s" if pend_errors != 1 }}</span>{% endif %}
+                {% if pend_warnings %}<span class="text-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{ pend_warnings }} warning{{ "s" if pend_warnings != 1 }}</span>{% endif %}
+            </span>
+        </div>
+        <p class="text-sm opacity-60 mb-2">Copy a ready-made prompt to hand a problem to another agent.</p>
+        {% for p in pendencies %}
+        <div class="border-t border-base-300 pt-1">
+            <div class="flex items-center gap-3 min-h-11">
+                {% if p.severity == "error" %}<i class="fa-solid fa-circle-xmark text-error w-4 text-center shrink-0 max-sm:self-start max-sm:mt-3.5"></i>
+                {% else %}<i class="fa-solid fa-triangle-exclamation text-warning w-4 text-center shrink-0 max-sm:self-start max-sm:mt-3.5"></i>{% endif %}
+                <div class="flex-1 min-w-0 flex flex-col gap-0.5 max-sm:py-1.5 sm:flex-row sm:flex-wrap sm:items-baseline sm:gap-x-2.5">
+                    <span class="text-sm font-medium break-words">{{ p.title }}</span>
+                    <span class="text-xs opacity-60 font-mono whitespace-nowrap"><i class="fa-solid fa-code-branch" style="font-size:10.5px"></i> {{ p.branch }}</span>
+                </div>
+                <span class="flex items-center gap-0.5 shrink-0">
+                    <button type="button" class="btn btn-ghost btn-sm gap-1.5 sm:min-w-28 max-sm:btn-square max-sm:w-11 max-sm:h-11" aria-label="Copy prompt" data-copy-prompt="pendency-prompt-{{ loop.index }}">
+                        <i class="fa-regular fa-copy"></i><span class="max-sm:hidden">Copy prompt</span>
+                    </button>
+                    <button type="button" class="btn btn-ghost btn-sm gap-1.5 max-sm:btn-square max-sm:w-11 max-sm:h-11" aria-label="Preview" aria-expanded="false" data-toggle-preview="pendency-preview-{{ loop.index }}">
+                        <i class="fa-regular fa-eye"></i><span class="max-sm:hidden">Preview</span>
+                    </button>
+                </span>
+            </div>
+            <template id="pendency-prompt-{{ loop.index }}">{{ p.prompt }}</template>
+            <div id="pendency-preview-{{ loop.index }}" class="hidden pb-3 sm:pl-11 max-sm:pl-4 max-sm:pr-3">
+                <pre class="text-xs leading-relaxed whitespace-pre-wrap break-words bg-neutral text-neutral-content px-3.5 py-3 rounded-lg border border-base-300 max-h-44 overflow-auto font-mono">{{ p.prompt }}</pre>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="flex items-center gap-2 text-sm text-success mb-6 px-5" id="all-clear">
+    <i class="fa-solid fa-circle-check"></i> <span class="text-base-content/80">All clear. No failing checks, failing workflows or stale items.</span>
+</div>
+{% endif %}
+<script>
+document.addEventListener('click', function (ev) {
+    var tog = ev.target.closest('[data-toggle-preview]');
+    if (tog) {
+        var pre = document.getElementById(tog.dataset.togglePreview);
+        var open = pre.classList.toggle('hidden') === false;
+        tog.setAttribute('aria-expanded', open);
+        tog.querySelector('i').className = open ? 'fa-solid fa-chevron-up' : 'fa-regular fa-eye';
+        tog.classList.toggle('bg-base-200', open);
+        return;
+    }
+    var btn = ev.target.closest('[data-copy-prompt]');
+    if (!btn) return;
+    var tpl = document.getElementById(btn.dataset.copyPrompt);
+    if (!tpl) return;
+    var original = btn.innerHTML;
+    navigator.clipboard.writeText(tpl.content.textContent).then(function () {
+        btn.innerHTML = '<i class="fa-solid fa-check"></i><span class="' + (btn.dataset.copyPrompt === 'repo-prompt' ? '' : 'max-sm:hidden') + '">Copied</span>';
+        btn.classList.add('text-success');
+        setTimeout(function () { btn.innerHTML = original; btn.classList.remove('text-success'); }, 1500);
+    });
+});
+</script>
+
 {# ── Stale Issues ──────────────────────────────────────────────────── #}
 {% if stats.stale_issue_items %}
 <div class="card bg-base-100 shadow mb-6">
     <div class="card-body">
         <div class="flex items-center justify-between mb-2">
-            <h2 class="card-title text-lg">Stale Issues</h2>
-            <span class="flex items-center gap-3 text-sm font-mono-nums">
-                <span class="opacity-60"><i class="fa-solid fa-circle-dot"></i> {{ stats.open_issues }} total</span>
-                <span class="{% if stale_issues_pct >= staleness.problematic_stale_issues_pct %}text-warning{% else %}opacity-60{% endif %}"><i class="fa-solid fa-clock"></i> {{ stats.stale_issues }} stale{% if stats.open_issues > 0 %} <span class="opacity-70">({{ '%.0f' | format(stale_issues_pct) }}%)</span>{% endif %}</span>
-            </span>
+            <h2 class="card-title text-lg">Stale issues <span class="font-mono-nums text-xs font-normal opacity-60">{{ stats.stale_issues }}</span></h2>
         </div>
         <div class="overflow-x-auto">
         <table class="table table-sm">
@@ -97,7 +170,7 @@
                     <th>#</th>
                     <th>Title</th>
                     <th>Author</th>
-                    <th>Last Activity</th>
+                    <th class="text-right">Last activity</th>
                 </tr>
             </thead>
             <tbody>
@@ -108,8 +181,8 @@
                         <a href="{{ issue.url }}" target="_blank" rel="noopener" class="link link-hover">{{ issue.title }}</a>
                     </td>
                     <td class="text-sm opacity-60">{{ issue.author }}</td>
-                    <td class="text-sm opacity-60">
-                        {{ fmt_date(issue.last_activity_at, '%Y-%m-%d') }}
+                    <td class="text-sm text-right font-mono-nums text-warning" title="{{ fmt_date(issue.last_activity_at, '%Y-%m-%d') }}">
+                        {{ time_ago(issue.last_activity_at) }}
                     </td>
                 </tr>
                 {% endfor %}
@@ -125,11 +198,7 @@
 <div class="card bg-base-100 shadow mb-6">
     <div class="card-body">
         <div class="flex items-center justify-between mb-2">
-            <h2 class="card-title text-lg">Stale Pull Requests</h2>
-            <span class="flex items-center gap-3 text-sm font-mono-nums">
-                <span class="opacity-60"><i class="fa-solid fa-code-pull-request"></i> {{ stats.open_pull_requests }} total</span>
-                <span class="{% if stale_prs_pct >= staleness.problematic_stale_prs_pct %}text-warning{% else %}opacity-60{% endif %}"><i class="fa-solid fa-clock"></i> {{ stats.stale_pull_requests }} stale{% if stats.open_pull_requests > 0 %} <span class="opacity-70">({{ '%.0f' | format(stale_prs_pct) }}%)</span>{% endif %}</span>
-            </span>
+            <h2 class="card-title text-lg">Stale pull requests <span class="font-mono-nums text-xs font-normal opacity-60">{{ stats.stale_pull_requests }}</span></h2>
         </div>
         <div class="overflow-x-auto">
         <table class="table table-sm">
@@ -138,7 +207,7 @@
                     <th>#</th>
                     <th>Title</th>
                     <th>Author</th>
-                    <th>Last Activity</th>
+                    <th class="text-right">Last activity</th>
                 </tr>
             </thead>
             <tbody>
@@ -149,8 +218,8 @@
                         <a href="{{ pr.url }}" target="_blank" rel="noopener" class="link link-hover">{{ pr.title }}</a>
                     </td>
                     <td class="text-sm opacity-60">{{ pr.author }}</td>
-                    <td class="text-sm opacity-60">
-                        {{ fmt_date(pr.last_activity_at, '%Y-%m-%d') }}
+                    <td class="text-sm text-right font-mono-nums text-warning" title="{{ fmt_date(pr.last_activity_at, '%Y-%m-%d') }}">
+                        {{ time_ago(pr.last_activity_at) }}
                     </td>
                 </tr>
                 {% endfor %}
@@ -233,14 +302,14 @@
                         {% else %}<i class="fa-solid fa-minus status-icon status-icon-not-run"></i>{% endif %}
                         <span class="text-sm">{{ chk.check_name }}</span>
                         </a>
-                        <span class="text-xs opacity-40">{{ chk.status }}</span>
+                        <span class="ml-auto text-xs font-mono min-w-[3.25rem] text-right {% if chk.status == 'pass' %}text-success{% elif chk.status == 'fail' and chk.severity == 'warning' %}text-warning{% elif chk.status == 'fail' %}text-error{% else %}opacity-40{% endif %}">{% if chk.status == 'fail' and chk.severity == 'warning' %}warning{% else %}{{ chk.status }}{% endif %}</span>
                         {% if chk.id %}
-                        <button class="btn btn-ghost btn-xs ml-auto"
+                        <button class="btn btn-ghost btn-xs gap-1"
                                 hx-get="/partials/check-output/{{ chk.id }}"
                                 hx-target="#check-output-{{ chk.id }}"
                                 hx-swap="innerHTML"
                                 hx-on::before-request="var t = document.getElementById('check-output-{{ chk.id }}'); if(t.innerHTML.trim()) { t.innerHTML = ''; event.preventDefault(); }">
-                            Output
+                            <i class="fa-solid fa-terminal" style="font-size:10.5px"></i>Output
                         </button>
                         {% endif %}
                     </div>

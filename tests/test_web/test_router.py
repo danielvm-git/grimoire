@@ -55,14 +55,14 @@ class TestRepositoryDetail:
         self, web_client: AsyncClient
     ) -> None:
         resp = await web_client.get("/repo/acme/api")
-        assert "Stale Issues" in resp.text
+        assert "Stale issues" in resp.text
         assert "Fix legacy endpoint" in resp.text
         assert "Docs out of date" in resp.text
         assert "#42" in resp.text or "42" in resp.text
 
     async def test_repo_detail_shows_stale_prs(self, web_client: AsyncClient) -> None:
         resp = await web_client.get("/repo/acme/api")
-        assert "Stale Pull Requests" in resp.text
+        assert "Stale pull requests" in resp.text
         assert "Refactor auth module" in resp.text
         assert "charlie" in resp.text
 
@@ -70,7 +70,7 @@ class TestRepositoryDetail:
         self, web_client: AsyncClient
     ) -> None:
         resp = await web_client.get("/repo/acme/api")
-        assert "Last Activity" in resp.text
+        assert "Last activity" in resp.text
         assert "2026-04-10" in resp.text
 
     async def test_repo_detail_shows_branches(self, web_client: AsyncClient) -> None:
@@ -85,7 +85,7 @@ class TestRepositoryDetail:
         """acme/api has 2 stale out of 5 issues (40%) which exceeds 20% threshold → warning."""
         resp = await web_client.get("/repo/acme/api")
         assert "text-warning" in resp.text
-        assert "(40%)" in resp.text
+        assert "(2 stale)" in resp.text
 
     async def test_repo_detail_no_warning_when_below_threshold(
         self, web_client: AsyncClient
@@ -93,7 +93,7 @@ class TestRepositoryDetail:
         """acme/frontend has 0 stale issues → should show text-success."""
         resp = await web_client.get("/repo/acme/frontend")
         # Stale Issues box should show text-success (0 stale)
-        assert "Stale Issues" not in resp.text or "text-success" in resp.text
+        assert "Stale issues" not in resp.text or "text-success" in resp.text
 
     async def test_repo_without_stale_items_hides_sections(
         self, web_client: AsyncClient
@@ -101,8 +101,8 @@ class TestRepositoryDetail:
         resp = await web_client.get("/repo/acme/frontend")
         assert resp.status_code == 200
         # The card-level sections should not appear (stat boxes use different text)
-        assert "Stale Issues</h2>" not in resp.text
-        assert "Stale Pull Requests</h2>" not in resp.text
+        assert "Stale issues</h2>" not in resp.text
+        assert "Stale pull requests</h2>" not in resp.text
 
 
 class TestActionsPage:
