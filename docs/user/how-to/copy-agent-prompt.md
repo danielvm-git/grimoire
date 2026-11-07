@@ -9,4 +9,4 @@ When a repository has something wrong with it, Grimoire can write the prompt for
 
 **Copy prompt for all** (top right) copies a single prompt covering every pendency, with errors first.
 
-Each prompt includes the repository, branch, what failed, the failing check output (last 2000 characters), the run or issue link, and a task description. Prompts are built from data Grimoire already has; nothing is sent to any external service.
+Workflow prompts also include when the failing run finished. Each prompt includes the repository, branch, what failed, the failing check output (last 2000 characters), the run or issue link, and a task description. Prompts are built from data Grimoire already has; nothing is sent to any external service.

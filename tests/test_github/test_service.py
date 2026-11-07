@@ -738,6 +738,89 @@ async def test_workflow_runs_304_preserves_previous_status(
     assert stats.workflows[0].status == "success"
 
 
+@respx.mock
+async def test_workflow_run_at_comes_from_latest_run(client: GitHubClient) -> None:
+    """The latest run's updated_at is exposed as WorkflowStatus.run_at."""
+    run_time = datetime(2026, 11, 7, 10, 0, tzinfo=UTC)
+    for path, payload in {
+        "issues": [],
+        "pulls": [],
+        "branches": [],
+    }.items():
+        respx.get(f"https://api.github.com/repos/owner/repo1/{path}").mock(
+            return_value=httpx.Response(200, json=payload, headers=_rl_headers())
+        )
+    respx.get("https://api.github.com/repos/owner/repo1/actions/workflows").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "total_count": 1,
+                "workflows": [
+                    {"id": 42, "name": "CI", "html_url": "https://github.com/wf"}
+                ],
+            },
+            headers=_rl_headers(),
+        )
+    )
+    respx.get(
+        "https://api.github.com/repos/owner/repo1/actions/workflows/42/runs"
+    ).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "workflow_runs": [
+                    {
+                        "conclusion": "failure",
+                        "html_url": "https://github.com/run/9",
+                        "updated_at": run_time.isoformat().replace("+00:00", "Z"),
+                    }
+                ]
+            },
+            headers=_rl_headers(),
+        )
+    )
+    respx.get("https://api.github.com/repos/owner/repo1/branches/main").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "name": "main",
+                "commit": {
+                    "sha": "abc",
+                    "commit": {"committer": {"date": run_time.isoformat()}},
+                },
+            },
+            headers=_rl_headers(),
+        )
+    )
+    repo = TrackedRepository(
+        full_name="owner/repo1", default_branch="main", branches=["main"]
+    )
+    stats = await fetch_repository_stats(repo, client, StalenessConfig())
+    assert stats.workflows[0].run_at == run_time
+
+
+async def test_run_at_survives_db_round_trip(engine: AsyncEngine) -> None:
+    run_time = datetime(2026, 11, 7, 10, 0, tzinfo=UTC)
+    repos = [
+        TrackedRepository(full_name="owner/r", default_branch="main", branches=["main"])
+    ]
+    stats = [
+        RepositoryStats(
+            full_name="owner/r",
+            default_branch="main",
+            workflows=[
+                WorkflowStatus(
+                    name="CI", branch="main", status="failure", url="u", run_at=run_time
+                )
+            ],
+        )
+    ]
+    await save_stats_to_db(engine, stats, repos)
+    _, loaded = await load_stats_from_db(engine)
+    assert loaded[0].workflows[0].run_at is not None
+    assert loaded[0].workflows[0].run_at.replace(tzinfo=UTC) == run_time
+
+
 def _rl_headers() -> dict[str, str]:
     return {"X-RateLimit-Remaining": "4999", "X-RateLimit-Limit": "5000"}
 

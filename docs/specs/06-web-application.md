@@ -278,7 +278,7 @@ Card titles are sentence case ("Stale issues", "Stale pull requests"). Last acti
 **5. Workflows & Checks (two-column card)**
 - Combined into a single card with a two-column grid layout (workflows left, checks right).
 - Each column has a header with a breakdown summary: `X passing · Y warning/pending · Z failing` (success → warnings → failures order), using status icons.
-- Flat list per column — one row per item with status icon, name, status text, and link.
+- Flat list per column — one row per item with status icon, name, status text, and link. Workflow rows also show the latest run's relative time (`2h ago`, absolute time in the `title`) when known.
 - Branch labels shown only when multiple branches are tracked.
 - Check rows show a right-aligned monospace status (`pass` success, `warning` warning, `fail` error) and an "Output" button with a terminal icon (HTMX `hx-get` to fetch full output on demand).
 

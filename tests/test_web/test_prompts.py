@@ -41,6 +41,19 @@ def test_workflow_prompt_includes_run_url() -> None:
     assert "gh run view" in prompt
 
 
+def test_workflow_prompt_mentions_run_time() -> None:
+    from datetime import datetime, timezone
+
+    prompt = build_workflow_prompt(
+        "a/b",
+        "main",
+        "CI",
+        "https://x/runs/1",
+        run_at=datetime(2026, 11, 7, 10, 0, tzinfo=timezone.utc),
+    )
+    assert "2026-11-07 10:00 UTC" in prompt
+
+
 def test_stale_prompt_differs_for_issue_and_pr() -> None:
     issue = build_stale_prompt("a/b", "main", "issue", 1, "T", "u")
     pr = build_stale_prompt("a/b", "main", "pr", 2, "T", "u")
@@ -77,6 +90,19 @@ class TestRepoDetailPrompts:
         resp = await web_client_with_checks.get("/repo/acme/frontend")
         assert "Check: Watchdog" in resp.text
         assert "Something went wrong" in resp.text
+
+    async def test_workflows_show_relative_run_time_run_at(
+        self, web_client: AsyncClient
+    ) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        from grimoire.github.router import _cache
+
+        _cache["acme/frontend"].workflows[0].run_at = datetime.now(
+            tz=timezone.utc
+        ) - timedelta(hours=2)
+        resp = await web_client.get("/repo/acme/frontend")
+        assert "2h ago" in resp.text
 
     async def test_no_pendencies_hides_section(self, web_client: AsyncClient) -> None:
         from grimoire.github.router import _cache

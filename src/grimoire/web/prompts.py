@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -67,7 +68,11 @@ def build_check_prompt(
 
 
 def build_workflow_prompt(
-    full_name: str, branch: str, workflow: str, run_url: str
+    full_name: str,
+    branch: str,
+    workflow: str,
+    run_url: str,
+    run_at: datetime | None = None,
 ) -> str:
     """Prompt for a failing GitHub Actions workflow."""
     lines = [
@@ -77,6 +82,8 @@ def build_workflow_prompt(
     ]
     if run_url:
         lines.append(f"Failing run: {run_url}")
+    if run_at:
+        lines.append(f"Run finished: {run_at.strftime('%Y-%m-%d %H:%M UTC')}")
     lines += [
         "",
         "Task: read the logs of the failing run "
@@ -157,7 +164,7 @@ def build_pendencies(
                 title=f"Workflow: {wf.name}",
                 branch=wf.branch,
                 prompt=build_workflow_prompt(
-                    full_name, wf.branch, wf.name, wf.run_url or wf.url
+                    full_name, wf.branch, wf.name, wf.run_url or wf.url, wf.run_at
                 ),
             )
         )

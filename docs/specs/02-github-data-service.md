@@ -141,7 +141,7 @@ All fetched data is persisted to the SQLite database as the **persistent cache**
 | `cached_repository` | full_name, default_branch, archived, source, last_commit_at, total_branches, fetched_at |
 | `cached_issue` | repo_full_name, title, number, url, author, created_at, last_comment_at, fetched_at |
 | `cached_pull_request` | repo_full_name, title, number, url, author, created_at, last_push_at, last_comment_at, fetched_at |
-| `cached_workflow_status` | repo_full_name, workflow_name, branch, status, url, run_url, fetched_at |
+| `cached_workflow_status` | repo_full_name, workflow_name, branch, status, url, run_url, run_at, fetched_at |
 | `cached_etag` | endpoint_url, etag, last_modified |
 
 Per-repo backlog weights are not persisted in this layer; the backlog engine resolves them from config when scoring items.
@@ -234,6 +234,8 @@ class WorkflowStatusResponse(BaseModel):
     branch: str
     status: str
     url: str
+    run_url: str = ""
+    run_at: datetime | None = None   # latest run's updated_at
 
 class RefreshResponse(BaseModel):
     message: str   # "Refresh started"

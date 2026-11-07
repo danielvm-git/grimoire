@@ -39,6 +39,7 @@ class WorkflowStatusResponse(BaseModel):
     status: str
     url: str
     run_url: str = ""
+    run_at: datetime | None = None
 
 
 class RepoSummary(BaseModel):

@@ -265,6 +265,7 @@ document.addEventListener('click', function (ev) {
                             <span class="text-sm">{{ wf.name }}</span>
                         </a>
                         <span class="text-xs opacity-40">{{ wf.status }}</span>
+                        {% if wf.run_at %}<span class="ml-auto text-xs font-mono-nums opacity-60" title="{{ fmt_date(wf.run_at, '%Y-%m-%d %H:%M UTC') }}">{{ time_ago(wf.run_at) }}</span>{% endif %}
                     </div>
                     {% endfor %}
                 {% endfor %}
