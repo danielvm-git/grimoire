@@ -44,6 +44,11 @@ The GitHub REST API has a rate limit of 5,000 requests/hour for authenticated us
 - On subsequent requests, send `If-None-Match` (ETag) and `If-Modified-Since` headers.
 - If GitHub returns `304 Not Modified`, skip parsing and use cached data. These 304 responses do **not** count against the rate limit.
 - This is the primary optimization: after the first full fetch, most subsequent refreshes are free.
+- The cache is best-effort: an unchanged ETag is not rewritten, an upsert that
+  hits `database is locked` is retried (`db_exec.retry_on_lock`) and then
+  dropped, and a locked cache read degrades to an unconditional request. A cache
+  failure must never discard a successfully fetched response — that used to
+  surface as the dashboard banner “Some data could not be fetched”.
 
 **Efficient fetching per resource type:**
 - **Issues:** Use `GET /repos/{owner}/{repo}/issues?state=open&per_page=100`. This returns both issues and PRs mixed together — filter client-side by excluding items that have a `pull_request` key in the JSON. Full list is needed to compute stale counts.
