@@ -76,6 +76,11 @@ Grimoire uses SQLite via aiosqlite + SQLModel. The database stores:
 
 There are no migrations — the schema is recreated on startup if the database file doesn't exist. During development, delete `grimoire.db` after schema changes.
 
+The database runs in [WAL mode](https://sqlite.org/wal.html) so that reads and the
+single write transaction do not block each other, with a 15-second busy timeout
+for lock contention. If you back up or move the file while Grimoire is running,
+copy the `grimoire.db-wal` and `grimoire.db-shm` sidecar files with it.
+
 ## Security model
 
 !!! warning "Trust boundary"

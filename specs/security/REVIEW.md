@@ -58,3 +58,20 @@ fixed: the `BaseHTTPMiddleware` auth guard broke the SSE stream on every client 
 change was introduced by the review fixes. Findings: `specs/bugs/registry.yaml`
 `mcp-auth-middleware-breaks-sse-stream`, `mcp-tools-report-vacuous-success`,
 `mcp-list-checks-missing-targets`. Decision record: `specs/adr/ADR-006-mcp-server-sse-token-auth.md`.
+
+## Branch review (2026-11-07) — `fix/sqlite-database-locked`
+
+- **Scope**: `src/grimoire/database.py`, `src/grimoire/db_exec.py`,
+  `src/grimoire/github/client.py`, `src/grimoire/github/service.py`
+  (diff `main...HEAD`)
+- **Threat-model delta**: none. No auth boundary, credential path, or trust-boundary change.
+
+| Area | Verdict | Notes |
+|---|---|---|
+| SQL injection (CWE-89) | PASS | The only new SQL fragments are `PRAGMA busy_timeout={int(busy_timeout_ms)}`, `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL`. The interpolation is an `int()`-cast value supplied by the process (never by config, HTTP, MCP, or repo/branch names); provenance is developer-authored with a type-enforced integer, so no attacker-reachable string reaches the statement. All application queries remain bound-parameter or ORM-built. |
+| Failure masking / fail-open (CWE-390) | PASS | `_save_etag_safely` and `_load_etag_safely` swallow a `sqlalchemy.exc.OperationalError` **only** when `is_lock_error()` matches the SQLITE_BUSY family; every other `OperationalError` (schema errors, corruption, read-only database) is re-raised. No authentication or authorization decision depends on the ETag cache. |
+| Denial of service (CWE-400) | PASS | `retry_on_lock` is bounded (`attempts` + fixed backoff tuple) and sleeps asynchronously, so it cannot busy-spin the event loop or retry indefinitely. Worst case adds ~1.3 s of latency to a cache write. |
+| Sensitive data exposure (CWE-532) | PASS | Lock warnings log the GitHub API path (`url_key`: path + pagination/branch params) and the attempt counter — no token, no response body, no SQL parameters. |
+| Secret leakage via VCS (CWE-552) | PASS (improved) | `.gitignore` now covers `grimoire.db*`, so the WAL sidecars (`-wal`, `-shm`) cannot be committed. Sidecars hold only the same data as the database file; no new exposure class, and the user docs now tell operators to copy them with the DB for backups. |
+
+**Findings ≥ confidence 8**: none. **Conclusion**: clean for merge to main.

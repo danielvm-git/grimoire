@@ -222,10 +222,21 @@ SQLModel table models for persistent state:
 **Functions to provide:**
 
 ```python
-async def get_engine(database_path: str) -> AsyncEngine: ...
+async def get_engine(
+    database_path: str, *, busy_timeout_ms: int = 15_000
+) -> AsyncEngine: ...
 async def create_tables(engine: AsyncEngine) -> None: ...
 async def get_session(engine: AsyncEngine) -> AsyncSession: ...
 ```
+
+**Concurrency:** SQLite allows one writer at a time, and the refresh path fans out
+over 10 repos whose ETag writes, run heartbeats, check results and the reclaim
+sweep all contend for it. Every connection therefore gets
+`PRAGMA journal_mode=WAL` (readers no longer block the writer),
+`PRAGMA busy_timeout` (default 15 s, configurable — the driver default of 5 s is
+too tight) and `PRAGMA synchronous=NORMAL`. Write paths additionally retry
+transient `database is locked` errors via `db_exec.retry_on_lock()`, and the
+ETag cache treats a persistent lock as a cache miss instead of failing a fetch.
 
 ## 1.5 — Example Config & justfile
 

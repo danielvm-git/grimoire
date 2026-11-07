@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import and_, or_, text, update
+from sqlalchemy import and_, event, or_, text, update
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlmodel import Field, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 # A running run owns a lease for this long; the engine refreshes it via
 # ``start_run_heartbeat`` while the script executes.
 RUN_LEASE_SECONDS = 60
+
+# SQLite serializes writers. Give them a generous wait budget (the driver
+# default is 5s) so a burst of concurrent cache writes queues instead of
+# raising ``database is locked``.
+DEFAULT_BUSY_TIMEOUT_MS = 15_000
 
 # Identifies this process as the lease owner of the runs it starts.
 PROCESS_OWNER_ID = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
@@ -218,11 +223,40 @@ class CachedETag(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 
-async def get_engine(database_path: str | None = None) -> AsyncEngine:
-    """Create an async SQLite engine."""
+async def get_engine(
+    database_path: str | None = None,
+    *,
+    busy_timeout_ms: int = DEFAULT_BUSY_TIMEOUT_MS,
+) -> AsyncEngine:
+    """Create an async SQLite engine configured for concurrent access.
+
+    ``journal_mode=WAL`` lets readers and the single writer work at the same
+    time; the rollback-journal default made every concurrent write a candidate
+    for ``database is locked``. ``busy_timeout`` and ``synchronous=NORMAL``
+    complete the standard WAL configuration.
+    """
     db_path = database_path or "grimoire.db"
     url = f"sqlite+aiosqlite:///{db_path}"
-    return create_async_engine(url, echo=False)
+    engine = create_async_engine(
+        url,
+        echo=False,
+        connect_args={"timeout": busy_timeout_ms / 1000},
+    )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _configure_connection(dbapi_connection: Any, _record: Any) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            # busy_timeout first: switching to WAL on a database still in
+            # rollback-journal mode briefly needs a lock, so it must be able to
+            # wait rather than fail at startup.
+            cursor.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=NORMAL")
+        finally:
+            cursor.close()
+
+    return engine
 
 
 async def create_tables(engine: AsyncEngine) -> None:

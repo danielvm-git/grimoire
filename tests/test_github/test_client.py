@@ -3,12 +3,17 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import httpx
 import pytest
 import respx
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grimoire.database import create_tables, get_engine
+from grimoire.database import CachedETag, create_tables, get_engine
 from grimoire.github.client import (
     GitHubAPIError,
     GitHubClient,
@@ -615,3 +620,124 @@ def test_no_last_next_link_state() -> None:
 
     assert "_last_next_link" not in GitHubClient.__dict__
     assert not hasattr(GitHubClient, "_last_next_link")
+
+
+# ---------------------------------------------------------------------------
+# SQLITE_BUSY resilience (BUG-2026-11-07T000000)
+# ---------------------------------------------------------------------------
+
+
+async def _hold_write_lock(engine: AsyncEngine, seconds: float) -> None:
+    """Acquire SQLite's write lock on a separate connection for *seconds*."""
+    async with engine.connect() as conn:
+        await conn.exec_driver_sql("BEGIN IMMEDIATE")
+        await conn.exec_driver_sql(
+            "INSERT OR REPLACE INTO cached_etag VALUES ('lock-holder', 'x', 'y')"
+        )
+        await asyncio.sleep(seconds)
+        await conn.exec_driver_sql("COMMIT")
+
+
+@respx.mock
+async def test_etag_save_retries_when_database_locked(tmp_path) -> None:
+    """A transient lock is retried instead of aborting the request."""
+    eng = await get_engine(str(tmp_path / "lock.db"), busy_timeout_ms=50)
+    await create_tables(eng)
+    client = GitHubClient(token="ghp_test", engine=eng, backoff_factors=(0.0, 0.0, 0.0))
+    respx.get("https://api.github.com/repos/owner/repo").mock(
+        return_value=httpx.Response(
+            200,
+            json={"full_name": "owner/repo"},
+            headers={"ETag": '"abc123"', "X-RateLimit-Remaining": "4999"},
+        )
+    )
+    try:
+        holder = asyncio.create_task(_hold_write_lock(eng, 0.2))
+        await asyncio.sleep(0.05)
+        data = await client.get_repo("owner/repo")
+        await holder
+    finally:
+        await client.close()
+    assert data is not None
+    async with AsyncSession(eng) as session:
+        record = (
+            await session.exec(
+                select(CachedETag).where(CachedETag.endpoint_url.contains("/repos/"))
+            )
+        ).first()
+    await eng.dispose()
+    assert record is not None
+
+
+@respx.mock
+async def test_etag_save_failure_does_not_abort_fetch(client: GitHubClient) -> None:
+    """A persistent lock on the etag cache must not discard fetched data."""
+    respx.get("https://api.github.com/repos/owner/repo").mock(
+        return_value=httpx.Response(
+            200,
+            json={"full_name": "owner/repo"},
+            headers={"ETag": '"abc123"', "X-RateLimit-Remaining": "4999"},
+        )
+    )
+
+    async def _always_locked(url_key: str, etag: str, last_modified: str) -> None:
+        raise OperationalError(
+            "INSERT INTO cached_etag", {}, Exception("database is locked")
+        )
+
+    client._save_etag = _always_locked  # type: ignore[method-assign]
+    data = await client.get_repo("owner/repo")
+    assert data is not None
+    assert data["full_name"] == "owner/repo"
+
+
+@respx.mock
+async def test_etag_load_failure_does_not_abort_fetch(client: GitHubClient) -> None:
+    """A lock while reading the etag cache degrades to a cache miss."""
+    respx.get("https://api.github.com/repos/owner/repo").mock(
+        return_value=httpx.Response(
+            200,
+            json={"full_name": "owner/repo"},
+            headers={"X-RateLimit-Remaining": "4999"},
+        )
+    )
+
+    async def _always_locked(url_key: str) -> tuple[str | None, str | None]:
+        raise OperationalError(
+            "SELECT cached_etag", {}, Exception("database is locked")
+        )
+
+    client._load_etag = _always_locked  # type: ignore[method-assign]
+    data = await client.get_repo("owner/repo")
+    assert data is not None
+
+
+@respx.mock
+async def test_unchanged_etag_is_not_rewritten(client: GitHubClient, engine) -> None:
+    """An identical ETag skips the upsert entirely, cutting write contention."""
+    route = respx.get("https://api.github.com/repos/owner/repo")
+    route.side_effect = [
+        httpx.Response(
+            200,
+            json={"full_name": "owner/repo"},
+            headers={"ETag": '"same"', "X-RateLimit-Remaining": "4999"},
+        ),
+        httpx.Response(
+            200,
+            json={"full_name": "owner/repo"},
+            headers={"ETag": '"same"', "X-RateLimit-Remaining": "4998"},
+        ),
+    ]
+
+    writes = 0
+    original = client._save_etag
+
+    async def _counting(url_key: str, etag: str, last_modified: str) -> None:
+        nonlocal writes
+        writes += 1
+        await original(url_key, etag, last_modified)
+
+    client._save_etag = _counting  # type: ignore[method-assign]
+    await client.get_repo("owner/repo")
+    await client.get_repo("owner/repo")
+    assert writes == 1, f"expected one write for an unchanged ETag, got {writes}"

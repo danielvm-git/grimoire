@@ -8,12 +8,13 @@ from typing import Any
 
 import httpx
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grimoire.database import CachedETag
-from grimoire.db_exec import exec_raw
+from grimoire.db_exec import exec_raw, is_lock_error, retry_on_lock
 from grimoire.observability.metrics import API_REQUESTS, update_rate_limit_metrics
 
 logger = logging.getLogger(__name__)
@@ -289,7 +290,7 @@ class GitHubClient:
         etag_header: str | None = None
         last_modified_header: str | None = None
         if use_etag:
-            etag_header, last_modified_header = await self._load_etag(url_key)
+            etag_header, last_modified_header = await self._load_etag_safely(url_key)
 
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
@@ -348,8 +349,11 @@ class GitHubClient:
                 # Store ETag / Last-Modified
                 new_etag = response.headers.get("ETag", "")
                 new_last_modified = response.headers.get("Last-Modified", "")
-                if new_etag or new_last_modified:
-                    await self._save_etag(url_key, new_etag, new_last_modified)
+                if (new_etag, new_last_modified) != (
+                    etag_header or "",
+                    last_modified_header or "",
+                ):
+                    await self._save_etag_safely(url_key, new_etag, new_last_modified)
 
                 return response.json()
 
@@ -385,6 +389,39 @@ class GitHubClient:
         )
 
     # -- ETag persistence ----------------------------------------------------
+    #
+    # The ETag cache is a pure optimization: losing an entry costs one
+    # unconditional request, while failing the fetch costs the user their
+    # dashboard data. A locked database must never abort a successful request.
+
+    async def _load_etag_safely(self, url_key: str) -> tuple[str | None, str | None]:
+        """Load a cached ETag, degrading to a cache miss if SQLite is locked."""
+        try:
+            return await self._load_etag(url_key)
+        except OperationalError as exc:
+            if not is_lock_error(exc):
+                raise
+            logger.warning(
+                "ETag cache unavailable for %s (database locked); "
+                "falling back to an unconditional request",
+                url_key,
+            )
+            return None, None
+
+    async def _save_etag_safely(
+        self, url_key: str, etag: str, last_modified: str
+    ) -> None:
+        """Persist an ETag, retrying locks and never failing the request."""
+        try:
+            await retry_on_lock(lambda: self._save_etag(url_key, etag, last_modified))
+        except OperationalError as exc:
+            if not is_lock_error(exc):
+                raise
+            logger.warning(
+                "Could not cache ETag for %s (database locked); "
+                "the next fetch will be unconditional",
+                url_key,
+            )
 
     async def _load_etag(self, url_key: str) -> tuple[str | None, str | None]:
         async with AsyncSession(self._engine) as session:

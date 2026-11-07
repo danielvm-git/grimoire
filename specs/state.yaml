@@ -2,11 +2,23 @@
 bigpowers_version: "2.3.0"
 workflow_mode: solo-git
 
-active_flow: idle
+active_flow: fix_bug
 active_epic: null
 active_epic_id: null
 active_story_id: null
 completed_epic: true
+
+bug_cycle:
+  bug_id: BUG-2026-11-07T000000
+  current_step: 5
+  completed_steps:
+    - 1
+    - 2
+    - 3
+    - 4
+  next_skill: release-branch
+  branch: fix/sqlite-database-locked
+  spec: specs/bugs/BUG-2026-11-07T000000-sqlite-database-locked.md
 
 project_cycle:
   current_phase: 4

@@ -1338,3 +1338,57 @@ bugs:
       re-pointing a tag is outside this run's approval, so it is reported instead.
     risk_level: medium
     commit_message: "fix(ci): install uv in the release job before regenerating the lockfile"
+
+  - slug: sqlite-database-locked-on-etag-write
+    title: Concurrent refresh aborts GitHub fetches with "database is locked" on cached_etag writes
+    module: src/grimoire/database.py, src/grimoire/github/client.py
+    severity: high
+    status: fixed
+    found_in: user report (dashboard banner "Some data could not be fetched")
+    description: >
+      The dashboard reports "Some data could not be fetched" for every repo in a refresh, with
+      "(sqlite3.OperationalError) database is locked [SQL: INSERT INTO cached_etag ...]".
+      Each warning is an entire repository losing its issues/PRs/workflows for that cycle,
+      because a failed ETag cache write aborted an otherwise successful GitHub response.
+    reproduction_steps:
+      - Start Grimoire with ~25 tracked repos and a frequent refresh schedule.
+      - Trigger a refresh (scheduler, dashboard button or startup backfill) while checks or actions run.
+      - >-
+        Observe the banner listing "Could not fetch runs for workflow ..." /
+        "Could not fetch workflows for <repo>: (sqlite3.OperationalError) database is locked
+        [SQL: INSERT INTO cached_etag ...]".
+      - "sqlite3 grimoire.db 'PRAGMA journal_mode'  # 'delete' — WAL was never enabled"
+    root_cause_hypothesis: >
+      get_engine() never set PRAGMA journal_mode, so SQLite ran in rollback-journal mode with a
+      single writer and pysqlite's 5 s busy timeout. refresh_all_stats fans out over 10 repos, each
+      issuing its own cached_etag upsert transaction, concurrently with run heartbeats, check-result
+      writes, the reclaim sweep and save_stats_to_db. A writer that misses the 5 s window raises
+      SQLITE_BUSY, which propagated out of _save_etag and killed the fetch. ADR-002 claimed WAL was
+      enabled, so the mitigation was believed to exist when it did not.
+    files_changed:
+      - src/grimoire/database.py
+      - src/grimoire/db_exec.py
+      - src/grimoire/github/client.py
+      - src/grimoire/github/service.py
+      - tests/test_database.py
+      - tests/test_db_exec.py
+      - tests/test_github/test_client.py
+      - tests/test_github/test_service.py
+      - specs/adr/ADR-002-sqlite-aiosqlite-sqlmodel.md
+      - docs/specs/01-scaffolding-and-configuration.md
+      - docs/specs/02-github-data-service.md
+    approach: >
+      Enable WAL, a configurable busy_timeout (default 15 s) and synchronous=NORMAL on every
+      connection; add db_exec.is_lock_error()/retry_on_lock() and use them for ETag upserts and
+      save_stats_to_db; make ETag cache reads/writes best-effort so a lock degrades to a cache miss
+      instead of discarding fetched data; skip the upsert when the ETag is unchanged. ADR-002
+      corrected to describe the implemented configuration.
+    regression:
+      test_engine_enables_wal_journal / test_engine_sets_generous_busy_timeout (tests/test_database.py);
+      test_retry_on_lock_succeeds_after_release (tests/test_db_exec.py);
+      test_etag_save_retries_when_database_locked, test_etag_save_failure_does_not_abort_fetch,
+      test_etag_load_failure_does_not_abort_fetch, test_unchanged_etag_is_not_rewritten
+      (tests/test_github/test_client.py); test_save_stats_to_db_retries_when_locked
+      (tests/test_github/test_service.py). All four client/service tests were verified RED before the fix.
+    risk_level: medium
+    commit_message: "fix(database): enable WAL and retry locks so cache writes cannot abort a fetch"
