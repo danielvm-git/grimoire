@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.13.0] - 2026-11-07
+
+### Features
+
+- **web:** copy agent prompts for repo pendencies ([#47](https://github.com/danielvm-git/grimoire/issues/47)) ([940f8d4](https://github.com/danielvm-git/grimoire/commit/940f8d4f00f949be5435868008b43c0b66917c19))
+
 ## [0.12.5] - 2026-11-07
 
 ### Bug Fixes
