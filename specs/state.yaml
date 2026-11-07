@@ -154,3 +154,6 @@ e13:
     - gate: "commit-attribution"
       decision: "Commits carry no Co-Authored-By footer."
       reason: "pre-tool-use hook enforces CONVENTIONS.md Git Attribution; user rule overrides the default attribution reminder."
+    - gate: "respond-review-e13"
+      decision: "Fixed review findings: clipboard fallback and error state, double-click restore, longer code fence for check output, vacuous test, reuse _parse_dt, added escaping/multi-branch tests. Kept the removal of the stale percentage header (it follows the Claude Design handoff; threshold coloring remains in the stats bar)."
+      reason: "Removed percentage is a design choice already recorded in spec 06 section 6.4; reviewer asked to confirm intent."

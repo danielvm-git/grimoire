@@ -93,7 +93,8 @@ class TestRepositoryDetail:
         """acme/frontend has 0 stale issues → should show text-success."""
         resp = await web_client.get("/repo/acme/frontend")
         # Stale Issues box should show text-success (0 stale)
-        assert "Stale issues" not in resp.text or "text-success" in resp.text
+        assert "Stale issues</h2>" not in resp.text
+        assert 'id="pendencies"' in resp.text or 'id="all-clear"' in resp.text
 
     async def test_repo_without_stale_items_hides_sections(
         self, web_client: AsyncClient

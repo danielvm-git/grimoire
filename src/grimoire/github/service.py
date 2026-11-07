@@ -47,13 +47,7 @@ _CONCURRENCY_LIMIT = 10
 
 def _parse_run_time(run: dict[str, Any]) -> datetime | None:
     """Return the run's last-updated time as an aware datetime, if present."""
-    raw = run.get("updated_at") or run.get("created_at")
-    if not raw:
-        return None
-    try:
-        return datetime.fromisoformat(raw)
-    except ValueError:
-        return None
+    return _parse_dt(run.get("updated_at") or run.get("created_at"))
 
 
 def _brief_error(exc: Exception) -> str:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
@@ -35,6 +36,12 @@ def _truncate(output: str) -> str:
     return "[...truncated...]\n" + output[-MAX_OUTPUT_CHARS:]
 
 
+def _fence_for(text: str) -> str:
+    """A backtick fence longer than any backtick run inside *text*."""
+    longest = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    return "`" * max(3, longest + 1)
+
+
 def _header(full_name: str, branch: str) -> str:
     return f"Repository: {full_name} (https://github.com/{full_name})\nBranch: {branch}"
 
@@ -47,6 +54,8 @@ def build_check_prompt(
     output: str,
 ) -> str:
     """Prompt for a failing Grimoire check."""
+    body = _truncate(output) or "(no output)"
+    fence = _fence_for(body)
     lines = [
         _header(full_name, branch),
         "",
@@ -57,9 +66,9 @@ def build_check_prompt(
     lines += [
         "",
         "Output of the failing check:",
-        "```",
-        _truncate(output) or "(no output)",
-        "```",
+        fence,
+        body,
+        fence,
         "",
         "Task: investigate the root cause in this repository and fix it so the "
         "check passes. " + _CONVENTIONS,

@@ -147,13 +147,35 @@ document.addEventListener('click', function (ev) {
     if (!btn) return;
     var tpl = document.getElementById(btn.dataset.copyPrompt);
     if (!tpl) return;
-    var original = btn.innerHTML;
-    navigator.clipboard.writeText(tpl.content.textContent).then(function () {
+    if (!btn.dataset.orig) btn.dataset.orig = btn.innerHTML;
+    copyText(tpl.content.textContent).then(function () {
         btn.innerHTML = '<i class="fa-solid fa-check"></i><span class="' + (btn.dataset.copyPrompt === 'repo-prompt' ? '' : 'max-sm:hidden') + '">Copied</span>';
         btn.classList.add('text-success');
-        setTimeout(function () { btn.innerHTML = original; btn.classList.remove('text-success'); }, 1500);
+        clearTimeout(btn._t);
+        btn._t = setTimeout(function () { btn.innerHTML = btn.dataset.orig; btn.classList.remove('text-success'); }, 1500);
+    }, function () {
+        btn.innerHTML = '<i class="fa-solid fa-xmark"></i><span class="max-sm:hidden">Copy failed</span>';
+        clearTimeout(btn._t);
+        btn._t = setTimeout(function () { btn.innerHTML = btn.dataset.orig; }, 1500);
     });
 });
+function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = false;
+        try { ok = document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        ok ? resolve() : reject(new Error('copy failed'));
+    });
+}
 </script>
 
 {# ── Stale Issues ──────────────────────────────────────────────────── #}
