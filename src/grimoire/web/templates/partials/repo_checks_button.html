@@ -1,0 +1,23 @@
+{# Run-all-checks button for one repo — idle or running. Polls only while running. #}
+{% if running %}
+<div id="repo-checks-btn"
+     hx-get="/partials/repo-checks-status/{{ repo_name }}?was_running=1"
+     hx-trigger="every 2s"
+     hx-swap="outerHTML">
+    <button class="btn btn-ghost btn-xs gap-1" disabled>
+        <span class="loading loading-spinner loading-xs"></span>
+        Running…
+        {% if progress_total > 0 %}<span class="font-mono-nums opacity-80">{{ progress_completed }}/{{ progress_total }}</span>{% endif %}
+    </button>
+</div>
+{% else %}
+<div id="repo-checks-btn">
+    <button class="btn btn-ghost btn-xs gap-1"
+            hx-post="/partials/repo-checks-run/{{ repo_name }}"
+            hx-target="#repo-checks-btn"
+            hx-swap="outerHTML"
+            hx-on::after-request="if(!event.detail.successful) { showToast(event.detail.xhr?.status === 409 ? 'Checks are already running' : 'Failed to run checks', 'error'); }">
+        <i class="fa-solid fa-play" style="font-size:10px"></i> Run checks
+    </button>
+</div>
+{% endif %}

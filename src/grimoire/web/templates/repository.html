@@ -133,6 +133,10 @@
 </div>
 {% endif %}
 <script>
+document.body.addEventListener('repoChecksCompleted', function () { window.location.reload(); });
+document.body.addEventListener('repoChecksSkipped', function (ev) {
+    showToast('Skipped (already running): ' + ev.detail.value, 'error');
+});
 document.addEventListener('click', function (ev) {
     var tog = ev.target.closest('[data-toggle-preview]');
     if (tog) {
@@ -301,15 +305,16 @@ function copyText(text) {
             <div>
                 {% if checks_by_branch %}
                 <div class="flex items-center justify-between mb-2">
-                    <h2 class="card-title text-lg">Checks</h2>
+                    <h2 class="card-title text-lg">Checks {% include "partials/repo_checks_button.html" with context %}</h2>
                     <span class="flex items-center gap-2 text-sm font-mono-nums">
                         {%- set chk_total = checks_by_branch.values() | map('length') | sum -%}
-                        {%- set chk_passing = chk_total - check_failures - check_warnings -%}
+                        {%- set chk_passing = chk_total - check_failures - check_warnings - check_not_run -%}
                         {%- if chk_passing %}<span class="text-success"><i class="fa-solid fa-check status-icon status-icon-pass"></i> {{ chk_passing }} passing</span>{% endif -%}
                         {%- if chk_passing and check_warnings %}<span class="opacity-40 mx-0.5">·</span>{% endif -%}
                         {%- if check_warnings %}<span class="text-warning"><i class="fa-solid fa-triangle-exclamation status-icon status-icon-pending"></i> {{ check_warnings }} warning</span>{% endif -%}
                         {%- if (chk_passing or check_warnings) and check_failures %}<span class="opacity-40 mx-0.5">·</span>{% endif -%}
                         {%- if check_failures %}<span class="text-error"><i class="fa-solid fa-xmark status-icon status-icon-fail"></i> {{ check_failures }} failing</span>{% endif -%}
+                        {%- if check_not_run %}{% if chk_passing or check_warnings or check_failures %}<span class="opacity-40 mx-0.5">·</span>{% endif %}<span class="opacity-60"><i class="fa-solid fa-minus status-icon status-icon-not-run"></i> {{ check_not_run }} not run</span>{% endif -%}
                     </span>
                 </div>
                 {% for branch, checks in checks_by_branch.items() %}

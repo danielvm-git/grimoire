@@ -975,3 +975,56 @@ async def test_action_results_include_failed_run(
     # The failed run is rendered alongside the fixture's completed run.
     assert resp.text.count("<details") >= 2
     assert 'title="fail"' in resp.text
+
+
+class TestRepoChecksRun:
+    """Run all checks for one repo from the detail page (story e13s05)."""
+
+    async def test_detail_page_has_run_checks_button(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get("/repo/acme/frontend")
+        assert "/partials/repo-checks-run/acme/frontend" in resp.text
+
+    async def test_status_partial_idle(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get(
+            "/partials/repo-checks-status/acme/frontend"
+        )
+        assert resp.status_code == 200
+        assert "Run checks" in resp.text
+        assert "hx-post" in resp.text
+
+    async def test_run_unknown_repo_404(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.post("/partials/repo-checks-run/no/pe")
+        assert resp.status_code == 404
+
+    async def test_run_starts_and_returns_running_state(
+        self, web_client_with_checks: AsyncClient, monkeypatch: object
+    ) -> None:
+        import grimoire.checks.engine as eng
+        import grimoire.checks.router as checks_router
+
+        calls: list[str] = []
+
+        async def fake_run(plan, repos, workspace, engine, repo_full_name=None, **kw):  # type: ignore[no-untyped-def]
+            calls.append(plan.repo_full_name)
+            return []
+
+        monkeypatch.setattr(eng, "run_reserved_checks_for_repo", fake_run)  # type: ignore[attr-defined]
+        monkeypatch.setattr(checks_router, "_workspace", object())  # type: ignore[attr-defined]
+        resp = await web_client_with_checks.post(
+            "/partials/repo-checks-run/acme/frontend"
+        )
+        assert resp.status_code == 200
+        assert "Running" in resp.text
+        assert calls == ["acme/frontend"]
+
+    async def test_check_counts_separate_not_run(
+        self, web_client_with_checks: AsyncClient
+    ) -> None:
+        resp = await web_client_with_checks.get("/repo/acme/frontend")
+        assert "not run" in resp.text

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -650,10 +651,21 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
         check_outputs,
     )
 
+    from grimoire.checks.engine import get_repo_run_progress, is_repo_run_active
+
+    run_progress = get_repo_run_progress(full_name)
+    check_not_run = sum(
+        1 for cs in checks_by_branch.values() for c in cs if c["status"] == "not-run"
+    )
+
     return templates.TemplateResponse(
         request,
         "repository.html",
         context={
+            "check_not_run": check_not_run,
+            "running": is_repo_run_active(full_name),
+            "progress_completed": run_progress.completed if run_progress else 0,
+            "progress_total": run_progress.total if run_progress else 0,
             "pendencies": pendencies,
             "repo_prompt": build_repo_prompt(full_name, pendencies),
             "repo_name": full_name,
@@ -671,6 +683,82 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
             "fmt_date": _fmt_date,
         },
     )
+
+
+def _repo_checks_button(
+    request: Request, repo_name: str, running: bool
+) -> HTMLResponse:
+    from grimoire.checks.engine import get_repo_run_progress
+
+    progress = get_repo_run_progress(repo_name)
+    return templates.TemplateResponse(
+        request,
+        "partials/repo_checks_button.html",
+        context={
+            "repo_name": repo_name,
+            "running": running,
+            "progress_completed": progress.completed if progress else 0,
+            "progress_total": progress.total if progress else 0,
+        },
+    )
+
+
+@router.get("/partials/repo-checks-status/{owner}/{name}", response_class=HTMLResponse)
+async def repo_checks_status_partial(
+    request: Request, owner: str, name: str, was_running: bool = False
+) -> HTMLResponse:
+    """Return the run-checks button for a repo (idle or running)."""
+    from grimoire.checks.engine import is_repo_run_active
+
+    full_name = f"{owner}/{name}"
+    running = is_repo_run_active(full_name)
+    resp = _repo_checks_button(request, full_name, running)
+    if was_running and not running:
+        resp.headers["HX-Trigger"] = "repoChecksCompleted"
+    return resp
+
+
+@router.post("/partials/repo-checks-run/{owner}/{name}", response_class=HTMLResponse)
+async def repo_checks_run_trigger(
+    request: Request, owner: str, name: str, background_tasks: BackgroundTasks
+) -> HTMLResponse:
+    """Run every enabled check against one repo as a background task."""
+    import grimoire.checks.engine as checks_eng
+    from grimoire.checks.router import _checks
+    from grimoire.checks.router import _engine as checks_engine
+    from grimoire.checks.router import _repos as checks_repos
+    from grimoire.checks.router import _workspace as checks_workspace
+    from grimoire.github.router import _repos as known_repos
+
+    full_name = f"{owner}/{name}"
+    if full_name not in known_repos:
+        raise HTTPException(status_code=404, detail=f"Repository {full_name} not found")
+    if checks_workspace is None or checks_engine is None:
+        raise HTTPException(status_code=500, detail="Checks engine not configured")
+
+    try:
+        plan = await checks_eng.reserve_checks_for_repo(
+            checks_engine, list(_checks), full_name
+        )
+    except checks_eng.CheckConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    async def _run_in_background() -> None:
+        try:
+            await checks_eng.run_reserved_checks_for_repo(
+                plan, checks_repos, checks_workspace, checks_engine
+            )
+        except Exception:
+            logger.exception("Repo check run for %s failed", full_name)
+
+    background_tasks.add_task(_run_in_background)
+
+    resp = _repo_checks_button(request, full_name, True)
+    if plan.skipped:
+        resp.headers["HX-Trigger"] = json.dumps(
+            {"repoChecksSkipped": ", ".join(plan.skipped)}
+        )
+    return resp
 
 
 @router.get("/actions", response_class=HTMLResponse)
