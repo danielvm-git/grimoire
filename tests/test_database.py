@@ -369,3 +369,53 @@ async def test_complete_run_is_compare_and_set(engine: AsyncEngine) -> None:
         row = await session.get(CheckRunRecord, run_id)
         assert row is not None
         assert row.status == "completed"
+
+
+# ---------------------------------------------------------------------------
+# SQLite concurrency configuration (BUG-2026-11-07T000000)
+# ---------------------------------------------------------------------------
+
+
+async def test_engine_enables_wal_journal(tmp_path) -> None:
+    """WAL lets readers and writers proceed together instead of deadlocking."""
+    eng = await get_engine(str(tmp_path / "wal.db"))
+    try:
+        async with eng.connect() as conn:
+            mode = (await conn.exec_driver_sql("PRAGMA journal_mode")).scalar()
+        assert str(mode).lower() == "wal"
+    finally:
+        await eng.dispose()
+
+
+async def test_engine_sets_generous_busy_timeout(tmp_path) -> None:
+    """Writers wait for the lock instead of failing after the 5s driver default."""
+    eng = await get_engine(str(tmp_path / "busy.db"))
+    try:
+        async with eng.connect() as conn:
+            timeout = (await conn.exec_driver_sql("PRAGMA busy_timeout")).scalar()
+        assert timeout is not None
+        assert int(timeout) >= 15_000
+    finally:
+        await eng.dispose()
+
+
+async def test_busy_timeout_is_configurable(tmp_path) -> None:
+    """Deployments on slow disks can raise the lock wait budget."""
+    eng = await get_engine(str(tmp_path / "busy2.db"), busy_timeout_ms=42_000)
+    try:
+        async with eng.connect() as conn:
+            timeout = (await conn.exec_driver_sql("PRAGMA busy_timeout")).scalar()
+        assert int(timeout) == 42_000
+    finally:
+        await eng.dispose()
+
+
+async def test_engine_uses_wal_synchronous(tmp_path) -> None:
+    """WAL works safely with synchronous=NORMAL (durable enough, much faster)."""
+    eng = await get_engine(str(tmp_path / "sync.db"))
+    try:
+        async with eng.connect() as conn:
+            level = (await conn.exec_driver_sql("PRAGMA synchronous")).scalar()
+        assert int(level) == 1  # 1 == NORMAL
+    finally:
+        await eng.dispose()

@@ -29,7 +29,7 @@ from grimoire.database import (
     CachedWorkflowStatus,
     CheckResultRecord,
 )
-from grimoire.db_exec import exec_raw
+from grimoire.db_exec import exec_raw, retry_on_lock
 from grimoire.github.client import GitHubClient, NotFoundError
 from grimoire.models import (
     IssueDetail,
@@ -639,7 +639,20 @@ async def save_stats_to_db(
     stats_list: list[RepositoryStats],
     repos: list[TrackedRepository],
 ) -> None:
-    """Clear old cached data for each repo and write fresh records."""
+    """Clear old cached data for each repo and write fresh records.
+
+    A momentary ``database is locked`` must not discard a refresh that already
+    paid for every API call, so the whole write transaction is retried.
+    """
+    await retry_on_lock(lambda: _write_stats_to_db(engine, stats_list, repos))
+
+
+async def _write_stats_to_db(
+    engine: AsyncEngine,
+    stats_list: list[RepositoryStats],
+    repos: list[TrackedRepository],
+) -> None:
+    """Persist stats in a single transaction (retried by save_stats_to_db)."""
     now = datetime.now(UTC)
     repo_map = {r.full_name: r for r in repos}
 

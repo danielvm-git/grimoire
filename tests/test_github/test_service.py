@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 
@@ -1076,3 +1077,44 @@ def test_every_github_conclusion_maps_explicitly() -> None:
     assert _map_conclusion("action_required") == "pending"
     assert _map_conclusion("queued") == "pending"
     assert _map_conclusion("in_progress") == "pending"
+
+
+# ---------------------------------------------------------------------------
+# SQLITE_BUSY resilience (BUG-2026-11-07T000000)
+# ---------------------------------------------------------------------------
+
+
+async def test_save_stats_to_db_retries_when_locked(tmp_path) -> None:
+    """A momentary write lock must not discard a completed refresh."""
+    eng = await get_engine(str(tmp_path / "lock.db"), busy_timeout_ms=50)
+    await create_tables(eng)
+
+    async def hold_lock() -> None:
+        async with eng.connect() as conn:
+            await conn.exec_driver_sql("BEGIN IMMEDIATE")
+            await conn.exec_driver_sql(
+                "INSERT OR REPLACE INTO cached_etag VALUES ('h','a','b')"
+            )
+            await asyncio.sleep(0.2)
+            await conn.exec_driver_sql("COMMIT")
+
+    holder = asyncio.create_task(hold_lock())
+    await asyncio.sleep(0.05)
+    try:
+        await save_stats_to_db(
+            eng,
+            [
+                RepositoryStats(
+                    full_name="owner/repo1",
+                    default_branch="main",
+                    fetched_at=datetime.now(UTC),
+                )
+            ],
+            [TrackedRepository(full_name="owner/repo1", default_branch="main")],
+        )
+        cached_repos, _ = await load_stats_from_db(eng)
+    finally:
+        await holder
+        await eng.dispose()
+
+    assert [r.full_name for r in cached_repos] == ["owner/repo1"]
