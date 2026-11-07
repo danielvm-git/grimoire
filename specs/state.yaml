@@ -2,23 +2,13 @@
 bigpowers_version: "2.3.0"
 workflow_mode: solo-git
 
-active_flow: fix_bug
+active_flow: idle
 active_epic: null
 active_epic_id: null
 active_story_id: null
 completed_epic: true
 
-bug_cycle:
-  bug_id: BUG-2026-11-07T000000
-  current_step: 5
-  completed_steps:
-    - 1
-    - 2
-    - 3
-    - 4
-  next_skill: release-branch
-  branch: fix/sqlite-database-locked
-  spec: specs/bugs/BUG-2026-11-07T000000-sqlite-database-locked.md
+bug_cycle: null
 
 project_cycle:
   current_phase: 4
@@ -65,13 +55,16 @@ epic_cycle:
       (e2e-session-transaction-warning).
 
 release:
-  target_version: "0.12.3"
-  last_tag: "v0.12.3"
-  last_publish: "0.12.3"
+  target_version: "0.12.4"
+  last_tag: "v0.12.4"
+  last_publish: "0.12.4"
   ci_verified: true
-  ci_run: 42271501353
+  ci_run: 42416768282
+  pr: 44
+  commit: "72c2c20"
   changelog_entry: true
   version_files_consistent: true
+  bug: BUG-2026-11-07T000000
 
 # Build&Ship cycle (2026-11-06) - all pending work landed and shipped.
 ship:
@@ -112,13 +105,15 @@ ship:
 
 git:
   branch: main
-  hash: "1f0bff6"
+  hash: "6df1aa8"
   pushed: true
   clean: true
   worktrees: 1
 
 handoff:
-  last_step_completed: "Build&Ship cycle completed: 3 PRs merged (#39, #40, #41), CI repaired (missing uv install in release job), all pending work shipped as v0.12.1 through v0.12.3. Main is clean at 1f0bff6, 514 tests passing with zero warnings. All registry entries closed. One residual noted: orphan tag v0.12.2 (release job died after big-release tagged but before version commit)."
+  last_step_completed: "fix_bug BUG-2026-11-07T000000 shipped as v0.12.4 (PR #44, merge 72c2c20, CI run 42416768282 all green). SQLite now runs in WAL mode with a 15s busy_timeout, transient SQLITE_BUSY is retried, and ETag cache failures can no longer abort a GitHub fetch. Feature branch deleted and pruned; main clean at 6df1aa8. Previous build&ship entry follows."
+
+  previous_cycle: "Build&Ship cycle completed: 3 PRs merged (#39, #40, #41), CI repaired (missing uv install in release job), all pending work shipped as v0.12.1 through v0.12.3. Main is clean at 1f0bff6, 514 tests passing with zero warnings. All registry entries closed. One residual noted: orphan tag v0.12.2 (release job died after big-release tagged but before version commit)."
   open_decisions:
     - gate: "build-ship-phase-1-triage"
       decision: "Treated all pending work as 2 work items: (1) e2e-session-transaction-warning (open bug), (2) land 14-commit review branch. Not stashed; committed as conventional commits."
