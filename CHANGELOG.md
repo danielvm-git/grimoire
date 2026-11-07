@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.12.5] - 2026-11-07
+
+### Bug Fixes
+
+- **database:** enable WAL and retry locks so cache writes cannot abort a fetch ([#44](https://github.com/danielvm-git/grimoire/issues/44)) ([72c2c20](https://github.com/danielvm-git/grimoire/commit/72c2c20f5700f00f3ff6efc2b41849ac32e86f6d))
+
 ## [0.12.4] - 2026-11-06
 
 ### Bug Fixes
