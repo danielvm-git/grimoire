@@ -55,9 +55,9 @@ epic_cycle:
       (e2e-session-transaction-warning).
 
 release:
-  target_version: "0.12.4"
-  last_tag: "v0.12.4"
-  last_publish: "0.12.4"
+  target_version: "0.12.5"
+  last_tag: "v0.12.5"
+  last_publish: "0.12.5"
   ci_verified: true
   ci_run: 42416768282
   pr: 44
@@ -105,13 +105,13 @@ ship:
 
 git:
   branch: main
-  hash: "6df1aa8"
+  hash: "8fd23f7"
   pushed: true
   clean: true
   worktrees: 1
 
 handoff:
-  last_step_completed: "fix_bug BUG-2026-11-07T000000 shipped as v0.12.4 (PR #44, merge 72c2c20, CI run 42416768282 all green). SQLite now runs in WAL mode with a 15s busy_timeout, transient SQLITE_BUSY is retried, and ETag cache failures can no longer abort a GitHub fetch. Feature branch deleted and pruned; main clean at 6df1aa8. Previous build&ship entry follows."
+  last_step_completed: "fix_bug BUG-2026-11-07T000000 shipped as v0.12.5 (PR #44, merge 72c2c20, CI run 42416768282 all green). SQLite now runs in WAL mode with a 15s busy_timeout, transient SQLITE_BUSY is retried, and ETag cache failures can no longer abort a GitHub fetch. Feature branch deleted and pruned; main clean at 8fd23f7. Previous build&ship entry follows."
 
   previous_cycle: "Build&Ship cycle completed: 3 PRs merged (#39, #40, #41), CI repaired (missing uv install in release job), all pending work shipped as v0.12.1 through v0.12.3. Main is clean at 1f0bff6, 514 tests passing with zero warnings. All registry entries closed. One residual noted: orphan tag v0.12.2 (release job died after big-release tagged but before version commit)."
   open_decisions:
