@@ -372,3 +372,110 @@ async def run_check_for_all_targets(
         with contextlib.suppress(asyncio.CancelledError):
             await heartbeat
         _running_checks.pop(check.slug, None)
+
+
+# ---------------------------------------------------------------------------
+# Running every check against a single repository
+# ---------------------------------------------------------------------------
+
+# In-memory tracking of repos with a "run all checks" in flight.
+_running_repos: dict[str, CheckProgress] = {}
+
+
+@dataclass
+class RepoRunPlan:
+    """Checks reserved for a one-repo run, plus those skipped as busy."""
+
+    repo_full_name: str
+    reserved: list[tuple[CheckDefinition, int]]
+    skipped: list[str]
+
+
+def is_repo_run_active(repo_full_name: str) -> bool:
+    """Return True while a one-repo run for *repo_full_name* is in flight."""
+    progress = _running_repos.get(repo_full_name)
+    if progress is None:
+        return False
+    if progress.expires_at is not None and progress.expires_at < datetime.now(
+        timezone.utc
+    ):
+        _running_repos.pop(repo_full_name, None)
+        return False
+    return True
+
+
+def get_repo_run_progress(repo_full_name: str) -> CheckProgress | None:
+    """Return progress (checks completed/total) for a one-repo run, or None."""
+    return _running_repos.get(repo_full_name)
+
+
+async def reserve_checks_for_repo(
+    engine: AsyncEngine,
+    checks: list[CheckDefinition],
+    repo_full_name: str,
+    triggered_by: str = "manual",
+) -> RepoRunPlan:
+    """Reserve a run slot for every enabled check; skip the ones already busy.
+
+    Raises CheckConflictError if a one-repo run for this repo is in flight.
+    """
+    if is_repo_run_active(repo_full_name):
+        raise CheckConflictError(f"Checks for '{repo_full_name}' are already running")
+
+    reserved: list[tuple[CheckDefinition, int]] = []
+    skipped: list[str] = []
+    for check in checks:
+        if not check.enabled:
+            continue
+        try:
+            run_id = await prepare_check_run(engine, check, triggered_by)
+        except CheckConflictError:
+            skipped.append(check.slug)
+            continue
+        reserved.append((check, run_id))
+
+    _running_repos[repo_full_name] = CheckProgress(
+        total=len(reserved), expires_at=_memory_lease()
+    )
+    return RepoRunPlan(repo_full_name, reserved, skipped)
+
+
+async def run_reserved_checks_for_repo(
+    plan: RepoRunPlan,
+    repos: list[TrackedRepository],
+    workspace: WorkspaceManager,
+    engine: AsyncEngine,
+    triggered_by: str = "manual",
+) -> list[CheckResult]:
+    """Execute the reserved checks for one repo (all its matching branches)."""
+    progress = _running_repos.get(plan.repo_full_name) or CheckProgress()
+    results: list[CheckResult] = []
+    sem = asyncio.Semaphore(_CONCURRENCY)
+
+    async def _one(check: CheckDefinition, run_id: int) -> None:
+        async with sem:
+            try:
+                results.extend(
+                    await run_check_for_all_targets(
+                        check,
+                        repos,
+                        workspace,
+                        engine,
+                        specific_repo=plan.repo_full_name,
+                        triggered_by=triggered_by,
+                        run_id=run_id,
+                    )
+                )
+            except Exception:
+                logger.exception(
+                    "Check '%s' failed for %s", check.slug, plan.repo_full_name
+                )
+            finally:
+                clear_check_running(check.slug)
+                progress.completed += 1
+
+    try:
+        await asyncio.gather(*(_one(c, rid) for c, rid in plan.reserved))
+    finally:
+        _running_repos.pop(plan.repo_full_name, None)
+    return results

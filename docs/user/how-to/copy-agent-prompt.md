@@ -10,3 +10,9 @@ When a repository has something wrong with it, Grimoire can write the prompt for
 **Copy prompt for all** (top right) copies a single prompt covering every pendency, with errors first.
 
 Workflow prompts also include when the failing run finished. Each prompt includes the repository, branch, what failed, the failing check output (last 2000 characters), the run or issue link, and a task description. Prompts are built from data Grimoire already has; nothing is sent to any external service.
+
+## Run the checks for one repository
+
+The **Checks** card on the repository page has a **Run checks** button. It runs every enabled check against that repository only, on all its tracked branches, and reloads the page when the run finishes. Checks that are already running somewhere else are skipped, and a notice tells you which ones.
+
+Checks with a `schedule` only run on their cron, and the others run on each data refresh, so a freshly deployed instance can show them as **not run** until the next tick. The header counts these separately from passing checks. Use **Run checks** to fill them in right away.

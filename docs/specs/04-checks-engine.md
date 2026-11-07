@@ -168,6 +168,11 @@ async def run_check_for_all_targets(
     """
 ```
 
+**Running every check for one repo** (`checks/engine.py`):
+- `reserve_checks_for_repo(engine, checks, repo_full_name)` calls `prepare_check_run` for each enabled check and returns a `RepoRunPlan(reserved, skipped)`; checks already running are skipped, not failed. Raises `CheckConflictError` if a one-repo run for that repo is in flight.
+- `run_reserved_checks_for_repo(plan, repos, workspace, engine)` runs each reserved check via `run_check_for_all_targets(..., specific_repo=repo)` (bounded concurrency) and releases the slots.
+- `is_repo_run_active` / `get_repo_run_progress` expose in-memory progress (`completed`/`total` checks).
+
 **Subprocess execution details:**
 - Scripts that begin with a shebang (`#!`) line are written to a temporary file, made executable, and run directly via `create_subprocess_exec` so the OS honors the interpreter (e.g. `#!/usr/bin/env bash`, `#!/usr/bin/env python3`). The temp file is cleaned up after execution.
 - Scripts without a shebang are passed to `/bin/sh` via `create_subprocess_shell` (scripts may use pipes, conditionals, etc.).

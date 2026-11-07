@@ -280,6 +280,8 @@ Card titles are sentence case ("Stale issues", "Stale pull requests"). Last acti
 - Each column has a header with a breakdown summary: `X passing · Y warning/pending · Z failing` (success → warnings → failures order), using status icons.
 - Flat list per column — one row per item with status icon, name, status text, and link. Workflow rows also show the latest run's relative time (`2h ago`, absolute time in the `title`) when known.
 - Branch labels shown only when multiple branches are tracked.
+- The Checks column header carries a **Run checks** button (HTMX): `POST /partials/repo-checks-run/{owner}/{name}` reserves a run for every enabled check, skips those already running (reported in a toast via `HX-Trigger: repoChecksSkipped`) and executes them in the background against this repo only (all matching branches). `GET /partials/repo-checks-status/{owner}/{name}` returns the idle/running button (polling every 2s with `completed/total` checks) and sends `HX-Trigger: repoChecksCompleted` when done, which reloads the page. 404 for an unknown repo, 409 if a run for the repo is already in flight.
+- The header breakdown separates `not-run` checks (`N not run`, muted) from passing ones; not-run checks are never counted as passing.
 - Check rows show a right-aligned monospace status (`pass` success, `warning` warning, `fail` error) and an "Output" button with a terminal icon (HTMX `hx-get` to fetch full output on demand).
 
 ## 6.5 — Actions Page
