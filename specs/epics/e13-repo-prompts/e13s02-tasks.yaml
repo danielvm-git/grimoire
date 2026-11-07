@@ -1,0 +1,9 @@
+story_id: e13s02
+title: "Pendencies card with copy and preview"
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: "Pendencies card with copy and preview"
+  verify: uv run pytest tests/test_web/test_prompts.py -q -k "RepoDetailPrompts"
+  status: done

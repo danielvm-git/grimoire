@@ -1,0 +1,9 @@
+story_id: e13s03
+title: "Align detail page with design handoff"
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: "Align detail page with design handoff"
+  verify: uv run pytest tests/test_web/test_router.py -q -k "RepositoryDetail"
+  status: done

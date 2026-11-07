@@ -1,0 +1,42 @@
+title: Repo Pendency Prompts
+status: done
+depends_on:
+- e06
+source: user request + Claude Design handoff (Repository Detail)
+stories:
+- id: e13s01
+  title: "Agent prompt generator"
+  status: done
+  bcps: 3
+  description: "build_pendencies/build_repo_prompt in web/prompts.py produce one prompt per failing check, failing workflow, stale issue and stale PR, plus a combined prompt."
+  tasks: e13s01-tasks.yaml
+  verify:
+  - uv run pytest tests/test_web/test_prompts.py -q -k "prompt"
+  spec: e13s01.md
+- id: e13s02
+  title: "Pendencies card with copy and preview"
+  status: done
+  bcps: 3
+  description: "Repo detail page shows a Pendencies card with severity summary, Copy prompt, Preview, Copy prompt for all and an all-clear state."
+  tasks: e13s02-tasks.yaml
+  verify:
+  - uv run pytest tests/test_web/test_prompts.py -q -k "RepoDetailPrompts"
+  spec: e13s02.md
+- id: e13s03
+  title: "Align detail page with design handoff"
+  status: done
+  bcps: 3
+  description: "Sentence-case stale cards with count, colored check status, terminal Output button, mobile icon-only buttons."
+  tasks: e13s03-tasks.yaml
+  verify:
+  - uv run pytest tests/test_web/test_router.py -q -k "RepositoryDetail"
+  spec: e13s03.md
+- id: e13s04
+  title: "Workflow last-run time"
+  status: done
+  bcps: 3
+  description: "WorkflowStatus gains run_at (from the latest run). Detail page shows relative time next to each workflow and the workflow prompt cites it."
+  tasks: e13s04-tasks.yaml
+  verify:
+  - uv run pytest tests/test_github tests/test_web -q -k "run_at"
+  spec: e13s04.md

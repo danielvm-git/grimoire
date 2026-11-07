@@ -1,0 +1,13 @@
+story_id: e13s04
+title: "Workflow last-run time"
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: "Add run_at to WorkflowStatus, CachedWorkflowStatus and schema, populated from run updated_at"
+  verify: uv run pytest tests/test_github -q -k run_at
+  status: done
+- id: 2
+  description: "Show relative run time per workflow on the detail page and in the workflow prompt"
+  verify: uv run pytest tests/test_web -q -k run_at
+  status: done
