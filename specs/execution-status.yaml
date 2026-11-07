@@ -112,6 +112,12 @@ development_status:
     started_at: "2026-11-06T13:01:00-03:00"
     completed_at: "2026-11-06T13:03:00-03:00"
 
+  e13: done
+  e13s01: done
+  e13s02: done
+  e13s03: done
+  e13s04: done
+
 # Post-epic review gate — an epic is only truly closed once a full review pass
 # finds no new findings. Evidence: specs/verifications/<epic>-verify.yaml
 post_epic_reviews:

@@ -114,6 +114,7 @@ async def get_repo_detail(owner: str, name: str) -> RepoDetailResponse:
                 status=w.status,
                 url=w.url,
                 run_url=w.run_url,
+                run_at=w.run_at,
             )
             for w in stats.workflows
         ],

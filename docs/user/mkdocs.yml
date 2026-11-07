@@ -44,6 +44,7 @@ nav:
   - How-to guides:
       - Write a check: how-to/write-a-check.md
       - Write an action: how-to/write-an-action.md
+      - Hand a problem to an agent: how-to/copy-agent-prompt.md
       - Deploy Grimoire: how-to/deploy.md
   - Reference:
       - Configuration: reference/configuration.md

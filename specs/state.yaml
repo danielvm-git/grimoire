@@ -142,3 +142,25 @@ handoff:
     release (no specs/product/SCOPE_LATEST.yaml exists yet), then slice-tasks
     and plan-work.
   next_command: "survey-context"
+
+# e13 Repo Pendency Prompts (2026-11-07)
+e13:
+  active_epic: e13
+  branch: danielvm-git/repo-custom-prompt-copy-398e24
+  tooling_note: "trace-stories and bp-yaml-set are not installed; status files edited by hand. Preflight = scripts/preflight.sh (just check)."
+  decisions:
+    - gate: "epic-selection"
+      decision: "User chose to create a new epic (e13) for the repo-detail pendencies screen."
+      reason: "EPIC value in the build prompt was empty; user answered the clarifying question."
+    - gate: "conventions-source"
+      decision: "AGENTS.md used as conventions; CLAUDE.md and CONVENTIONS.md do not exist in this repo."
+      reason: "User chose this over running seed-conventions."
+    - gate: "red-first-waiver-e13s01-s03"
+      decision: "Stories e13s01-e13s03 were implemented interactively before the epic was planned, so red-first was not possible. They landed as one feat commit (7d2ad25) with tests; their verify commands pass. e13s04 is built red-first."
+      reason: "Code and tests pre-existed the planning spine; rewriting history to fake red-first would be dishonest."
+    - gate: "commit-attribution"
+      decision: "Commits carry no Co-Authored-By footer."
+      reason: "pre-tool-use hook enforces CONVENTIONS.md Git Attribution; user rule overrides the default attribution reminder."
+    - gate: "respond-review-e13"
+      decision: "Fixed review findings: clipboard fallback and error state, double-click restore, longer code fence for check output, vacuous test, reuse _parse_dt, added escaping/multi-branch tests. Kept the removal of the stale percentage header (it follows the Claude Design handoff; threshold coloring remains in the stats bar)."
+      reason: "Removed percentage is a design choice already recorded in spec 06 section 6.4; reviewer asked to confirm intent."

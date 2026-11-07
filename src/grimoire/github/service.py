@@ -45,6 +45,11 @@ logger = logging.getLogger(__name__)
 _CONCURRENCY_LIMIT = 10
 
 
+def _parse_run_time(run: dict[str, Any]) -> datetime | None:
+    """Return the run's last-updated time as an aware datetime, if present."""
+    return _parse_dt(run.get("updated_at") or run.get("created_at"))
+
+
 def _brief_error(exc: Exception) -> str:
     """Return a concise, user-friendly description of a fetch error."""
     import httpx
@@ -428,6 +433,7 @@ async def fetch_repository_stats(
                                     status=status_str,
                                     url=wf.get("html_url", ""),
                                     run_url=run.get("html_url", ""),
+                                    run_at=_parse_run_time(run),
                                 )
                             )
                         elif runs is None:
@@ -722,6 +728,7 @@ async def _write_stats_to_db(
                         status=wf.status,
                         url=wf.url,
                         run_url=wf.run_url,
+                        run_at=wf.run_at,
                         fetched_at=stats.fetched_at or now,
                     )
                 )
@@ -806,6 +813,7 @@ async def load_stats_from_db(
                     status=w.status,
                     url=w.url,
                     run_url=w.run_url,
+                    run_at=w.run_at,
                 )
                 for w in wf_rows
             ]

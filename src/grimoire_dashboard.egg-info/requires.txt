@@ -1,0 +1,16 @@
+aiosqlite>=0.21
+apscheduler<4,>=3.11
+dataconfy>=0.0.3
+fastapi>=0.115
+httpx>=0.28
+jinja2>=3.1
+mcp>=1.0.0
+opentelemetry-api>=1.30
+opentelemetry-instrumentation-fastapi>=0.51b0
+opentelemetry-sdk>=1.30
+prometheus-client>=0.22
+pydantic>=2.10
+python-multipart>=0.0.18
+pyyaml>=6.0
+sqlmodel>=0.0.22
+uvicorn[standard]>=0.34

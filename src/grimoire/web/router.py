@@ -32,6 +32,7 @@ from grimoire.web.backlog import (
     group_by_repo,
     group_by_type,
 )
+from grimoire.web.prompts import build_pendencies, build_repo_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -581,6 +582,26 @@ async def dashboard(
     )
 
 
+async def _load_check_outputs(result_ids: list[int]) -> dict[int, str]:
+    """Fetch stored output for the given check result ids."""
+    from grimoire.checks.router import _engine as _checks_engine
+
+    outputs: dict[int, str] = {}
+    if _checks_engine is None or not result_ids:
+        return outputs
+    async with AsyncSession(_checks_engine) as session:
+        for rid in result_ids:
+            result = await _exec_text(
+                session,
+                text("SELECT output FROM check_result WHERE id = :id"),
+                params={"id": rid},
+            )
+            row = result.first()
+            if row:
+                outputs[rid] = row[0]
+    return outputs
+
+
 @router.get("/repo/{owner}/{name}", response_class=HTMLResponse)
 async def repository_detail(request: Request, owner: str, name: str) -> HTMLResponse:
     """Repository detail page."""
@@ -612,10 +633,29 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
         full_name, branches, check_targets, results_by_key
     )
 
+    from grimoire.checks.router import _checks
+
+    failed_ids = [
+        c["id"]
+        for cs in checks_by_branch.values()
+        for c in cs
+        if c["status"] == "fail" and c.get("id")
+    ]
+    check_outputs = await _load_check_outputs(failed_ids)
+    pendencies = build_pendencies(
+        full_name,
+        stats,
+        checks_by_branch,
+        {c.slug: c.description for c in _checks},
+        check_outputs,
+    )
+
     return templates.TemplateResponse(
         request,
         "repository.html",
         context={
+            "pendencies": pendencies,
+            "repo_prompt": build_repo_prompt(full_name, pendencies),
             "repo_name": full_name,
             "stats": stats,
             "repo": repo,

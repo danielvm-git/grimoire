@@ -30,6 +30,7 @@ class WorkflowStatus(BaseModel):
     status: str  # "success" | "failure" | "pending" | "unknown"
     url: str
     run_url: str = ""
+    run_at: datetime | None = None  # when the latest run last updated
 
 
 class IssueDetail(BaseModel):
