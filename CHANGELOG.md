@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.14.0] - 2026-11-07
+
+### Features
+
+- **web:** run all checks for one repo from the detail page ([#48](https://github.com/danielvm-git/grimoire/issues/48)) ([41bc2d8](https://github.com/danielvm-git/grimoire/commit/41bc2d854c45792dd1da819d6373e01deebb5f6f))
+
 ## [0.13.0] - 2026-11-07
 
 ### Features
