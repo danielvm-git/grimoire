@@ -37,6 +37,11 @@ script: |
       return entry
 
 
+  def _sev(level: str) -> None:
+      """Tag the most recent result with the severity of its failure."""
+      _ALL_RESULTS[-1]["severity"] = level
+
+
   class _GHA_Loader(yaml.SafeLoader):
       """SafeLoader that preserves GitHub Actions' ``on`` keyword.
 
@@ -195,9 +200,6 @@ script: |
   # ── Audit runner ─────────────────────────────────────────────────────────
 
   def audit() -> int:
-      critical_fails = 0
-      high_fails = 0
-      medium_fails = 0
 
       if not WORKFLOWS.is_dir():
           _r("0. Workflows directory exists", True, "N/A",
@@ -218,7 +220,7 @@ script: |
               workflows[f.name] = wf
           else:
               _r(f"Parse {f.name}", False, f.name, "Failed to parse YAML")
-              critical_fails += 1
+              _sev("critical")
 
       ci_cd = _ci_cd_files(yml_files)
       deploy_wf = _deploy_files(yml_files)
@@ -246,7 +248,7 @@ script: |
           else:
               _r("1a. CI/CD pipeline file exists", False,
                  yml_files[0].name, "No identifiable CI/CD pipeline file")
-              high_fails += 1
+              _sev("high")
 
       # 1b: Separate deploy file
       if deploy_wf:
@@ -273,7 +275,7 @@ script: |
       if staging:
           _r("1c. No unused staging workflow", False,
              staging[0].name, "Staging workflow found — solo dev: prod only")
-          medium_fails += 1
+          _sev("medium")
       else:
           _r("1c. No unused staging workflow", True, "N/A", "")
 
@@ -282,7 +284,7 @@ script: |
       if bad_names:
           _r("1d. Kebab-case filenames", False,
              bad_names[0], f"Underscore in name: {bad_names[0]}")
-          medium_fails += 1
+          _sev("medium")
       else:
           _r("1d. Kebab-case filenames", True, "N/A", "")
 
@@ -293,7 +295,7 @@ script: |
           if generic:
               _r("1e. Action names are specific", False,
                  f".github/actions/{generic[0]}", f"Generic name: {generic[0]}")
-              medium_fails += 1
+              _sev("medium")
 
       # ── 2. TRIGGERS ──────────────────────────────────────────────────────
 
@@ -309,16 +311,16 @@ script: |
               valid_trigger = has_wf_run or has_push
               _r(f"2a. trigger [{fname}]", valid_trigger, fname, "" if valid_trigger else "Deploy workflow missing workflow_run or push trigger")
               if not valid_trigger:
-                  high_fails += 1
+                  _sev("high")
           else:
               _r(f"2a. push trigger [{fname}]", has_push, fname, "" if has_push else "Primary workflow missing push trigger")
               if not has_push:
-                  high_fails += 1
+                  _sev("high")
 
           if ci_cd and fname == ci_cd[0].name:
               _r(f"2b. pull_request trigger [{fname}]", has_pr, fname, "")
               if not has_pr:
-                  medium_fails += 1
+                  _sev("medium")
 
 
       # 2c: concurrency on CI/CD file
@@ -334,14 +336,14 @@ script: |
                   _r("2c. concurrency + cancel-in-progress: true", False,
                      ci_cd[0].name,
                      "cancel-in-progress is false — test runs won't cancel on new pushes")
-                  medium_fails += 1
+                  _sev("medium")
               else:
                   _r("2c. concurrency exists", True,
                      ci_cd[0].name, "String-form concurrency — cancel not inspectable")
           else:
               _r("2c. concurrency defined", False,
                  ci_cd[0].name, "Missing — new pushes won't cancel superseded runs")
-              medium_fails += 1
+              _sev("medium")
 
           # 2d: deploy concurrency must NOT cancel-in-progress
           ci_cd_jobs = _jobs(wf)
@@ -353,7 +355,7 @@ script: |
                           _r("2d. Deploy cancel-in-progress: false", False,
                              f"{ci_cd[0].name} job:{jname}",
                              "Deploy concurrency has cancel-in-progress: true — can break production")
-                          high_fails += 1
+                          _sev("high")
 
       if deploy_wf:
           dwf = workflows.get(deploy_wf[0].name, {})
@@ -363,7 +365,7 @@ script: |
               _r("2d. Deploy concurrency: cancel-in-progress false", False,
                  deploy_wf[0].name,
                  "Deploy must not cancel in-flight — can break production")
-              high_fails += 1
+              _sev("high")
           elif dep_conc and dep_cancel is False:
               _r("2d. Deploy concurrency: cancel-in-progress false", True,
                  deploy_wf[0].name, "")
@@ -397,7 +399,7 @@ script: |
           _r("3a. Jobs use explicit needs:", has_needs, ci_cd[0].name,
              f"Jobs: {', '.join(jnames)}" if jnames else "No jobs defined")
           if not has_needs:
-              high_fails += 1
+              _sev("high")
 
           # 3b: test has needs: lint (if lint is its own job)
           if lint_jobs and test_jobs:
@@ -411,7 +413,7 @@ script: |
                  f"test={test_jobs[0]}, lint={lint_name}" if test_has_lint
                  else f"Lint is own job but test doesn't depend on it")
               if not test_has_lint:
-                  high_fails += 1
+                  _sev("high")
 
           # 3c: build has needs: test
           if build_jobs and test_jobs:
@@ -425,7 +427,7 @@ script: |
                  f"build={build_jobs[0]}, test={test_name}" if build_has_test
                  else "Build does not depend on test — could run before tests pass")
               if not build_has_test:
-                  critical_fails += 1
+                  _sev("critical")
 
           # 3d: release has needs: build
           if release_jobs and build_jobs:
@@ -439,7 +441,7 @@ script: |
                  f"release={release_jobs[0]}, build={build_name}" if rel_has_build
                  else "Release does not depend on build")
               if not rel_has_build:
-                  high_fails += 1
+                  _sev("high")
 
           # 3e: No continue-on-error on gate jobs
           for jname, jdef in jobs.items():
@@ -448,7 +450,7 @@ script: |
                   _r("3e. No continue-on-error on gates", False,
                      f"{ci_cd[0].name} job:{jname}",
                      "continue-on-error: true defeats stop-the-line")
-                  high_fails += 1
+                  _sev("high")
 
           # 3f: deploy triggered by CI/CD (not independent push)
           if deploy_wf:
@@ -485,7 +487,7 @@ script: |
                   if own_push:
                       _r("3f. Deploy chained to pipeline, not push", False,
                          deploy_wf[0].name, "Has its own push trigger — can fire outside pipeline")
-                      high_fails += 1
+                      _sev("high")
                   else:
                       _r("3f. Deploy trigger mechanism", True, deploy_wf[0].name,
                          f"Triggered by: {', '.join(devents)}")
@@ -503,7 +505,7 @@ script: |
                           _r("3g. Deploy does not rebuild", False,
                              f"{dwf_name} job:{jname}",
                              f"Contains build steps: {', '.join(found_builds)}")
-                          high_fails += 1
+                          _sev("high")
           else:
               # Check if deploy is a job in the CI/CD pipeline with needs
               for jname, jdef in jobs.items():
@@ -517,7 +519,7 @@ script: |
                           _r("3f. Deploy job has needs:", False,
                              f"{ci_cd[0].name} job:{jname}",
                              "Deploy runs in parallel — not gated")
-                          high_fails += 1
+                          _sev("high")
 
       # ── 4. BUILD ARTIFACT REUSE ──────────────────────────────────────────
 
@@ -536,7 +538,7 @@ script: |
                      f"{ci_cd[0].name} + {deploy_wf[0].name if deploy_wf else ''}",
                      "Artifact uploaded" + (" and downloaded in deploy" if has_download_in_deploy else " but deploy may not reuse"))
                   if not has_download_in_deploy:
-                      high_fails += 1
+                      _sev("high")
               else:
                   _r("4a. Build artifact uploaded", True, ci_cd[0].name, "")
           else:
@@ -594,7 +596,7 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_verify_artifact else "No pre-deploy artifact verification")
           if not has_verify_artifact:
-              high_fails += 1
+              _sev("high")
 
           # 5d: environment: production
           has_environment = deploy_env or "environment: production" in deploy_text
@@ -602,7 +604,7 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_environment else "No environment block — consider adding for secret scoping")
           if not has_environment:
-              medium_fails += 1
+              _sev("medium")
 
           # 5e: Secrets from GitHub secrets
           has_secret_ref = "${{ secrets." in deploy_text
@@ -610,7 +612,7 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_secret_ref else "No secret references found in deploy")
           if not has_secret_ref:
-              medium_fails += 1
+              _sev("medium")
 
           # 5f: Hardcoded secrets check
           suspicious = ["ghp_", "ghs_", "ghu_", "sk-", "api_key=", "token=", "password=", "secret="]
@@ -619,7 +621,7 @@ script: |
                   _r("5f. No hardcoded secrets", False,
                      deploy_wf[0].name if deploy_wf else ci_cd[0].name,
                      f"Possible hardcoded secret pattern: {sus}")
-                  critical_fails += 1
+                  _sev("critical")
                   break
           else:
               _r("5f. No hardcoded secrets", True, "N/A", "")
@@ -651,7 +653,7 @@ script: |
                  deploy_wf[0].name,
                  "" if has_rollback else "No rollback mechanism detected")
           if not has_rollback and deploy_wf:
-              high_fails += 1
+              _sev("high")
 
       # ── 6. POST-DEPLOY SAFETY NET ────────────────────────────────────────
 
@@ -665,7 +667,7 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_smoke else "No post-deploy verification — no staging to catch issues")
           if not has_smoke and deploy_wf:
-              high_fails += 1
+              _sev("high")
 
           # 6b: Verification is its own step
           if has_smoke:
@@ -685,7 +687,7 @@ script: |
                      deploy_wf[0].name if deploy_wf else ci_cd[0].name,
                      "" if has_separate_verify else "Verify may be folded into deploy command")
                   if not has_separate_verify:
-                      medium_fails += 1
+                      _sev("medium")
 
           # 6c: Failure surfaced clearly
           has_fail_on_unhealthy = (
@@ -700,7 +702,7 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_fail_on_unhealthy else "No failure handling detected")
           if not has_fail_on_unhealthy and deploy_wf:
-              medium_fails += 1
+              _sev("medium")
 
       # ── 7. BRANCH PROTECTION (informational only) ────────────────────────
       _r("7a. Branch protection — status checks", True, "N/A",
@@ -721,14 +723,11 @@ script: |
                       unpinned.append(f"{fname}/{jname}: {ref}")
 
       if unpinned:
+          shown = "; ".join(unpinned[:3])
+          more = f" (+{len(unpinned) - 3} more)" if len(unpinned) > 3 else ""
           _r("8a. Third-party actions pinned", False,
-             unpinned[0].split(":")[0], f"Unpinned: {unpinned[0]}")
-          medium_fails += 1
-          for pin in unpinned[1:3]:
-              _r("   (also unpinned)", False, pin.split(":")[0],
-                 f"Unpinned: {pin}")
-          if len(unpinned) > 3:
-              _r("   ... and more", False, f"+{len(unpinned)-3} more", "")
+             unpinned[0].split(":")[0], f"Unpinned: {shown}{more}")
+          _sev("medium")
       else:
           _r("8a. Third-party actions pinned to SHA or version", True, "N/A", "")
 
@@ -744,7 +743,7 @@ script: |
       _r("8b. Dependency caching used (lint/test faster)", has_cache,
          "N/A", "" if has_cache else "No caching detected — lint/test may be slower")
       if not has_cache:
-          medium_fails += 1
+          _sev("medium")
 
       # ── 9. PERMISSIONS & SECRETS ─────────────────────────────────────────
 
@@ -753,7 +752,7 @@ script: |
           explicit, note = _permission_scope(wf)
           _r(f"9a. Permissions block [{fname}]", explicit, fname, note)
           if not explicit:
-              medium_fails += 1
+              _sev("medium")
 
       # 9b: OIDC check (informational — cloud deploy only)
       has_oidc = False
@@ -774,13 +773,24 @@ script: |
               if "run: echo" in line.lower() and ("${{ secrets." in line or "${{ env." in line):
                   _r(f"9c. Secrets not echoed to logs [{fname}]", False,
                      fname, f"Potential secret echo: {line.strip()[:80]}")
-                  high_fails += 1
+                  _sev("high")
 
       # ── SUMMARY ──────────────────────────────────────────────────────────
 
       total = len(_ALL_RESULTS)
-      passed_count = sum(1 for r in _ALL_RESULTS if r["passed"])
-      failed_count = total - passed_count
+      failures = [r for r in _ALL_RESULTS if not r["passed"]]
+      passed_count = total - len(failures)
+      failed_count = len(failures)
+      # A failing rule that was never tagged still counts, at the lowest level.
+      for r in failures:
+          r.setdefault("severity", "medium")
+      by_level = {
+          lvl: [r for r in failures if r["severity"] == lvl]
+          for lvl in ("critical", "high", "medium")
+      }
+      critical_fails = len(by_level["critical"])
+      high_fails = len(by_level["high"])
+      medium_fails = len(by_level["medium"])
 
       print()
       print("=" * 88)
@@ -796,9 +806,9 @@ script: |
       print()
       if failed_count > 0:
           print(f"  Breakdown:")
-          print(f"    Critical:    {critical_fails}  (broken sequencing, hardcoded secrets)")
-          print(f"    High:        {high_fails}  (missing rollback, missing smoke test, artifact reuse)")
-          print(f"    Medium:      {medium_fails}  (naming, caching, permissions)")
+          print(f"    Critical:    {critical_fails}")
+          print(f"    High:        {high_fails}")
+          print(f"    Medium:      {medium_fails}")
       print()
 
       # Print table
@@ -809,20 +819,29 @@ script: |
           print(f"| {r['check_id']:<65s} | {status:<6s} | {r['file_ref']:<30s} | {r['notes']}")
       print()
 
+      def _list(level: str) -> None:
+          for n, r in enumerate(by_level[level], 1):
+              rid, _, title = r["check_id"].partition(". ")
+              detail = f" — {r['notes']}" if r["notes"] else ""
+              print(f"   {n}. [{rid}] {title}{detail}")
+
       if critical_fails > 0:
-          print("❌ CRITICAL: Pipeline sequencing is broken or secrets exposed — fix before merge.")
-          print(f"   Top priorities: 1. Fix {critical_fails} critical issue(s)")
-          print(f"                   2. Address {high_fails} high-severity issue(s)")
-          print(f"                   3. Address {medium_fails} medium-severity issue(s)")
+          print(f"❌ CRITICAL: {critical_fails} critical issue(s) — fix before merge:")
+          _list("critical")
+          if high_fails:
+              print(f"   Also {high_fails} high-severity issue(s):")
+              _list("high")
           return 2
       elif high_fails > 0:
-          print("⚠️ HIGH: Pipeline works but missing safety nets. Recommendations:")
-          print(f"   1. Fix {high_fails} high-severity issue(s) (rollback, smoke test, artifact reuse)")
-          print(f"   2. Address {medium_fails} medium-severity issue(s)")
+          print(f"⚠️ HIGH: {high_fails} high-severity issue(s):")
+          _list("high")
+          if medium_fails:
+              print(f"   Also {medium_fails} medium-severity issue(s):")
+              _list("medium")
           return 1
       elif medium_fails > 0:
-          print("ℹ️  LOW: Pipeline is functional, minor hygiene issues remain.")
-          print(f"   {failed_count} issue(s) to address at your convenience.")
+          print(f"ℹ️  LOW: Pipeline is functional, {medium_fails} hygiene issue(s) remain:")
+          _list("medium")
           return 0
       else:
           print("✅ ALL CHECKS PASSED — Pipeline follows solo-dev CI/CD best practices.")

@@ -152,3 +152,38 @@ def test_9a_names_the_job_that_inherits_the_default(audit: Audit) -> None:
     assert row[1] == "FAIL"
     assert "test" in row[3]
     assert "lint" not in row[3]
+
+
+# ── #56: summary footer comes from the failing rules ─────────────────────────
+
+
+def _footer(stdout: str) -> str:
+    lines = stdout.splitlines()
+    start = next(i for i, line in enumerate(lines) if line[:1] in "❌⚠ℹ✅")
+    return "\n".join(lines[start:])
+
+
+def test_footer_names_only_rules_that_failed(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    result = audit.run()
+    failed_ids = {r[0].split(".")[0] for r in result.rows if r[1] == "FAIL"}
+    passed_ids = {r[0].split(".")[0] for r in result.rows if r[1] == "PASS"}
+    footer = _footer(result.stdout)
+    assert "(rollback, smoke test, artifact reuse)" not in footer
+    assert "[3a]" in footer
+    for rid in passed_ids - failed_ids:
+        assert f"[{rid}]" not in footer
+
+
+def test_headline_counts_equal_fail_rows(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow("other.yml", PIPELINE)
+    result = audit.run()
+    fails = len([r for r in result.rows if r[1] == "FAIL"])
+    out = result.stdout
+    assert f"Failed:       {fails}" in out
+    counts = {
+        level: int(out.split(f"{level}:")[1].split()[0])
+        for level in ("Critical", "High", "Medium")
+    }
+    assert sum(counts.values()) == fails
