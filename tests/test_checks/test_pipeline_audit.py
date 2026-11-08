@@ -641,3 +641,58 @@ def test_branch_protection_without_token_is_unknown(audit: Audit, github) -> Non
     result = _env_run(audit)
     assert result.status("7a.") == ["UNKNOWN"]
     assert fake.paths == []
+
+
+# ── #57: stable rule IDs and --json ──────────────────────────────────────────
+
+
+def _json_run(audit: Audit) -> tuple[AuditResult, dict]:
+    result = audit.run("--json")
+    return result, json.loads(result.stdout)
+
+
+def test_json_emits_one_object_per_rule(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow("other.yml", PIPELINE)
+    table = audit.run()
+    result, doc = _json_run(audit)
+    assert result.returncode == table.returncode
+    assert len(doc["rules"]) == len(table.rows)
+    for rule in doc["rules"]:
+        assert rule["status"] in ("pass", "fail", "unknown")
+        assert rule["rule"].startswith("CI-")
+        assert {"title", "file", "remediation"} <= rule.keys()
+    assert doc["summary"]["failed"] == len([r for r in table.rows if r[1] != "PASS"])
+
+
+def test_json_failed_rule_has_severity_and_remediation(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    _, doc = _json_run(audit)
+    perms = [r for r in doc["rules"] if r["rule"] == "CI-PERM-001"]
+    assert len(perms) == 1
+    assert perms[0]["status"] == "fail"
+    assert perms[0]["severity"] == "medium"
+    assert perms[0]["file"] == "test-build-release.yml"
+    assert "permissions" in perms[0]["remediation"]
+
+
+def test_json_ids_are_stable_and_unmapped_free(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow(
+        "deploy.yml",
+        _deploy(job_perms="    permissions:\n      id-token: write\n"),
+    )
+    _, doc = _json_run(audit)
+    ids = [r["rule"] for r in doc["rules"]]
+    assert "CI-UNMAPPED" not in ids
+    by_title = {r["title"]: r["rule"] for r in doc["rules"]}
+    assert by_title["Branch protection — status checks"] == "CI-PROTECT-001"
+    assert by_title["Branch protection — no direct push"] == "CI-PROTECT-002"
+    assert by_title["Deploy authenticates (OIDC or secret)"] == "CI-DEPLOY-AUTH-001"
+
+
+def test_json_with_no_workflows_is_still_valid_json(audit: Audit) -> None:
+    result, doc = _json_run(audit)
+    assert result.returncode == 0
+    assert doc["summary"]["failed"] == 0
+    assert doc["rules"][0]["rule"] == "CI-WORKFLOWS-001"

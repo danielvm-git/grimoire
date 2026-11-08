@@ -1548,7 +1548,8 @@ bugs:
     title: "#57 run workflow-shape checks on workflow PRs; stable rule IDs and --json"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: low
-    status: open
+    status: partial
+    evidence: "test_json_* (4 tests): pass. Stable IDs and --json shipped; PR-attached results need an owner decision (no PR surface in Grimoire), documented as a workflow snippet."
     description: "Stable IDs and --json are implementable. Attaching results to a PR before merge needs a decision outside this repo (Grimoire has no PR-comment surface); to be reported, not closed. Verify: -k json."
   - slug: gh-58-audit-8b-cache-detection
     title: "#58 audit 8b misses setup-python/pip/uv cache and accepts cache: true on setup-python"

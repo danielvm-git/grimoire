@@ -141,3 +141,44 @@ The exit code follows the worst failing severity: critical → `2`, high → `1`
 | `2a` | high | Only the primary pipeline needs a `push` trigger. Auxiliary workflows (PR bots, issue triage) are exempt |
 
 Set `GRIMOIRE_AUDIT_STRICT_SHA_PINNING=1` in the Grimoire environment to make `8a` accept only 40-character SHAs and OCI digests. Floating tags such as `@v6` then fail.
+
+### Machine-readable output and pull-request use
+
+Run the script with `--json` to get one object per rule instead of the table. The exit code is the same.
+
+```json
+{"rule": "CI-PERM-001", "title": "Permissions block", "status": "fail",
+ "severity": "medium", "file": "deploy.yml",
+ "remediation": "Declare permissions: at workflow level or on every job", "notes": "..."}
+```
+
+`status` is `pass`, `fail` or `unknown`. Rule IDs such as `CI-PERM-001`, `CI-PIN-001` and `CI-PROTECT-001` are stable: they do not change when rules are reordered or renumbered in the table.
+
+Grimoire runs checks on the branches it observes, so it cannot attach a result to a pull request. To get the audit before a merge, run the script in the audited repository's own CI:
+
+```yaml
+on:
+  pull_request:
+    paths: ['.github/workflows/**', '.github/actions/**']
+jobs:
+  audit:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyyaml
+      - run: |
+          python - <<'PY' > audit.py
+          import urllib.request, yaml
+          url = "https://raw.githubusercontent.com/danielvm-git/grimoire/main/data/checks/ci-cd-pipeline-audit.yaml"
+          print(yaml.safe_load(urllib.request.urlopen(url))["script"])
+          PY
+          python audit.py --json
+        env:
+          REPO_FULL_NAME: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+```
+
+Rules `7a` and `7b` need a token that can read branch protection; without one they report `unknown`.
