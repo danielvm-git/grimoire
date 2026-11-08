@@ -239,3 +239,21 @@ e13:
       lint: "clean (ruff, pyright, codespell, vulture)"
       conventional_commits: true
       ai_attribution: "none"
+
+# Post-epic review + Build&Ship (2026-11-08, branch danielvm-git/post-epic-review-fixes-98d1fb)
+post_epic_review_all:
+  scope: "e01-e11, e13 (EPIC value was blank; user chose all unreviewed epics)"
+  method: "baseline just check (644 passed), fresh-context reviewer over src/grimoire, coverage scan"
+  fixed: 7
+  deferred: 7
+  decisions:
+    - gate: commit-hook-false-positive
+      decision: "bigpowers pre-tool-use hook blocked commits from this worktree (reads branch from its own cwd, saw main). Commits were made through the user's terminal tab at the user's instruction (Allow land mode, then try the embedded terminal). The hook was not modified or bypassed."
+      reason: "User approved committing; the branch is not protected."
+    - gate: retarget-fix-scope
+      decision: "Hid stale results only for list/regex targets; script-targeted checks are exempt because their targets cannot be resolved without a workdir."
+      reason: "Reviewer's suggested fix would have hidden every script-targeted result."
+    - gate: deferred-items
+      decision: "7 registry entries marked deferred with reasons (auth/CSRF needs an owner decision; the rest are low impact or need design)."
+      reason: "Scope change or unreproduced."
+  next_skill: release-branch

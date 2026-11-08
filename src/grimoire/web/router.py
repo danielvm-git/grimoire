@@ -417,7 +417,29 @@ async def _load_check_context(
                 "timestamp": row[6],
             }
 
-    return check_targets, results_by_key
+    return check_targets, _drop_untargeted_results(
+        _checks, check_targets, results_by_key
+    )
+
+
+def _drop_untargeted_results(
+    check_defs: list[Any],
+    check_targets: dict[str, set[tuple[str, str]]],
+    results_by_key: dict[tuple[str, str, str], dict[str, Any]],
+) -> dict[tuple[str, str, str], dict[str, Any]]:
+    """Discard stored results for pairs a check no longer targets.
+
+    A retargeted check keeps its old rows in the database; without this they
+    show as permanent failures nothing can re-run. Script-targeted checks are
+    exempt because their targets cannot be resolved without a workdir.
+    """
+    static_slugs = {c.slug for c in check_defs if c.targets.script is None}
+    return {
+        key: result
+        for key, result in results_by_key.items()
+        if key[0] not in static_slugs
+        or (key[1], key[2]) in check_targets.get(key[0], set())
+    }
 
 
 def _build_checks_for_repo(

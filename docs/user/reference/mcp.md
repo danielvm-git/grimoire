@@ -29,6 +29,8 @@ The MCP server registers 5 primary tools for AI agent interaction:
 | `get_check_backlog` | `repo: str`, `refresh: bool = False` | Returns missing or failing checks with error log output snippets, one entry per branch. |
 | `run_repo_checks` | `repo: str`, `check_slug: str \| None = None` | Triggers execution of checks for a repository on demand. |
 
+Disabled checks are never run by `run_repo_checks` or `refresh=true`; asking for one by `check_slug` is an error.
+
 Every tool validates its input. A repository that is not tracked is rejected with a
 `ValueError` that names the repository and lists the tracked ones — it never reports an empty
 success.

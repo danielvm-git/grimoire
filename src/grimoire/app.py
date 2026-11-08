@@ -38,7 +38,7 @@ from grimoire.database import (
 from grimoire.github.client import GitHubClient
 from grimoire.github.router import (
     _cache,
-    _last_refresh,
+    get_last_refresh,
     refresh_router,
     set_refresh_callback,
     update_cache,
@@ -393,8 +393,9 @@ def create_app() -> FastAPI:
         status = "ok"
         details: dict[str, object] = {}
 
-        if _last_refresh:
-            age = (datetime.now(tz=timezone.utc) - _last_refresh).total_seconds()
+        last_refresh = get_last_refresh()
+        if last_refresh:
+            age = (datetime.now(tz=timezone.utc) - last_refresh).total_seconds()
             details["cache_age_seconds"] = int(age)
 
         if _cache:

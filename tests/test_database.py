@@ -419,3 +419,40 @@ async def test_engine_uses_wal_synchronous(tmp_path) -> None:
         assert int(level) == 1  # 1 == NORMAL
     finally:
         await eng.dispose()
+
+
+async def test_touch_queued_runs_protects_them_from_reclaim(
+    engine: AsyncEngine,
+) -> None:
+    """A queued run still waiting for a slot is kept alive, not interrupted."""
+    from datetime import timedelta
+
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from grimoire.database import (
+        CheckRunRecord,
+        _utcnow,
+        reclaim_expired_runs,
+        touch_queued_runs,
+    )
+
+    async with AsyncSession(engine) as session:
+        record = CheckRunRecord(
+            check_slug="waiting",
+            check_name="Waiting",
+            triggered_by="manual",
+            started_at=_utcnow() - timedelta(seconds=600),
+        )
+        session.add(record)
+        await session.commit()
+        await session.refresh(record)
+        run_id = record.id
+    assert run_id is not None
+
+    await touch_queued_runs(engine, CheckRunRecord, [run_id])
+    assert await reclaim_expired_runs(engine) == 0
+
+    async with AsyncSession(engine) as session:
+        row = await session.get(CheckRunRecord, run_id)
+        assert row is not None
+        assert row.status == "queued"
