@@ -144,7 +144,7 @@ async def resolve_repositories(
                 repo = await _resolve_static(source, client, cached_repo_meta)
                 return [repo] if repo is not None else []
             if isinstance(source, TeamRepoSource):
-                return await _resolve_team(source, client)
+                return await _resolve_team(source, client, cached_repo_meta)
             return []
 
     # Resolve all sources concurrently; gather preserves config order so the
@@ -232,14 +232,37 @@ async def _resolve_static(
         )
     except Exception:
         logger.warning(
-            "Failed to resolve static repo %s, skipping", source.repo, exc_info=True
+            "Failed to resolve static repo %s, keeping cached entry if any",
+            source.repo,
+            exc_info=True,
         )
-        return None
+        # A transient API error must not drop the repo: prune_stale_data would
+        # treat it as untracked and delete its cache, history and clone.
+        cached = (cached_repo_meta or {}).get(source.repo)
+        if cached is None or cached.archived:
+            return None
+        return _tracked_from_cache(cached, source.branches)
+
+
+def _tracked_from_cache(
+    cached: CachedRepository, branches: list[str] | None = None
+) -> TrackedRepository:
+    """Rebuild a tracked repo from its cached row when the API is unavailable."""
+    default_branch = cached.default_branch or "main"
+    return TrackedRepository(
+        full_name=cached.full_name,
+        default_branch=default_branch,
+        branches=branches
+        or json.loads(cached.branches_json or "[]")
+        or [default_branch],
+        source=cached.source,  # type: ignore[arg-type]
+    )
 
 
 async def _resolve_team(
     source: TeamRepoSource,
     client: GitHubClient,
+    cached_repo_meta: dict[str, CachedRepository] | None = None,
 ) -> list[TrackedRepository]:
     # team format: "org/team-slug"
     try:
@@ -252,9 +275,18 @@ async def _resolve_team(
         repos = await client.get_team_repos(org, team_slug)
     except Exception:
         logger.warning(
-            "Failed to fetch repos for team %s, skipping", source.team, exc_info=True
+            "Failed to fetch repos for team %s, keeping cached team repos",
+            source.team,
+            exc_info=True,
         )
-        return []
+        excluded = set(source.exclude)
+        return [
+            _tracked_from_cache(cached)
+            for cached in (cached_repo_meta or {}).values()
+            if cached.source == "team"
+            and not cached.archived
+            and cached.full_name not in excluded
+        ]
 
     exclude_set = set(source.exclude)
     resolved: list[TrackedRepository] = []

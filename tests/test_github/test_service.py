@@ -1201,3 +1201,50 @@ async def test_save_stats_to_db_retries_when_locked(tmp_path) -> None:
         await eng.dispose()
 
     assert [r.full_name for r in cached_repos] == ["owner/repo1"]
+
+
+# ---------------------------------------------------------------------------
+# resolve_repositories — transient failures must not drop cached repos
+# ---------------------------------------------------------------------------
+
+
+async def _seed_cached_repo(
+    engine: AsyncEngine, full_name: str, source: str = "static"
+) -> None:
+    async with AsyncSession(engine) as session:
+        session.add(
+            CachedRepository(
+                full_name=full_name,
+                default_branch="trunk",
+                source=source,
+                branches_json='["trunk"]',
+            )
+        )
+        await session.commit()
+
+
+@respx.mock
+async def test_static_repo_lookup_failure_keeps_cached_repo(
+    client: GitHubClient, engine: AsyncEngine
+) -> None:
+    await _seed_cached_repo(engine, "owner/repo1")
+    respx.get("https://api.github.com/repos/owner/repo1").mock(
+        return_value=httpx.Response(500)
+    )
+    repos = await resolve_repositories(_make_config(), client)
+    assert [r.full_name for r in repos] == ["owner/repo1"]
+    assert repos[0].default_branch == "trunk"
+
+
+@respx.mock
+async def test_team_lookup_failure_keeps_cached_team_repos(
+    client: GitHubClient, engine: AsyncEngine
+) -> None:
+    await _seed_cached_repo(engine, "org/team-repo", source="team")
+    respx.get("https://api.github.com/orgs/org/teams/core/repos").mock(
+        return_value=httpx.Response(500)
+    )
+    config = _make_config(repos=[TeamRepoSource(team="org/core")])
+    repos = await resolve_repositories(config, client)
+    assert [r.full_name for r in repos] == ["org/team-repo"]
+    assert repos[0].source == "team"
