@@ -203,6 +203,38 @@ script: |
       return "unpinned"
 
 
+  _SETUP_CACHE_VALUES = {
+      "setup-python": {"pip", "poetry", "pipenv", "uv"},
+      "setup-node": {"npm", "yarn", "pnpm"},
+      "setup-java": {"gradle", "maven", "sbt"},
+  }
+
+
+  def _cache_mechanism(uses: str, with_: object) -> str | None:
+      """Name the caching mechanism a step uses, if any.
+
+      Returns ``invalid-setup-python-cache-true`` for the value setup-python
+      rejects at runtime, so the caller can flag it instead of crediting it.
+      """
+      action = uses.split("@", 1)[0].lower()
+      inputs = with_ if isinstance(with_, dict) else {}
+      if action == "actions/cache" or action.startswith("actions/cache/"):
+          return "actions/cache"
+      if action == "swatinem/rust-cache":
+          return "rust-cache"
+      if action == "astral-sh/setup-uv":
+          return "setup-uv enable-cache" if inputs.get("enable-cache") in (True, "true") else None
+      name = action.rsplit("/", 1)[-1]
+      cache = inputs.get("cache")
+      if name == "setup-python" and cache in (True, "true"):
+          return "invalid-setup-python-cache-true"
+      if name == "setup-go" and cache in (True, "true"):
+          return "setup-go cache=true"
+      if name in _SETUP_CACHE_VALUES and str(cache).lower() in _SETUP_CACHE_VALUES[name]:
+          return f"{name} cache={str(cache).lower()}"
+      return None
+
+
   def _find_trigger_events(wf: dict) -> list[str]:
       on = wf.get("on", {})
       if isinstance(on, str):
@@ -761,18 +793,33 @@ script: |
           _r("8a. Third-party actions pinned to SHA or version", True, "N/A",
              summary or "no external actions used")
 
-      # 8b: Dependency caching
-      cache_keywords = ["actions/cache", "cache: true", "cache: npm", "Swatinem/rust-cache"]
-      has_cache = False
+      # 8b: Dependency caching, read from parsed steps (never from a dict repr)
+      cache_found: list[tuple[str, str]] = []  # (workflow file, mechanism)
+      cache_invalid: list[tuple[str, str]] = []
       for fname, wf in workflows.items():
-          text = str(wf)
-          if any(kw in text for kw in cache_keywords):
-              has_cache = True
-              break
+          for jdef in _jobs(wf).values():
+              if not isinstance(jdef, dict):
+                  continue
+              for step in jdef.get("steps") or []:
+                  if not isinstance(step, dict) or not isinstance(step.get("uses"), str):
+                      continue
+                  mech = _cache_mechanism(step["uses"], step.get("with"))
+                  if mech == "invalid-setup-python-cache-true":
+                      cache_invalid.append((fname, mech))
+                  elif mech:
+                      cache_found.append((fname, mech))
 
-      _r("8b. Dependency caching used (lint/test faster)", has_cache,
-         "N/A", "" if has_cache else "No caching detected — lint/test may be slower")
-      if not has_cache:
+      if cache_found:
+          fname, mech = cache_found[0]
+          _r("8b. Dependency caching used (lint/test faster)", True, fname, mech)
+      else:
+          _r("8b. Dependency caching used (lint/test faster)", False,
+             "N/A", "No caching detected — lint/test may be slower")
+          _sev("medium")
+      for fname, _ in cache_invalid[:1]:
+          _r("8b. setup-python cache value is valid", False, fname,
+             "cache: true is rejected by actions/setup-python — use "
+             "pip|poetry|pipenv|uv (https://github.com/actions/setup-python#caching-packages-dependencies)")
           _sev("medium")
 
       # ── 9. PERMISSIONS & SECRETS ─────────────────────────────────────────

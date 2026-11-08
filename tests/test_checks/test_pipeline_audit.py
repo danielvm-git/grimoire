@@ -272,3 +272,63 @@ def test_pinning_checks_reusable_workflow_refs(audit: Audit) -> None:
     row = _pin_row(audit.run())
     assert row[1] == "FAIL"
     assert "ci.yml@main" in row[3]
+
+
+# ── #58 / #60.4: rule 8b dependency caching ──────────────────────────────────
+
+
+def _cache_wf(step: str) -> str:
+    return PIPELINE + "      " + step.replace("\n", "\n      ") + "\n"
+
+
+@pytest.mark.parametrize(
+    ("step", "mechanism"),
+    [
+        ("- uses: actions/cache@v4\n  with:\n    path: ~/.cache", "actions/cache"),
+        (
+            "- uses: actions/setup-python@v5\n  with:\n    cache: pip",
+            "setup-python cache=pip",
+        ),
+        (
+            "- uses: actions/setup-python@v5\n  with:\n    cache: uv",
+            "setup-python cache=uv",
+        ),
+        (
+            "- uses: actions/setup-node@v4\n  with:\n    cache: 'npm'",
+            "setup-node cache=npm",
+        ),
+        (
+            "- uses: actions/setup-go@v5\n  with:\n    cache: true",
+            "setup-go cache=true",
+        ),
+        (
+            "- uses: astral-sh/setup-uv@v5\n  with:\n    enable-cache: true",
+            "setup-uv enable-cache",
+        ),
+        ("- uses: Swatinem/rust-cache@v2", "rust-cache"),
+    ],
+)
+def test_caching_recognised_mechanisms(audit: Audit, step: str, mechanism: str) -> None:
+    audit.workflow("test-build-release.yml", _cache_wf(step))
+    (row,) = audit.run().find("8b.")
+    assert row[1] == "PASS"
+    assert mechanism in row[3]
+    assert row[2] == "test-build-release.yml"
+
+
+def test_caching_setup_python_cache_true_is_not_caching(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        _cache_wf("- uses: actions/setup-python@v5\n  with:\n    cache: true"),
+    )
+    rows = audit.run().find("8b.")
+    assert [r[1] for r in rows] == ["FAIL", "FAIL"]
+    assert any("pip|poetry|pipenv|uv" in r[3] for r in rows)
+
+
+def test_caching_keyword_in_a_script_does_not_count(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml", _cache_wf("- run: echo 'cache: true actions/cache'")
+    )
+    (row,) = audit.run().find("8b.")
+    assert row[1] == "FAIL"
