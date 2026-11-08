@@ -94,9 +94,39 @@ script: |
       return [f for f in files if "staging" in f.stem.lower()]
 
 
-  def _permissions_block(wf: dict) -> dict | None:
-      """Return top-level permissions dict, or None."""
+  def _permissions_block(wf: dict) -> dict | str | None:
+      """Return the top-level permissions value, or None."""
       return wf.get("permissions")
+
+
+  def _describe_permissions(perm: object) -> str:
+      if isinstance(perm, dict):
+          return ", ".join(f"{k}:{v}" for k, v in perm.items()) or "none"
+      return str(perm)
+
+
+  def _permission_scope(wf: dict) -> tuple[bool, str]:
+      """Return (explicit, note) for a workflow's token scope.
+
+      A workflow is explicit when it has a top-level ``permissions:`` block, or when
+      every job declares its own. Job-level scope is narrower, so it is accepted.
+      """
+      perm = _permissions_block(wf)
+      if perm is not None:
+          return True, f"Scoped: {_describe_permissions(perm)}"
+      jobs = {k: v for k, v in _jobs(wf).items() if isinstance(v, dict)}
+      inheriting = [j for j, d in jobs.items() if d.get("permissions") is None]
+      if jobs and not inheriting:
+          detail = "; ".join(
+              f"{j}={_describe_permissions(d['permissions'])}" for j, d in jobs.items()
+          )
+          return True, f"Scoped (job-level): {detail}"
+      if inheriting:
+          return False, (
+              "Uses broad default token scope — no top-level block and "
+              f"job(s) without permissions: {', '.join(inheriting)}"
+          )
+      return False, "Missing — uses broad default token scope"
 
 
   def _has_concurrency(wf: dict) -> bool:
@@ -720,15 +750,10 @@ script: |
 
       # 9a: Explicit permissions block
       for fname, wf in workflows.items():
-          perm = _permissions_block(wf)
-          if perm is None:
-              _r(f"9a. Permissions block [{fname}]", False, fname,
-                 "Missing — uses broad default token scope")
+          explicit, note = _permission_scope(wf)
+          _r(f"9a. Permissions block [{fname}]", explicit, fname, note)
+          if not explicit:
               medium_fails += 1
-          else:
-              _r(f"9a. Permissions block [{fname}]", True, fname,
-                 f"Scoped: {', '.join(perm.keys())}" if isinstance(perm, dict) else str(perm))
-              break  # Only flag one
 
       # 9b: OIDC check (informational — cloud deploy only)
       has_oidc = False
