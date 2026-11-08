@@ -7,10 +7,14 @@ the same way the checks engine does, then reads the result table it prints.
 
 from __future__ import annotations
 
+import http.server
+import json
 import os
 import subprocess
 import sys
 import textwrap
+import threading
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -66,7 +70,7 @@ class AuditResult:
             if not line.startswith("| ") or line.startswith("| Check ID"):
                 continue
             cells = [c.strip() for c in line.strip("|").split("|", 3)]
-            if len(cells) == 4 and cells[1] in ("PASS", "FAIL"):
+            if len(cells) == 4 and cells[1] in ("PASS", "FAIL", "UNKNOWN"):
                 self.rows.append((cells[0], cells[1], cells[2], cells[3]))
 
     def find(self, prefix: str) -> list[tuple[str, str, str, str]]:
@@ -166,7 +170,7 @@ def _footer(stdout: str) -> str:
 def test_footer_names_only_rules_that_failed(audit: Audit) -> None:
     audit.workflow("test-build-release.yml", PIPELINE)
     result = audit.run()
-    failed_ids = {r[0].split(".")[0] for r in result.rows if r[1] == "FAIL"}
+    failed_ids = {r[0].split(".")[0] for r in result.rows if r[1] != "PASS"}
     passed_ids = {r[0].split(".")[0] for r in result.rows if r[1] == "PASS"}
     footer = _footer(result.stdout)
     assert "(rollback, smoke test, artifact reuse)" not in footer
@@ -179,7 +183,7 @@ def test_headline_counts_equal_fail_rows(audit: Audit) -> None:
     audit.workflow("test-build-release.yml", PIPELINE)
     audit.workflow("other.yml", PIPELINE)
     result = audit.run()
-    fails = len([r for r in result.rows if r[1] == "FAIL"])
+    fails = len([r for r in result.rows if r[1] != "PASS"])
     out = result.stdout
     assert f"Failed:       {fails}" in out
     counts = {
@@ -492,3 +496,148 @@ def test_push_trigger_still_required_on_primary_pipeline(audit: Audit) -> None:
         PIPELINE.replace("  push:\n    branches: [main]\n", ""),
     )
     assert audit.run().status("2a.") == ["FAIL"]
+
+
+# ── #52: rules 7a/7b read branch protection from the API ─────────────────────
+
+
+class FakeGitHub:
+    """Tiny GitHub API stand-in keyed by request path."""
+
+    def __init__(self, routes: dict[str, tuple[int, object]]) -> None:
+        self.routes = routes
+        self.paths: list[str] = []
+        outer = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                outer.paths.append(self.path)
+                status, body = outer.routes.get(
+                    self.path, (404, {"message": "Not Found"})
+                )
+                payload = json.dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args: object) -> None:
+                pass
+
+        self.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        return f"http://127.0.0.1:{self.server.server_port}"
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
+PROTECTION = "/repos/acme/widget/branches/main/protection"
+RULES = "/repos/acme/widget/rules/branches/main"
+
+
+@pytest.fixture
+def github() -> Iterator[Callable[[dict[str, tuple[int, object]]], FakeGitHub]]:
+    servers: list[FakeGitHub] = []
+
+    def make(routes: dict[str, tuple[int, object]]) -> FakeGitHub:
+        servers.append(FakeGitHub(routes))
+        return servers[-1]
+
+    yield make
+    for server in servers:
+        server.close()
+
+
+def _with_api(audit: Audit, fake: FakeGitHub, token: str = "t") -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.env.update({"GITHUB_API_URL": fake.url, "DEFAULT_BRANCH": "main"})
+    if token:
+        audit.env["GH_TOKEN"] = token
+
+
+def _env_run(audit: Audit) -> AuditResult:
+    return audit.run()
+
+
+def test_branch_protection_404_fails_both_rules(audit: Audit, github) -> None:
+    _with_api(audit, github({}))
+    result = _env_run(audit)
+    assert result.status("7a.") == ["FAIL"]
+    assert result.status("7b.") == ["FAIL"]
+    assert "not protected" in result.find("7a.")[0][3]
+
+
+def test_branch_protection_full_classic_protection_passes(audit: Audit, github) -> None:
+    body = {
+        "required_status_checks": {"contexts": ["test"], "checks": []},
+        "required_pull_request_reviews": {"required_approving_review_count": 1},
+        "enforce_admins": {"enabled": True},
+    }
+    _with_api(audit, github({PROTECTION: (200, body)}))
+    result = _env_run(audit)
+    assert result.status("7a.") == ["PASS"]
+    assert result.status("7b.") == ["PASS"]
+    assert "test" in result.find("7a.")[0][3]
+
+
+def test_branch_protection_without_required_checks_fails_7a(
+    audit: Audit, github
+) -> None:
+    body = {
+        "required_pull_request_reviews": {"required_approving_review_count": 1},
+        "enforce_admins": {"enabled": True},
+    }
+    _with_api(audit, github({PROTECTION: (200, body)}))
+    result = _env_run(audit)
+    assert result.status("7a.") == ["FAIL"]
+    assert result.status("7b.") == ["PASS"]
+
+
+def test_branch_protection_admins_may_push_directly_fails_7b(
+    audit: Audit, github
+) -> None:
+    body = {
+        "required_status_checks": {"contexts": ["test"]},
+        "required_pull_request_reviews": {},
+        "enforce_admins": {"enabled": False},
+    }
+    _with_api(audit, github({PROTECTION: (200, body)}))
+    assert _env_run(audit).status("7b.") == ["FAIL"]
+
+
+def test_branch_protection_rulesets_satisfy_both(audit: Audit, github) -> None:
+    rules = [
+        {"type": "pull_request", "parameters": {}},
+        {
+            "type": "required_status_checks",
+            "parameters": {"required_status_checks": [{"context": "test"}]},
+        },
+    ]
+    _with_api(audit, github({RULES: (200, rules)}))
+    result = _env_run(audit)
+    assert result.status("7a.") == ["PASS"]
+    assert result.status("7b.") == ["PASS"]
+
+
+def test_branch_protection_unreadable_is_unknown_never_pass(
+    audit: Audit, github
+) -> None:
+    _with_api(audit, github({PROTECTION: (403, {}), RULES: (403, {})}))
+    result = _env_run(audit)
+    assert result.status("7a.") == ["UNKNOWN"]
+    assert result.status("7b.") == ["UNKNOWN"]
+    assert "403" in result.find("7a.")[0][3]
+
+
+def test_branch_protection_without_token_is_unknown(audit: Audit, github) -> None:
+    fake = github({})
+    _with_api(audit, fake, token="")
+    result = _env_run(audit)
+    assert result.status("7a.") == ["UNKNOWN"]
+    assert fake.paths == []

@@ -14,9 +14,12 @@ script: |
   """CI/CD Pipeline Audit — checks every repo against the solo-dev checklist."""
   from __future__ import annotations
 
+  import json
   import os
   import re
   import sys
+  import urllib.error
+  import urllib.request
   from pathlib import Path
   from collections import defaultdict
 
@@ -31,8 +34,12 @@ script: |
   _ALL_RESULTS: list[dict] = []  # accumulates (check_id, passed, file_ref, notes)
 
 
-  def _r(check_id: str, passed: bool, file_ref: str = "", notes: str = "") -> dict:
-      entry = dict(check_id=check_id, passed=passed, file_ref=file_ref, notes=notes)
+  def _r(check_id: str, passed: bool, file_ref: str = "", notes: str = "",
+         unknown: bool = False) -> dict:
+      """Record a result. ``unknown`` marks a rule that could not be verified; it
+      never counts as a pass."""
+      entry = dict(check_id=check_id, passed=passed and not unknown,
+                   file_ref=file_ref, notes=notes, unknown=unknown)
       _ALL_RESULTS.append(entry)
       return entry
 
@@ -257,6 +264,69 @@ script: |
       return seen
 
 
+  def _api_get(url: str, token: str) -> tuple[int, object]:
+      """GET a GitHub API URL. Returns (status, json); status 0 on network error."""
+      req = urllib.request.Request(url, headers={
+          "Authorization": f"Bearer {token}",
+          "Accept": "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+      })
+      try:
+          with urllib.request.urlopen(req, timeout=20) as resp:
+              return resp.status, json.loads(resp.read() or b"null")
+      except urllib.error.HTTPError as exc:
+          return exc.code, None
+      except Exception as exc:  # noqa: BLE001 — surfaced as "unknown", never a pass
+          return 0, str(exc)
+
+
+  def _branch_protection() -> tuple[dict | None, list | None, str]:
+      """Return (classic, rulesets, problem). ``problem`` is set when unreadable."""
+      repo = os.environ.get("REPO_FULL_NAME", "")
+      token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+      branch = os.environ.get("DEFAULT_BRANCH") or os.environ.get("BRANCH") or "main"
+      if "/" not in repo:
+          return None, None, "REPO_FULL_NAME is not set"
+      if not token:
+          return None, None, "no GH_TOKEN; cannot read branch protection"
+      base = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+      c_status, classic = _api_get(f"{base}/repos/{repo}/branches/{branch}/protection", token)
+      r_status, rules = _api_get(f"{base}/repos/{repo}/rules/branches/{branch}", token)
+      if c_status not in (200, 404) and r_status != 200:
+          return None, None, (
+              f"protection API HTTP {c_status}, rulesets API HTTP {r_status}; "
+              "check the token's administration read permission"
+          )
+      return (
+          classic if c_status == 200 and isinstance(classic, dict) else None,
+          rules if r_status == 200 and isinstance(rules, list) else None,
+          "",
+      )
+
+
+  def _protection_findings(classic: dict | None, rules: list | None) -> tuple[list[str], str | None]:
+      """Return (required check names, no-direct-push problem or None)."""
+      rules = rules or []
+      checks: list[str] = []
+      if classic:
+          rsc = classic.get("required_status_checks") or {}
+          checks += list(rsc.get("contexts") or [])
+          checks += [c.get("context", "") for c in rsc.get("checks") or [] if isinstance(c, dict)]
+      for rule in rules:
+          if isinstance(rule, dict) and rule.get("type") == "required_status_checks":
+              params = rule.get("parameters") or {}
+              checks += [c.get("context", "") for c in params.get("required_status_checks") or []
+                         if isinstance(c, dict)]
+      checks = sorted({c for c in checks if c})
+      if any(isinstance(r, dict) and r.get("type") == "pull_request" for r in rules):
+          return checks, None
+      if classic and classic.get("required_pull_request_reviews") is not None:
+          if (classic.get("enforce_admins") or {}).get("enabled"):
+              return checks, None
+          return checks, "pull request required but admins can push directly (enforce_admins is off)"
+      return checks, "does not require a pull request"
+
+
   def _find_trigger_events(wf: dict) -> list[str]:
       on = wf.get("on", {})
       if isinstance(on, str):
@@ -478,7 +548,7 @@ script: |
               lint_name = lint_jobs[0]
               test_has_lint = False
               for tj in test_jobs:
-                  if lint_name in deps[tj]:
+                  if lint_name in _reachable(deps, tj):
                       test_has_lint = True
                       break
               _r("3b. test needs: lint", test_has_lint, ci_cd[0].name,
@@ -777,11 +847,30 @@ script: |
           if not has_fail_on_unhealthy and deploy_wf:
               _sev("medium")
 
-      # ── 7. BRANCH PROTECTION (informational only) ────────────────────────
-      _r("7a. Branch protection — status checks", True, "N/A",
-         "Cannot verify from YAML — check repo settings manually")
-      _r("7b. Branch protection — no direct push", True, "N/A",
-         "Cannot verify from YAML — check repo settings manually")
+      # ── 7. BRANCH PROTECTION (read from the GitHub API) ──────────────────
+      # A rule that cannot be verified is UNKNOWN, never PASS.
+      classic, ruleset, bp_problem = _branch_protection()
+      if bp_problem:
+          for rid, title in (("7a", "status checks"), ("7b", "no direct push")):
+              _r(f"{rid}. Branch protection — {title}", False, "N/A",
+                 f"Could not verify: {bp_problem}", unknown=True)
+              _sev("medium")
+      elif classic is None and not ruleset:
+          for rid, title in (("7a", "status checks"), ("7b", "no direct push")):
+              _r(f"{rid}. Branch protection — {title}", False, "N/A",
+                 "Default branch is not protected")
+              _sev("high")
+      else:
+          bp_checks, bp_push = _protection_findings(classic, ruleset)
+          _r("7a. Branch protection — status checks", bool(bp_checks), "N/A",
+             f"Required checks: {', '.join(bp_checks)}" if bp_checks
+             else "Protected, but no required status checks")
+          if not bp_checks:
+              _sev("high")
+          _r("7b. Branch protection — no direct push", bp_push is None, "N/A",
+             "Pull request required" if bp_push is None else f"Direct push possible: {bp_push}")
+          if bp_push is not None:
+              _sev("high")
 
       # ── 8. SUPPLY CHAIN / HYGIENE ───────────────────────────────────────
 
@@ -915,11 +1004,11 @@ script: |
       print()
 
       # Print table
-      print(f"| {'Check ID':<65s} | {'Status':<6s} | {'File':<30s} | Notes")
-      print(f"|{'-'*65}|{'------':<6s}|{'-'*30}|-------")
+      print(f"| {'Check ID':<65s} | {'Status':<7s} | {'File':<30s} | Notes")
+      print(f"|{'-'*65}|{'-------':<7s}|{'-'*30}|-------")
       for r in _ALL_RESULTS:
-          status = "PASS" if r["passed"] else "FAIL"
-          print(f"| {r['check_id']:<65s} | {status:<6s} | {r['file_ref']:<30s} | {r['notes']}")
+          status = "PASS" if r["passed"] else ("UNKNOWN" if r.get("unknown") else "FAIL")
+          print(f"| {r['check_id']:<65s} | {status:<7s} | {r['file_ref']:<30s} | {r['notes']}")
       print()
 
       def _list(level: str) -> None:
