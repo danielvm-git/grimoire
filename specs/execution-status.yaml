@@ -117,6 +117,7 @@ development_status:
   e13s02: done
   e13s03: done
   e13s04: done
+  e13s05: done
 
 # Post-epic review gate — an epic is only truly closed once a full review pass
 # finds no new findings. Evidence: specs/verifications/<epic>-verify.yaml

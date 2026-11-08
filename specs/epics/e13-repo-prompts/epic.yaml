@@ -40,3 +40,13 @@ stories:
   verify:
   - uv run pytest tests/test_github tests/test_web -q -k "run_at"
   spec: e13s04.md
+- id: e13s05
+  title: "Run all checks for one repo"
+  status: done
+  bcps: 3
+  description: "The Checks card runs every enabled check against one repository, skips checks already running, and counts not-run checks separately from passing ones."
+  tasks: e13s05-tasks.yaml
+  verify:
+  - uv run pytest tests/test_checks/test_repo_run.py -q
+  - uv run pytest tests/test_web/test_router.py -q -k TestRepoChecksRun
+  spec: e13s05.md

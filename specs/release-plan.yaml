@@ -117,17 +117,18 @@ epics:
     bcps: 12
     status: done
 
+  - id: e13
+    title: "Repo Pendency Prompts"
+    capsule_dir: specs/epics/e13-repo-prompts
+    file: specs/epics/e13-repo-prompts/epic.yaml
+    wsjf: 88
+    bcps: 15
+    status: done
+    released_in: "v0.14.0"
+
 bugs:
   total: 15
   fixed: 15
   deferred: 0
   wontfix: 0
   registry: specs/bugs/registry.yaml
-
-  - id: e13
-    title: "Repo Pendency Prompts"
-    capsule_dir: specs/epics/e13-repo-prompts
-    file: specs/epics/e13-repo-prompts/epic.yaml
-    wsjf: 88
-    bcps: 12
-    status: done

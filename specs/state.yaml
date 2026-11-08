@@ -55,16 +55,33 @@ epic_cycle:
       (e2e-session-transaction-warning).
 
 release:
-  target_version: "0.12.5"
-  last_tag: "v0.12.5"
-  last_publish: "0.12.5"
+  target_version: "0.14.0"
+  last_tag: "v0.14.0"
+  last_publish: "0.14.0"
   ci_verified: true
-  ci_run: 42416768282
-  pr: 44
-  commit: "72c2c20"
+  ci_run: 42423881258
+  ci_runs_verified:
+    - "Test Build Release Docs #42423881258 — success (9389321)"
+    - "Deploy #42423990410 — success (9389321)"
+    - "Deploy Docs #42423959325 — success (9389321)"
+  pr: 48
+  commit: "9389321"
   changelog_entry: true
   version_files_consistent: true
-  bug: BUG-2026-11-07T000000
+  bug: null
+  note: >
+    PR #48 (feat(web): run all checks for one repo) was merged to main as 41bc2d8 and
+    tagged v0.14.0. The release commit is 9389321 (version files 0.14.0). The feature
+    branch was already merged before release-branch ran, so this run verified and
+    recorded the release instead of re-merging it. Story e13s05 was implemented with
+    the #48 code but missing from the e13 capsule; it is recorded in this commit.
+  residual:
+    - id: egg-info-version-drift
+      detail: >
+        src/grimoire_dashboard.egg-info/PKG-INFO is tracked but the release job only
+        updates CHANGELOG.md, pyproject.toml and uv.lock, so the committed metadata
+        still reports 0.12.4 while pyproject is 0.14.0. Not committed here (it is
+        generated build output); consider untracking the egg-info directory.
 
 # Build&Ship cycle (2026-11-06) - all pending work landed and shipped.
 ship:
@@ -105,13 +122,13 @@ ship:
 
 git:
   branch: main
-  hash: "8fd23f7"
+  hash: "9389321"
   pushed: true
   clean: true
   worktrees: 1
 
 handoff:
-  last_step_completed: "fix_bug BUG-2026-11-07T000000 shipped as v0.12.5 (PR #44, merge 72c2c20, CI run 42416768282 all green). SQLite now runs in WAL mode with a 15s busy_timeout, transient SQLITE_BUSY is retried, and ETag cache failures can no longer abort a GitHub fetch. Feature branch deleted and pruned; main clean at 8fd23f7. Previous build&ship entry follows."
+  last_step_completed: "release-branch verified and recorded v0.14.0. PR #48 (feat/repo-checks-run) was already merged as 41bc2d8 and tagged v0.14.0; the release commit is 9389321. just check is green (559 passed, 88% coverage, zero lint/type errors) and main CI is green (Test Build Release Docs, Deploy, Deploy Docs). Recorded the missing e13s05 story, refreshed the security review for the run-checks diff, and cleaned up the feature branch/worktree. Previous build&ship entry follows."
 
   previous_cycle: "Build&Ship cycle completed: 3 PRs merged (#39, #40, #41), CI repaired (missing uv install in release job), all pending work shipped as v0.12.1 through v0.12.3. Main is clean at 1f0bff6, 514 tests passing with zero warnings. All registry entries closed. One residual noted: orphan tag v0.12.2 (release job died after big-release tagged but before version commit)."
   open_decisions:
@@ -130,6 +147,18 @@ handoff:
     - gate: "build-ship-phase-5-verify"
       decision: "All phases ended green: clean tree, no unmerged work, main==origin/main, Preflight green (514 passed, 0 warnings)."
       reason: "Standing gate requirement."
+    - gate: "release-already-merged-v0-14-0"
+      decision: "feat/repo-checks-run (0d5b42b) was already squash-merged as PR #48 (41bc2d8) and released as v0.14.0 before release-branch ran. Verified tree equality for src/tests/docs, confirmed the tag and green CI, and did not create a duplicate merge."
+      reason: "Re-merging an already released branch would add no code and would risk a second version bump. Verify-then-clean is the honest path."
+    - gate: "traceability-e13s05-missing"
+      decision: "tests/test_checks/test_repo_run.py is tagged e13s05 and shipped with PR #48, but e13s05 was absent from execution-status.yaml and the e13 capsule. Added the story to both plus a spec and tasks file in this bookkeeping commit."
+      reason: "gate-trace reported CONCERNS for a dark story; the tag is in the code, so the status files were wrong, not the implementation. Fixed rather than waived."
+    - gate: "audit-gate-unavailable"
+      decision: "scripts/lib/assert-epic-gate.sh and specs/AUDIT_LATEST.md do not exist in this repo; the release audit gate is WAIVED. Preflight (just check) and the security review are the enforced gates."
+      reason: "The bigpowers audit tooling is not installed here (state.yaml tooling_note). No gate command exists to run."
+    - gate: "security-review-freshness"
+      decision: "specs/security/REVIEW.md did not cover the run-checks diff. Appended a branch review for feat/repo-checks-run: whitelisted repo lookup, operator-authored check scripts, bounded concurrency, no new secrets or injection surface. Verdict PASS, zero findings at confidence >= 8."
+      reason: "The release gate requires a security review matching the branch diff."
   required_reading:
     - specs/state.yaml
     - specs/bugs/registry.yaml
@@ -164,3 +193,22 @@ e13:
     - gate: "respond-review-e13"
       decision: "Fixed review findings: clipboard fallback and error state, double-click restore, longer code fence for check output, vacuous test, reuse _parse_dt, added escaping/multi-branch tests. Kept the removal of the stale percentage header (it follows the Claude Design handoff; threshold coloring remains in the stats bar)."
       reason: "Removed percentage is a design choice already recorded in spec 06 section 6.4; reviewer asked to confirm intent."
+  release_v0_14_0:
+    epic: e13
+    pr: 48
+    merge_commit: "41bc2d8"
+    release_commit: "9389321"
+    tag: "v0.14.0"
+    stories:
+      - e13s01
+      - e13s02
+      - e13s03
+      - e13s04
+      - e13s05
+    ci_verified: true
+    verification:
+      tests: "559 passed"
+      coverage: "88%"
+      lint: "clean (ruff, pyright, codespell, vulture)"
+      conventional_commits: true
+      ai_attribution: "none"
