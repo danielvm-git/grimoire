@@ -349,3 +349,33 @@ async def test_list_checks_includes_targets(tmp_path: Path) -> None:
     ]
 
     await db_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_run_repo_checks_skips_disabled_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    db_engine = await get_engine(str(tmp_path / "test.db"))
+    await create_tables(db_engine)
+    disabled = _check("sec", "Security")
+    disabled.enabled = False
+    handlers = MCPToolHandlers(
+        engine=db_engine,
+        checks=[_check("lint", "Linting"), disabled],
+        repos=[_repo()],
+        workspace=_workspace(tmp_path),
+    )
+    ran: list[str] = []
+
+    async def fake_run(*args, **kwargs):
+        ran.append(kwargs["check"].slug)
+        return []
+
+    monkeypatch.setattr("grimoire.mcp.tools.run_check_for_all_targets", fake_run)
+
+    await handlers.run_repo_checks("lucabello/grimoire")
+    await handlers.get_repo_checks_status("lucabello/grimoire", refresh=True)
+    assert set(ran) == {"lint"}
+
+    with pytest.raises(ValueError, match="not found or disabled"):
+        await handlers.run_repo_checks("lucabello/grimoire", check_slug="sec")

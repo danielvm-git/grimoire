@@ -92,9 +92,13 @@ class MCPToolHandlers:
         self.repos = repos
         self.workspace = workspace
 
+    def _enabled_checks(self) -> list[CheckDefinition]:
+        """Checks an operator has not disabled (web, cron and refresh honor this too)."""
+        return [check for check in self.checks if check.enabled]
+
     async def _refresh_checks_for_repo(self, repo: str) -> None:
         """Re-run every check for one repository, tolerating concurrent runs."""
-        for check in self.checks:
+        for check in self._enabled_checks():
             try:
                 await run_check_for_all_targets(
                     check=check,
@@ -190,12 +194,14 @@ class MCPToolHandlers:
         validate_repo(repo)
         require_tracked_repo(repo, self.repos)
 
-        target_checks = self.checks
+        target_checks = self._enabled_checks()
         if check_slug:
             validate_check_slug(check_slug)
-            target_checks = [c for c in self.checks if c.slug == check_slug]
+            target_checks = [c for c in target_checks if c.slug == check_slug]
             if not target_checks:
-                raise ValueError(f"Check with slug '{check_slug}' not found.")
+                raise ValueError(
+                    f"Check with slug '{check_slug}' not found or disabled."
+                )
 
         details = [await self._execute_check(check, repo) for check in target_checks]
         return {
