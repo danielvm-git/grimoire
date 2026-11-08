@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.16.1] - 2026-11-08
+
+### Bug Fixes
+
+- **checks:** audit re-execs under the server interpreter without PyYAML ([#67](https://github.com/danielvm-git/grimoire/issues/67)) ([042336b](https://github.com/danielvm-git/grimoire/commit/042336b589225b70eb23cd44a94f2d40b8c2134c))
+
 ## [0.16.0] - 2026-11-08
 
 ### Features
