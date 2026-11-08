@@ -1028,3 +1028,26 @@ class TestRepoChecksRun:
     ) -> None:
         resp = await web_client_with_checks.get("/repo/acme/frontend")
         assert "not run" in resp.text
+
+
+def test_drop_untargeted_results_discards_retargeted_check_rows() -> None:
+    from grimoire.targeting import TargetSpec
+    from grimoire.web.router import _drop_untargeted_results
+
+    class _Check:
+        def __init__(self, slug: str, targets: TargetSpec) -> None:
+            self.slug = slug
+            self.targets = targets
+
+    listed = _Check("listed", TargetSpec(list=["a/y"]))
+    scripted = _Check("scripted", TargetSpec(script="true"))
+    old = {"id": 1, "passed": False}
+    results = {
+        ("listed", "a/x", "main"): old,
+        ("listed", "a/y", "main"): old,
+        ("scripted", "a/x", "main"): old,
+    }
+    kept = _drop_untargeted_results(
+        [listed, scripted], {"listed": {("a/y", "main")}, "scripted": set()}, results
+    )
+    assert set(kept) == {("listed", "a/y", "main"), ("scripted", "a/x", "main")}
