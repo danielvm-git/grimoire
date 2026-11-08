@@ -24,6 +24,7 @@ from grimoire.database import (
     fail_run,
     mark_run_running,
     start_run_heartbeat,
+    touch_queued_runs,
 )
 from grimoire.models import CheckResult
 from grimoire.observability.metrics import update_check_metrics
@@ -472,8 +473,22 @@ async def run_reserved_checks_for_repo(
                 clear_check_running(check.slug)
                 progress.completed += 1
 
+    async def _keep_queued_alive() -> None:
+        interval = max(1.0, RUN_LEASE_SECONDS / 3)
+        run_ids = [rid for _, rid in plan.reserved]
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await touch_queued_runs(engine, CheckRunRecord, run_ids)
+            except Exception:  # noqa: BLE001 - must not kill the batch
+                logger.exception("Failed to refresh queued check runs")
+
+    keeper = asyncio.create_task(_keep_queued_alive())
     try:
         await asyncio.gather(*(_one(c, rid) for c, rid in plan.reserved))
     finally:
+        keeper.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await keeper
         _running_repos.pop(plan.repo_full_name, None)
     return results

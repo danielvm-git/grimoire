@@ -437,6 +437,26 @@ def start_run_heartbeat(
     return asyncio.create_task(_heartbeat_loop(engine, model, run_id, interval))
 
 
+async def touch_queued_runs(
+    engine: AsyncEngine, model: Any, run_ids: list[int]
+) -> None:
+    """Refresh ``started_at`` of still-queued runs so the sweep leaves them alone.
+
+    Runs wait for a concurrency slot while queued; without this a batch larger
+    than the slot count is reclaimed as interrupted before it ever starts.
+    """
+    if not run_ids:
+        return
+    statement = (
+        update(model)
+        .where(model.id.in_(run_ids), model.status == RunState.QUEUED.value)
+        .values(started_at=_utcnow())
+    )
+    async with AsyncSession(engine) as session:
+        await exec_raw(session, statement)
+        await session.commit()
+
+
 async def reclaim_expired_runs(engine: AsyncEngine) -> int:
     """Mark runs whose owner stopped heartbeating as 'interrupted'.
 
