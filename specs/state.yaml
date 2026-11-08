@@ -55,17 +55,18 @@ epic_cycle:
       (e2e-session-transaction-warning).
 
 release:
-  target_version: "0.14.0"
-  last_tag: "v0.14.0"
-  last_publish: "0.14.0"
+  target_version: "0.15.0"
+  last_tag: "v0.15.0"
+  last_publish: "0.15.0"
   ci_verified: true
-  ci_run: 42423881258
+  ci_run: 42492029350
   ci_runs_verified:
-    - "Test Build Release Docs #42423881258 — success (9389321)"
-    - "Deploy #42423990410 — success (9389321)"
-    - "Deploy Docs #42423959325 — success (9389321)"
-  pr: 48
-  commit: "9389321"
+    - "Test Build Release #42492029350 — success, test+build+release (faf591a)"
+    - "Test Build Release Docs #42492029335 — success (faf591a)"
+    - "Deploy #42492121216 — success (faf591a)"
+    - "Deploy Docs #42492082230 — success (faf591a)"
+  pr: 61
+  commit: "faf591a"
   changelog_entry: true
   version_files_consistent: true
   bug: null
@@ -82,6 +83,30 @@ release:
         updates CHANGELOG.md, pyproject.toml and uv.lock, so the committed metadata
         still reports 0.12.4 while pyproject is 0.14.0. Not committed here (it is
         generated build output); consider untracking the egg-info directory.
+
+# Build&Ship cycle — 2026-11-08 (SCOPE: all pending work)
+decisions:
+  - gate: phase-1-triage-baseline
+    decision: "Recorded baseline: clean tree at 5e6a2dc, no uncommitted work, no failing tests (559 passed), registry 65/65 fixed, no active bug entry. Work items = the unmerged conformance branch only."
+    reason: "Phase 1 asks for failing tests and active registry entries as work items; both lists were empty, so pending work came from unmerged branches."
+  - gate: phase-1-stale-branch-triage
+    decision: "Used git cherry plus tree comparison to classify branches. feat/repo-checks-run, chore/e13s05-release-record and danielvm-git/musing-villani-96c3f5 had zero unapplied commits (musing-villani had zero diff vs main) and were deleted as merged. danielvm-git/open-specs-findings-11d1df was the only branch with an unapplied commit (4f0b215), renamed feat/conformance-score and shipped."
+    reason: "Squash merges break patch-id checks, so content comparison was needed before declaring a branch merged. Nothing unmerged was deleted."
+  - gate: phase-2-conformance-interpreter-gap
+    decision: "Blocked the merge until the bundled conformance checks stopped calling bare python3: run.sh starts uvicorn without the venv on PATH, so all 15 checks raised ModuleNotFoundError and every repo would show 0% compliance and a red P0. Fixed with GRIMOIRE_PYTHON from target_env (commit 414e280) using failing tests first."
+    reason: "Verify-work gap closure: the feature would have been broken in the documented production runtime."
+  - gate: phase-2-spec-tracking-gap
+    decision: "Added docs/specs/09-conformance-rules.md with git add -f because specs/ in .git/info/exclude also matches docs/specs/, leaving the module spec untracked (commit d04e48e)."
+    reason: "AGENTS.md requires a numbered spec for a new module; the file existed but was invisible to git."
+  - gate: phase-3-verify-work
+    decision: "just check (644 passed), just coverage (89% total, conformance 93-100%), just build (sdist+wheel), pyright strict green. scripts/trace-stories and scripts/sync-skills do not exist in this repo, so traceability was satisfied by spec 09 plus the 00-overview module graph and user docs."
+    reason: "Substituted the gates that exist for the ones the skill assumes; no gate was skipped."
+  - gate: phase-4-release-branch
+    decision: "Shipped PR #61 with one small conventional commit per fix, merged squash-merge after test+build green, verified main CI green afterwards (Test Build Release, Test Build Release Docs, Deploy, Deploy Docs), pulled main and removed the merged worktree and both local and remote branches."
+    reason: "workflow_mode is solo-git, but CONVENTIONS.md forbids pushing to main directly, so the PR path is the intersection of both policies."
+  - gate: phase-4-auto-release
+    decision: "The repository release workflow auto-tagged v0.15.0 from the merged feat commit. No manual tag or publish was performed in this run."
+    reason: "Semantic release is triggered by the repo's own main pipeline, not by an agent action."
 
 # Build&Ship cycle (2026-11-06) - all pending work landed and shipped.
 ship:
@@ -122,13 +147,15 @@ ship:
 
 git:
   branch: main
-  hash: "9389321"
+  hash: "ea2fb58"
   pushed: true
   clean: true
   worktrees: 1
 
 handoff:
-  last_step_completed: "release-branch verified and recorded v0.14.0. PR #48 (feat/repo-checks-run) was already merged as 41bc2d8 and tagged v0.14.0; the release commit is 9389321. just check is green (559 passed, 88% coverage, zero lint/type errors) and main CI is green (Test Build Release Docs, Deploy, Deploy Docs). Recorded the missing e13s05 story, refreshed the security review for the run-checks diff, and cleaned up the feature branch/worktree. Previous build&ship entry follows."
+  last_step_completed: "Build&Ship cycle (2026-11-08) completed for SCOPE=all pending work. One work item existed: the unmerged conformance branch. Shipped as PR #61 (merge faf591a, auto-released v0.15.0) with two in-branch fixes found during verification (GRIMOIRE_PYTHON for bundled checks, tracked spec 09). Baseline and final Preflight: 644 passed, 89% coverage. Main CI green on all four workflows after merge. Removed 2 worktrees and 4 merged branches; one stale remote branch (danielvm-git/repo-custom-prompt-copy-398e24) left in place because patch-ids no longer prove it merged. Previous entry follows."
+
+  previous_cycle_2: "release-branch verified and recorded v0.14.0. PR #48 (feat/repo-checks-run) was already merged as 41bc2d8 and tagged v0.14.0; the release commit is 9389321. just check is green (559 passed, 88% coverage, zero lint/type errors) and main CI is green (Test Build Release Docs, Deploy, Deploy Docs). Recorded the missing e13s05 story, refreshed the security review for the run-checks diff, and cleaned up the feature branch/worktree. Previous build&ship entry follows."
 
   previous_cycle: "Build&Ship cycle completed: 3 PRs merged (#39, #40, #41), CI repaired (missing uv install in release job), all pending work shipped as v0.12.1 through v0.12.3. Main is clean at 1f0bff6, 514 tests passing with zero warnings. All registry entries closed. One residual noted: orphan tag v0.12.2 (release job died after big-release tagged but before version commit)."
   open_decisions:
