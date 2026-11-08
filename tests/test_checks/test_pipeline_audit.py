@@ -404,3 +404,91 @@ def test_deploy_auth_id_token_read_is_not_oidc(audit: Audit) -> None:
     audit.workflow("test-build-release.yml", PIPELINE)
     audit.workflow("deploy.yml", _deploy(perms="permissions:\n  id-token: none\n"))
     assert _auth_row(audit.run())[1] == "FAIL"
+
+
+# ── #60.1 / #60.2: sequencing and triggers ───────────────────────────────────
+
+
+def _graph(**needs: list[str]) -> str:
+    out = PIPELINE.split("jobs:")[0] + "jobs:\n"
+    for job, deps in needs.items():
+        name = job.replace("_", "-")
+        out += f"  {name}:\n    runs-on: ubuntu-22.04\n"
+        if deps:
+            out += f"    needs: [{', '.join(d.replace('_', '-') for d in deps)}]\n"
+        out += "    steps:\n      - run: echo\n"
+    return out
+
+
+def test_sequencing_build_reaches_test_through_intermediate_jobs(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        _graph(
+            lint=[],
+            test_sqlite=["lint"],
+            test_ui=["lint"],
+            verify=["test_sqlite"],
+            release=["verify", "test_ui"],
+            build=["release"],
+        ),
+    )
+    result = audit.run()
+    assert result.status("3c.") == ["PASS"]
+    assert result.status("3d.") == ["PASS"]
+
+
+def test_sequencing_classic_build_then_release_still_passes(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        _graph(lint=[], test=["lint"], build=["test"], release=["build"]),
+    )
+    result = audit.run()
+    assert result.status("3c.") == ["PASS"]
+    assert result.status("3d.") == ["PASS"]
+
+
+def test_sequencing_build_with_no_path_to_test_is_critical(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        _graph(lint=[], test=["lint"], build=[], release=["build"]),
+    )
+    result = audit.run()
+    assert result.status("3c.") == ["FAIL"]
+    assert result.returncode == 2
+
+
+def test_sequencing_unrelated_build_and_release_fail_3d(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        _graph(test=[], build=["test"], release=["test"]),
+    )
+    assert audit.run().status("3d.") == ["FAIL"]
+
+
+AUX = """\
+name: PR review
+on:
+  pull_request:
+  issue_comment:
+jobs:
+  review:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo
+"""
+
+
+def test_push_trigger_not_required_on_auxiliary_workflows(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow("pr-review.yaml", AUX)
+    rows = {r[0]: r[1] for r in audit.run().find("2a.")}
+    assert rows["2a. push trigger [test-build-release.yml]"] == "PASS"
+    assert all(v == "PASS" for v in rows.values())
+
+
+def test_push_trigger_still_required_on_primary_pipeline(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        PIPELINE.replace("  push:\n    branches: [main]\n", ""),
+    )
+    assert audit.run().status("2a.") == ["FAIL"]

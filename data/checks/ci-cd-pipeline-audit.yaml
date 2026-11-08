@@ -245,6 +245,18 @@ script: |
       return None
 
 
+  def _reachable(deps: dict[str, set[str]], job: str) -> set[str]:
+      """Every job ``job`` depends on, directly or through other jobs."""
+      seen: set[str] = set()
+      stack = list(deps.get(job, ()))
+      while stack:
+          cur = stack.pop()
+          if cur not in seen:
+              seen.add(cur)
+              stack.extend(deps.get(cur, ()))
+      return seen
+
+
   def _find_trigger_events(wf: dict) -> list[str]:
       on = wf.get("on", {})
       if isinstance(on, str):
@@ -369,10 +381,13 @@ script: |
               _r(f"2a. trigger [{fname}]", valid_trigger, fname, "" if valid_trigger else "Deploy workflow missing workflow_run or push trigger")
               if not valid_trigger:
                   _sev("high")
-          else:
+          elif ci_cd and fname == ci_cd[0].name:
               _r(f"2a. push trigger [{fname}]", has_push, fname, "" if has_push else "Primary workflow missing push trigger")
               if not has_push:
                   _sev("high")
+          else:
+              _r(f"2a. push trigger [{fname}]", True, fname,
+                 f"Auxiliary workflow — push not required (on: {', '.join(events)})")
 
           if ci_cd and fname == ci_cd[0].name:
               _r(f"2b. pull_request trigger [{fname}]", has_pr, fname, "")
@@ -472,32 +487,31 @@ script: |
               if not test_has_lint:
                   _sev("high")
 
-          # 3c: build has needs: test
+          # 3c: build depends on a test job, directly or through other jobs
           if build_jobs and test_jobs:
-              test_name = test_jobs[0]
-              build_has_test = False
-              for bj in build_jobs:
-                  if test_name in deps[bj]:
-                      build_has_test = True
-                      break
+              reached = [t for t in test_jobs if any(t in _reachable(deps, bj) for bj in build_jobs)]
+              build_has_test = bool(reached)
               _r("3c. build needs: test", build_has_test, ci_cd[0].name,
-                 f"build={build_jobs[0]}, test={test_name}" if build_has_test
+                 f"build={build_jobs[0]}, test={reached[0]} (via needs chain)" if build_has_test
                  else "Build does not depend on test — could run before tests pass")
               if not build_has_test:
                   _sev("critical")
 
-          # 3d: release has needs: build
+          # 3d: release and build are ordered either way: build-then-release, or
+          # tag-then-build (release computes the version, build compiles the tag)
           if release_jobs and build_jobs:
-              build_name = build_jobs[0]
-              rel_has_build = False
-              for rj in release_jobs:
-                  if build_name in deps[rj]:
-                      rel_has_build = True
-                      break
-              _r("3d. release needs: build", rel_has_build, ci_cd[0].name,
-                 f"release={release_jobs[0]}, build={build_name}" if rel_has_build
-                 else "Release does not depend on build")
-              if not rel_has_build:
+              build_first = any(
+                  bj in _reachable(deps, rj) for rj in release_jobs for bj in build_jobs
+              )
+              release_first = any(
+                  rj in _reachable(deps, bj) for rj in release_jobs for bj in build_jobs
+              )
+              ordered = build_first or release_first
+              _r("3d. release and build are ordered", ordered, ci_cd[0].name,
+                 (f"release={release_jobs[0]}, build={build_jobs[0]} "
+                  f"({'build then release' if build_first else 'tag then build'})")
+                 if ordered else "Release and build have no needs: relationship")
+              if not ordered:
                   _sev("high")
 
           # 3e: No continue-on-error on gate jobs
