@@ -228,9 +228,7 @@ async def run_check(
     except asyncio.TimeoutError:
         output = f"Timed out after {_DEFAULT_TIMEOUT}s"
         passed = False
-        if proc is not None:
-            proc.kill()
-            await proc.wait()
+        await terminate_process(proc)
     except OSError as exc:
         output = f"Failed to execute: {exc}"
         passed = False

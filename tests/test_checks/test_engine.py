@@ -142,6 +142,38 @@ class TestRunCheck:
         finally:
             eng._DEFAULT_TIMEOUT = original
 
+    async def test_timeout_kills_background_children(self, tmp_path: Path) -> None:
+        import os
+
+        import grimoire.checks.engine as eng
+
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+        pidfile = tmp_path / "child.pid"
+
+        original = eng._DEFAULT_TIMEOUT
+        eng._DEFAULT_TIMEOUT = 1
+        try:
+            await run_check(
+                _check(f"sleep 60 & echo $! > {pidfile}; wait"),
+                _repo(),
+                "main",
+                ws,
+                engine,  # type: ignore[arg-type]
+            )
+        finally:
+            eng._DEFAULT_TIMEOUT = original
+
+        pid = int(pidfile.read_text())
+        await asyncio.sleep(0.2)
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        os.kill(pid, 9)
+        pytest.fail("background child survived the check timeout")
+
     async def test_result_persisted(self, tmp_path: Path) -> None:
         engine = await get_engine(str(tmp_path / "test.db"))
         await create_tables(engine)

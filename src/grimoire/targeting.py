@@ -142,9 +142,7 @@ async def _script_matches(
         rc = await asyncio.wait_for(proc.wait(), timeout=_TARGETING_TIMEOUT)
         return rc == 0
     except (asyncio.TimeoutError, OSError):
-        if proc is not None and proc.returncode is None:
-            proc.kill()
-            await proc.wait()
+        await terminate_process(proc)
         return False
 
     finally:
