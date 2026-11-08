@@ -14,89 +14,126 @@ enabled: false
 severity: warning
 script: |
   #!/usr/bin/env bash
-  # v3 migration detector — NOT the stale issue #2 (ci-cd-*.yml as "new") script.
-  set -euo pipefail
+  # v3 migration detector. Runs under the server's interpreter (PyYAML).
+  exec "${GRIMOIRE_PYTHON:-python3}" -c "$(cat <<'PY'
+  import re
+  import sys
+  from pathlib import Path
 
-  WF=".github/workflows"
+  import yaml
 
-  if [ ! -d "$WF" ]; then
-    echo "WARN: No recognizable workflows (.github/workflows missing)"
-    exit 1
-  fi
+  WF = Path(".github/workflows")
+  if not WF.is_dir():
+      print("WARN: No recognizable workflows (.github/workflows missing)")
+      sys.exit(1)
 
-  shopt -s nullglob
+  files = sorted([*WF.glob("*.yml"), *WF.glob("*.yaml")])
+  tbr = [f for f in files if f.name in ("test-build-release.yml", "test-build-release.yaml")]
+  deploy = [f for f in files if re.fullmatch(r"deploy(-.*)?\.ya?ml", f.name)]
+  cicd = [f for f in files if re.fullmatch(r"ci-cd-.*\.ya?ml", f.name)]
+  embedded = [
+      f for f in files
+      if f not in deploy and re.search(r"^ {2}deploy:[ \t]*$", f.read_text(), re.M)
+  ]
+  HOSTING = re.compile(r"SITE_URL|APP_TYPE|deploy-meta|pages-site")
+  OPT_OUT = re.compile(r"^\s*BIGPOWERS_DEPLOY:\s*['\"]?none['\"]?\s*$", re.M)
 
-  tbr=()
-  for f in "$WF"/test-build-release.yml "$WF"/test-build-release.yaml; do
-    [ -f "$f" ] && tbr+=("$f")
-  done
 
-  deploy=()
-  for f in "$WF"/deploy.yml "$WF"/deploy.yaml "$WF"/deploy-*.yml "$WF"/deploy-*.yaml; do
-    [ -f "$f" ] && deploy+=("$f")
-  done
+  def load(path):
+      data = yaml.safe_load(path.read_text())
+      if isinstance(data, dict) and True in data and "on" not in data:
+          data["on"] = data.pop(True)  # YAML 1.1 reads bare `on` as True
+      return data if isinstance(data, dict) else {}
 
-  cicd=()
-  for f in "$WF"/ci-cd-*.yml "$WF"/ci-cd-*.yaml; do
-    [ -f "$f" ] && cicd+=("$f")
-  done
 
-  # Embedded deploy: a non-deploy-named workflow defines a top-level deploy job.
-  embedded=()
-  for f in "$WF"/*.yml "$WF"/*.yaml; do
-    base="$(basename "$f")"
-    case "$base" in
-      deploy.yml|deploy.yaml|deploy-*.yml|deploy-*.yaml) continue ;;
-    esac
-    if grep -Eq '^[[:space:]]{2}deploy:[[:space:]]*$' "$f"; then
-      embedded+=("$f")
-    fi
-  done
+  def norm(text):
+      return re.sub(r"\s+", " ", str(text or "")).replace('"', "'")
 
-  deploy_ok=false
-  if [ "${#tbr[@]}" -gt 0 ] && [ "${#deploy[@]}" -gt 0 ]; then
-    deploy_ok=true
-    for f in "${deploy[@]}"; do
-      if ! grep -Eq '^[[:space:]]*workflow_run:[[:space:]]*$' "$f"; then
-        echo "FAIL: ${f#"$WF"/} missing workflow_run trigger (v3 deploy must follow test-build-release)"
-        deploy_ok=false
-      fi
-      # cancel-in-progress: true is unsafe for production deploys
-      if grep -Eq 'cancel-in-progress:[[:space:]]*true' "$f"; then
-        echo "FAIL: ${f#"$WF"/} sets cancel-in-progress: true on deploy concurrency"
-        deploy_ok=false
-      fi
-    done
-  fi
 
-  if $deploy_ok && [ "${#cicd[@]}" -eq 0 ]; then
-    echo "PASS: v3 CI/CD pair present"
-    echo "  - test-build-release: ${tbr[*]#"$WF"/}"
-    echo "  - deploy: ${deploy[*]#"$WF"/}"
-    exit 0
-  fi
+  def gate_problems(path, pipeline_names):
+      wf = load(path)
+      out = []
+      run = (wf.get("on") or {}).get("workflow_run") if isinstance(wf.get("on"), dict) else None
+      if not isinstance(run, dict):
+          return [f"{path.name} missing workflow_run trigger (v3 deploy must follow test-build-release)"]
+      followed = run.get("workflows") or []
+      if pipeline_names and not set(followed) & pipeline_names:
+          out.append(
+              f"{path.name} workflow_run does not follow the pipeline "
+              f"({', '.join(sorted(pipeline_names))})"
+          )
+      if "completed" not in (run.get("types") or []):
+          out.append(f"{path.name} workflow_run types must include completed")
+      jobs = {k: v for k, v in (wf.get("jobs") or {}).items() if isinstance(v, dict)}
 
-  if [ "${#cicd[@]}" -gt 0 ] || [ "${#embedded[@]}" -gt 0 ] || [ "${#tbr[@]}" -gt 0 ] || [ "${#deploy[@]}" -gt 0 ]; then
-    echo "FAIL: Not fully migrated to v3 (test-build-release.yml + separate deploy.yml)"
-    if [ "${#cicd[@]}" -gt 0 ]; then
-      echo "  - Still using ci-cd-*.yml: ${cicd[*]#"$WF"/}"
-    fi
-    if [ "${#embedded[@]}" -gt 0 ]; then
-      echo "  - Embedded deploy job (no separate deploy workflow): ${embedded[*]#"$WF"/}"
-    fi
-    if [ "${#tbr[@]}" -eq 0 ]; then
-      echo "  - Missing test-build-release.yml"
-    fi
-    if [ "${#deploy[@]}" -eq 0 ]; then
-      echo "  - Missing separate deploy.yml / deploy-*.yml"
-    fi
-    if [ "${#cicd[@]}" -gt 0 ] && [ "${#tbr[@]}" -gt 0 ]; then
-      echo "  - Transitional: v3 files present but ci-cd-*.yml not removed yet"
-    fi
-    exit 1
-  fi
+      def chain_conditions(name, seen=()):
+          job = jobs.get(name, {})
+          cond = norm(job.get("if"))
+          needs = job.get("needs") or []
+          needs = [needs] if isinstance(needs, str) else needs
+          for dep in needs:
+              if dep in jobs and dep not in seen:
+                  cond += " " + chain_conditions(dep, (*seen, name))
+          return cond
 
-  echo "WARN: No recognizable workflow pattern"
-  echo "  Expected: test-build-release.yml + deploy.yml (or deploy-*.yml)"
-  ls -1 "$WF" 2>/dev/null | sed 's/^/  - /' || true
-  exit 1
+      for name in jobs:
+          cond = chain_conditions(name)
+          has_success = re.search(r"workflow_run\.conclusion\s*==\s*'success'", cond)
+          has_branch = re.search(r"workflow_run\.head_branch\s*==", cond)
+          if not (has_success and has_branch):
+              out.append(
+                  f"{path.name} job '{name}' is not gated on "
+                  "workflow_run.conclusion == 'success' and workflow_run.head_branch"
+              )
+      if re.search(r"cancel-in-progress:[ \t]*true", path.read_text()):
+          out.append(f"{path.name} sets cancel-in-progress: true on deploy concurrency")
+      return out
+
+
+  def listing(paths):
+      return " ".join(p.name for p in paths)
+
+
+  problems = []
+  if tbr and deploy:
+      names = {str(load(f).get("name") or "") for f in tbr} - {""}
+      for f in deploy:
+          problems += gate_problems(f, names)
+  deploy_ok = bool(tbr and deploy) and not problems
+
+  if deploy_ok and not cicd:
+      print("PASS: v3 CI/CD pair present")
+      print(f"  - test-build-release: {listing(tbr)}")
+      print(f"  - deploy: {listing(deploy)}")
+      sys.exit(0)
+
+  # CLI/library profile: release is terminal when nothing hands off to a deploy.
+  if tbr and not deploy and not cicd and not embedded:
+      text = "\n".join(f.read_text() for f in tbr)
+      if OPT_OUT.search(text) or not HOSTING.search(text):
+          print("PASS: CLI — no hosted deploy (test-build-release.yml is terminal)")
+          sys.exit(0)
+
+  if cicd or embedded or tbr or deploy:
+      print("FAIL: Not fully migrated to v3 (test-build-release.yml + separate deploy.yml)")
+      for line in problems:
+          print(f"  - {line}")
+      if cicd:
+          print(f"  - Still using ci-cd-*.yml: {listing(cicd)}")
+      if embedded:
+          print(f"  - Embedded deploy job (no separate deploy workflow): {listing(embedded)}")
+      if not tbr:
+          print("  - Missing test-build-release.yml")
+      if not deploy:
+          print("  - Missing separate deploy.yml / deploy-*.yml")
+      if cicd and tbr:
+          print("  - Transitional: v3 files present but ci-cd-*.yml not removed yet")
+      sys.exit(1)
+
+  print("WARN: No recognizable workflow pattern")
+  print("  Expected: test-build-release.yml + deploy.yml (or deploy-*.yml)")
+  for f in files:
+      print(f"  - {f.name}")
+  sys.exit(1)
+  PY
+  )"
