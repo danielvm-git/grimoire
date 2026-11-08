@@ -44,6 +44,76 @@ script: |
       return entry
 
 
+  # Stable rule IDs and remediation. The label numbers in the table ("9a") are
+  # positional and may change; these IDs never do.
+  _RULES = {
+      "0": ("CI-WORKFLOWS-001", "Add .github/workflows/ with a test-build-release.yml pipeline"),
+      "Parse": ("CI-PARSE-001", "Fix the YAML syntax error in the workflow file"),
+      "1a": ("CI-LAYOUT-001", "Name the pipeline test-build-release.yml"),
+      "1b": ("CI-LAYOUT-002", "Move deploy into a separate deploy.yml"),
+      "1c": ("CI-LAYOUT-003", "Delete the unused staging workflow"),
+      "1d": ("CI-LAYOUT-004", "Rename workflow files to kebab-case"),
+      "1e": ("CI-LAYOUT-005", "Give .github/actions/ entries specific names"),
+      "2a": ("CI-TRIGGER-001", "Trigger the pipeline on push (deploy on workflow_run)"),
+      "2b": ("CI-TRIGGER-002", "Trigger the pipeline on pull_request"),
+      "2c": ("CI-CONCURRENCY-001", "Add concurrency with cancel-in-progress: true to the pipeline"),
+      "2d": ("CI-CONCURRENCY-002", "Set cancel-in-progress: false on the deploy"),
+      "3a": ("CI-ORDER-001", "Chain jobs with needs:"),
+      "3b": ("CI-ORDER-002", "Make test jobs depend on lint"),
+      "3c": ("CI-ORDER-003", "Make build depend on the test jobs"),
+      "3d": ("CI-ORDER-004", "Order release and build with needs:"),
+      "3e": ("CI-ORDER-005", "Remove continue-on-error from gate jobs"),
+      "3f": ("CI-DEPLOY-CHAIN-001", "Trigger deploy from the pipeline via workflow_run, not push"),
+      "3g": ("CI-DEPLOY-CHAIN-002", "Download the build artifact in deploy instead of rebuilding"),
+      "4a": ("CI-ARTIFACT-001", "Download the uploaded artifact in the deploy workflow"),
+      "4b": ("CI-ARTIFACT-002", "Embed the version or commit SHA in the artifact"),
+      "5b": ("CI-DEPLOY-001", "Run deploy after the pipeline"),
+      "5c": ("CI-DEPLOY-002", "Verify the artifact before deploying"),
+      "5d": ("CI-DEPLOY-003", "Add environment: production to the deploy job"),
+      "5e": ("CI-DEPLOY-AUTH-001", "Authenticate with OIDC (id-token: write) or a secrets.* credential"),
+      "5f": ("CI-SECRETS-001", "Move hardcoded credentials into GitHub secrets"),
+      "5g": ("CI-DEPLOY-004", "Make the deploy mechanism identifiable"),
+      "5h": ("CI-DEPLOY-005", "Add a rollback path to the deploy"),
+      "6a": ("CI-VERIFY-001", "Add a post-deploy smoke or health check"),
+      "6b": ("CI-VERIFY-002", "Put verification in its own named step"),
+      "6c": ("CI-VERIFY-003", "Fail the job when verification fails"),
+      "7a": ("CI-PROTECT-001", "Require status checks on the default branch"),
+      "7b": ("CI-PROTECT-002", "Require pull requests and enforce them for admins"),
+      "8a": ("CI-PIN-001", "Pin actions to a commit SHA or OCI digest"),
+      "8b": ("CI-CACHE-001", "Cache dependencies (actions/cache or the setup-* cache input)"),
+      "9a": ("CI-PERM-001", "Declare permissions: at workflow level or on every job"),
+      "9b": ("CI-OIDC-001", "Prefer OIDC for cloud authentication"),
+      "9c": ("CI-SECRETS-002", "Do not echo secrets in run steps"),
+  }
+  _TITLE_RULES = {
+      "setup-python cache value is valid": (
+          "CI-CACHE-002", "Use cache: pip|poetry|pipenv|uv with actions/setup-python"),
+  }
+
+
+  def _rule_info(check_id: str) -> tuple[str, str, str]:
+      """Return (stable id, title, remediation) for a result label."""
+      prefix, _, title = check_id.partition(". ")
+      title = re.sub(r"\s*\[[^\]]*\]$", "", title).strip()
+      rid, fix = _TITLE_RULES.get(title) or _RULES.get(prefix, ("CI-UNMAPPED", "See the audit notes"))
+      return rid, title, fix
+
+
+  def _early() -> int:
+      """Exit path for repos with no workflows: nothing to fail."""
+      if "--json" in sys.argv[1:]:
+          rid, title, _ = _rule_info(_ALL_RESULTS[-1]["check_id"])
+          print(json.dumps({
+              "repository": os.environ.get("REPO_FULL_NAME", "unknown"),
+              "branch": os.environ.get("BRANCH", "unknown"),
+              "summary": {"total": 1, "passed": 1, "failed": 0,
+                          "critical": 0, "high": 0, "medium": 0},
+              "rules": [{"rule": rid, "title": title, "status": "pass", "file": "N/A",
+                         "remediation": "", "notes": _ALL_RESULTS[-1]["notes"]}],
+          }, indent=2))
+      return 0
+
+
   def _sev(level: str) -> None:
       """Tag the most recent result with the severity of its failure."""
       _ALL_RESULTS[-1]["severity"] = level
@@ -343,13 +413,13 @@ script: |
       if not WORKFLOWS.is_dir():
           _r("0. Workflows directory exists", True, "N/A",
              "No .github/workflows/ — repo doesn't use CI/CD")
-          return 0  # not a failure, just no CI
+          return _early()  # not a failure, just no CI
 
       yml_files = _all_yml()
       if not yml_files:
           _r("0. Workflow files exist", True, "N/A",
              "Directory exists but empty — no CI pipeline defined")
-          return 0
+          return _early()
 
       # Load all workflows
       workflows: dict[str, dict] = {}
@@ -983,6 +1053,31 @@ script: |
       critical_fails = len(by_level["critical"])
       high_fails = len(by_level["high"])
       medium_fails = len(by_level["medium"])
+
+      if "--json" in sys.argv[1:]:
+          rules_out = []
+          for r in _ALL_RESULTS:
+              rid, title, fix = _rule_info(r["check_id"])
+              status = "pass" if r["passed"] else ("unknown" if r.get("unknown") else "fail")
+              item = {
+                  "rule": rid,
+                  "title": title,
+                  "status": status,
+                  "file": r["file_ref"],
+                  "remediation": "" if r["passed"] else fix,
+                  "notes": r["notes"],
+              }
+              if status != "pass":
+                  item["severity"] = r["severity"]
+              rules_out.append(item)
+          print(json.dumps({
+              "repository": os.environ.get("REPO_FULL_NAME", "unknown"),
+              "branch": os.environ.get("BRANCH", "unknown"),
+              "summary": {"total": total, "passed": passed_count, "failed": failed_count,
+                          "critical": critical_fails, "high": high_fails, "medium": medium_fails},
+              "rules": rules_out,
+          }, indent=2))
+          return 2 if critical_fails else (1 if high_fails else 0)
 
       print()
       print("=" * 88)
