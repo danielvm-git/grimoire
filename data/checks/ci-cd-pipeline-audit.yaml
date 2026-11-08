@@ -14,9 +14,12 @@ script: |
   """CI/CD Pipeline Audit — checks every repo against the solo-dev checklist."""
   from __future__ import annotations
 
+  import json
   import os
-
+  import re
   import sys
+  import urllib.error
+  import urllib.request
   from pathlib import Path
   from collections import defaultdict
 
@@ -31,10 +34,19 @@ script: |
   _ALL_RESULTS: list[dict] = []  # accumulates (check_id, passed, file_ref, notes)
 
 
-  def _r(check_id: str, passed: bool, file_ref: str = "", notes: str = "") -> dict:
-      entry = dict(check_id=check_id, passed=passed, file_ref=file_ref, notes=notes)
+  def _r(check_id: str, passed: bool, file_ref: str = "", notes: str = "",
+         unknown: bool = False) -> dict:
+      """Record a result. ``unknown`` marks a rule that could not be verified; it
+      never counts as a pass."""
+      entry = dict(check_id=check_id, passed=passed and not unknown,
+                   file_ref=file_ref, notes=notes, unknown=unknown)
       _ALL_RESULTS.append(entry)
       return entry
+
+
+  def _sev(level: str) -> None:
+      """Tag the most recent result with the severity of its failure."""
+      _ALL_RESULTS[-1]["severity"] = level
 
 
   class _GHA_Loader(yaml.SafeLoader):
@@ -94,9 +106,39 @@ script: |
       return [f for f in files if "staging" in f.stem.lower()]
 
 
-  def _permissions_block(wf: dict) -> dict | None:
-      """Return top-level permissions dict, or None."""
+  def _permissions_block(wf: dict) -> dict | str | None:
+      """Return the top-level permissions value, or None."""
       return wf.get("permissions")
+
+
+  def _describe_permissions(perm: object) -> str:
+      if isinstance(perm, dict):
+          return ", ".join(f"{k}:{v}" for k, v in perm.items()) or "none"
+      return str(perm)
+
+
+  def _permission_scope(wf: dict) -> tuple[bool, str]:
+      """Return (explicit, note) for a workflow's token scope.
+
+      A workflow is explicit when it has a top-level ``permissions:`` block, or when
+      every job declares its own. Job-level scope is narrower, so it is accepted.
+      """
+      perm = _permissions_block(wf)
+      if perm is not None:
+          return True, f"Scoped: {_describe_permissions(perm)}"
+      jobs = {k: v for k, v in _jobs(wf).items() if isinstance(v, dict)}
+      inheriting = [j for j, d in jobs.items() if d.get("permissions") is None]
+      if jobs and not inheriting:
+          detail = "; ".join(
+              f"{j}={_describe_permissions(d['permissions'])}" for j, d in jobs.items()
+          )
+          return True, f"Scoped (job-level): {detail}"
+      if inheriting:
+          return False, (
+              "Uses broad default token scope — no top-level block and "
+              f"job(s) without permissions: {', '.join(inheriting)}"
+          )
+      return False, "Missing — uses broad default token scope"
 
 
   def _has_concurrency(wf: dict) -> bool:
@@ -130,27 +172,159 @@ script: |
   def _uses_actions(job_def: dict) -> list[str]:
       """Collect all `uses:` values from steps."""
       refs: list[str] = []
-      for step in job_def.get("steps", []):
-          if isinstance(step, dict) and "uses" in step:
+      if isinstance(job_def.get("uses"), str):
+          refs.append(job_def["uses"])  # reusable workflow call
+      for step in job_def.get("steps") or []:
+          if isinstance(step, dict) and isinstance(step.get("uses"), str):
               refs.append(step["uses"])
       return refs
 
 
-  def _is_action_pinned(ref: str) -> bool:
-      """Check if a third-party action is pinned to a SHA or version tag."""
-      if "/" not in ref:
-          return True  # official actions like actions/checkout are fine
-      _, version = ref.split("@", 1) if "@" in ref else (ref, "")
-      if not version:
-          return False
-      # SHA-like (40 hex chars, possibly shortened) = pinned
-      if all(c in "0123456789abcdef" for c in version) and len(version) >= 7:
-          return True
-      # Semantic version tag = acceptable (x.y.z, x.y, or vN)
-      parts = version.lstrip("v").split(".")
-      if len(parts) >= 1 and all(p.isdigit() for p in parts):
-          return True
-      return False
+  _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+  _DIGEST_RE = re.compile(r"@sha256:[0-9a-f]{64}$")
+  _FLOATING_RE = re.compile(r"^v?\d+(\.\d+)?$")
+  _VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
+
+
+  def _classify_ref(ref: str) -> str:
+      """Classify a ``uses:`` ref.
+
+      Returns one of ``local`` (skipped), ``sha`` (40-char commit), ``digest``
+      (OCI ``@sha256:``), ``version`` (exact tag such as ``v6.1.2``),
+      ``floating-major`` (``v6`` or ``v6.1``, which the owner can move) or
+      ``unpinned`` (branch, no ref, or an untagged/tagged image).
+      """
+      if ref.startswith("./"):
+          return "local"
+      if ref.startswith("docker://"):
+          return "digest" if _DIGEST_RE.search(ref) else "unpinned"
+      _, sep, version = ref.partition("@")
+      if not sep or not version:
+          return "unpinned"
+      if _SHA_RE.match(version):
+          return "sha"
+      if _VERSION_RE.match(version):
+          return "version"
+      if _FLOATING_RE.match(version):
+          return "floating-major"
+      return "unpinned"
+
+
+  _SETUP_CACHE_VALUES = {
+      "setup-python": {"pip", "poetry", "pipenv", "uv"},
+      "setup-node": {"npm", "yarn", "pnpm"},
+      "setup-java": {"gradle", "maven", "sbt"},
+  }
+
+
+  def _cache_mechanism(uses: str, with_: object) -> str | None:
+      """Name the caching mechanism a step uses, if any.
+
+      Returns ``invalid-setup-python-cache-true`` for the value setup-python
+      rejects at runtime, so the caller can flag it instead of crediting it.
+      """
+      action = uses.split("@", 1)[0].lower()
+      inputs = with_ if isinstance(with_, dict) else {}
+      if action == "actions/cache" or action.startswith("actions/cache/"):
+          return "actions/cache"
+      if action == "swatinem/rust-cache":
+          return "rust-cache"
+      if action == "astral-sh/setup-uv":
+          return "setup-uv enable-cache" if inputs.get("enable-cache") in (True, "true") else None
+      name = action.rsplit("/", 1)[-1]
+      cache = inputs.get("cache")
+      if name == "setup-python" and cache in (True, "true"):
+          return "invalid-setup-python-cache-true"
+      if name == "setup-go" and cache in (True, "true"):
+          return "setup-go cache=true"
+      if name in _SETUP_CACHE_VALUES and str(cache).lower() in _SETUP_CACHE_VALUES[name]:
+          return f"{name} cache={str(cache).lower()}"
+      return None
+
+
+  def _deploy_auth(deploy_text: str) -> str | None:
+      """Name how the deploy authenticates, or None when nothing is evident."""
+      if re.search(r"id-token['\"]?\s*:\s*['\"]?write", deploy_text):
+          return "OIDC (id-token: write)"
+      names = sorted(set(re.findall(r"\$\{\{\s*secrets\.([A-Za-z0-9_]+)", deploy_text)))
+      if names:
+          return "secrets: " + ", ".join(names)
+      return None
+
+
+  def _reachable(deps: dict[str, set[str]], job: str) -> set[str]:
+      """Every job ``job`` depends on, directly or through other jobs."""
+      seen: set[str] = set()
+      stack = list(deps.get(job, ()))
+      while stack:
+          cur = stack.pop()
+          if cur not in seen:
+              seen.add(cur)
+              stack.extend(deps.get(cur, ()))
+      return seen
+
+
+  def _api_get(url: str, token: str) -> tuple[int, object]:
+      """GET a GitHub API URL. Returns (status, json); status 0 on network error."""
+      req = urllib.request.Request(url, headers={
+          "Authorization": f"Bearer {token}",
+          "Accept": "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+      })
+      try:
+          with urllib.request.urlopen(req, timeout=20) as resp:
+              return resp.status, json.loads(resp.read() or b"null")
+      except urllib.error.HTTPError as exc:
+          return exc.code, None
+      except Exception as exc:  # noqa: BLE001 — surfaced as "unknown", never a pass
+          return 0, str(exc)
+
+
+  def _branch_protection() -> tuple[dict | None, list | None, str]:
+      """Return (classic, rulesets, problem). ``problem`` is set when unreadable."""
+      repo = os.environ.get("REPO_FULL_NAME", "")
+      token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+      branch = os.environ.get("DEFAULT_BRANCH") or os.environ.get("BRANCH") or "main"
+      if "/" not in repo:
+          return None, None, "REPO_FULL_NAME is not set"
+      if not token:
+          return None, None, "no GH_TOKEN; cannot read branch protection"
+      base = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
+      c_status, classic = _api_get(f"{base}/repos/{repo}/branches/{branch}/protection", token)
+      r_status, rules = _api_get(f"{base}/repos/{repo}/rules/branches/{branch}", token)
+      if c_status not in (200, 404) and r_status != 200:
+          return None, None, (
+              f"protection API HTTP {c_status}, rulesets API HTTP {r_status}; "
+              "check the token's administration read permission"
+          )
+      return (
+          classic if c_status == 200 and isinstance(classic, dict) else None,
+          rules if r_status == 200 and isinstance(rules, list) else None,
+          "",
+      )
+
+
+  def _protection_findings(classic: dict | None, rules: list | None) -> tuple[list[str], str | None]:
+      """Return (required check names, no-direct-push problem or None)."""
+      rules = rules or []
+      checks: list[str] = []
+      if classic:
+          rsc = classic.get("required_status_checks") or {}
+          checks += list(rsc.get("contexts") or [])
+          checks += [c.get("context", "") for c in rsc.get("checks") or [] if isinstance(c, dict)]
+      for rule in rules:
+          if isinstance(rule, dict) and rule.get("type") == "required_status_checks":
+              params = rule.get("parameters") or {}
+              checks += [c.get("context", "") for c in params.get("required_status_checks") or []
+                         if isinstance(c, dict)]
+      checks = sorted({c for c in checks if c})
+      if any(isinstance(r, dict) and r.get("type") == "pull_request" for r in rules):
+          return checks, None
+      if classic and classic.get("required_pull_request_reviews") is not None:
+          if (classic.get("enforce_admins") or {}).get("enabled"):
+              return checks, None
+          return checks, "pull request required but admins can push directly (enforce_admins is off)"
+      return checks, "does not require a pull request"
 
 
   def _find_trigger_events(wf: dict) -> list[str]:
@@ -165,9 +339,6 @@ script: |
   # ── Audit runner ─────────────────────────────────────────────────────────
 
   def audit() -> int:
-      critical_fails = 0
-      high_fails = 0
-      medium_fails = 0
 
       if not WORKFLOWS.is_dir():
           _r("0. Workflows directory exists", True, "N/A",
@@ -188,7 +359,7 @@ script: |
               workflows[f.name] = wf
           else:
               _r(f"Parse {f.name}", False, f.name, "Failed to parse YAML")
-              critical_fails += 1
+              _sev("critical")
 
       ci_cd = _ci_cd_files(yml_files)
       deploy_wf = _deploy_files(yml_files)
@@ -216,7 +387,7 @@ script: |
           else:
               _r("1a. CI/CD pipeline file exists", False,
                  yml_files[0].name, "No identifiable CI/CD pipeline file")
-              high_fails += 1
+              _sev("high")
 
       # 1b: Separate deploy file
       if deploy_wf:
@@ -243,7 +414,7 @@ script: |
       if staging:
           _r("1c. No unused staging workflow", False,
              staging[0].name, "Staging workflow found — solo dev: prod only")
-          medium_fails += 1
+          _sev("medium")
       else:
           _r("1c. No unused staging workflow", True, "N/A", "")
 
@@ -252,7 +423,7 @@ script: |
       if bad_names:
           _r("1d. Kebab-case filenames", False,
              bad_names[0], f"Underscore in name: {bad_names[0]}")
-          medium_fails += 1
+          _sev("medium")
       else:
           _r("1d. Kebab-case filenames", True, "N/A", "")
 
@@ -263,7 +434,7 @@ script: |
           if generic:
               _r("1e. Action names are specific", False,
                  f".github/actions/{generic[0]}", f"Generic name: {generic[0]}")
-              medium_fails += 1
+              _sev("medium")
 
       # ── 2. TRIGGERS ──────────────────────────────────────────────────────
 
@@ -279,16 +450,19 @@ script: |
               valid_trigger = has_wf_run or has_push
               _r(f"2a. trigger [{fname}]", valid_trigger, fname, "" if valid_trigger else "Deploy workflow missing workflow_run or push trigger")
               if not valid_trigger:
-                  high_fails += 1
-          else:
+                  _sev("high")
+          elif ci_cd and fname == ci_cd[0].name:
               _r(f"2a. push trigger [{fname}]", has_push, fname, "" if has_push else "Primary workflow missing push trigger")
               if not has_push:
-                  high_fails += 1
+                  _sev("high")
+          else:
+              _r(f"2a. push trigger [{fname}]", True, fname,
+                 f"Auxiliary workflow — push not required (on: {', '.join(events)})")
 
           if ci_cd and fname == ci_cd[0].name:
               _r(f"2b. pull_request trigger [{fname}]", has_pr, fname, "")
               if not has_pr:
-                  medium_fails += 1
+                  _sev("medium")
 
 
       # 2c: concurrency on CI/CD file
@@ -304,14 +478,14 @@ script: |
                   _r("2c. concurrency + cancel-in-progress: true", False,
                      ci_cd[0].name,
                      "cancel-in-progress is false — test runs won't cancel on new pushes")
-                  medium_fails += 1
+                  _sev("medium")
               else:
                   _r("2c. concurrency exists", True,
                      ci_cd[0].name, "String-form concurrency — cancel not inspectable")
           else:
               _r("2c. concurrency defined", False,
                  ci_cd[0].name, "Missing — new pushes won't cancel superseded runs")
-              medium_fails += 1
+              _sev("medium")
 
           # 2d: deploy concurrency must NOT cancel-in-progress
           ci_cd_jobs = _jobs(wf)
@@ -323,7 +497,7 @@ script: |
                           _r("2d. Deploy cancel-in-progress: false", False,
                              f"{ci_cd[0].name} job:{jname}",
                              "Deploy concurrency has cancel-in-progress: true — can break production")
-                          high_fails += 1
+                          _sev("high")
 
       if deploy_wf:
           dwf = workflows.get(deploy_wf[0].name, {})
@@ -333,7 +507,7 @@ script: |
               _r("2d. Deploy concurrency: cancel-in-progress false", False,
                  deploy_wf[0].name,
                  "Deploy must not cancel in-flight — can break production")
-              high_fails += 1
+              _sev("high")
           elif dep_conc and dep_cancel is False:
               _r("2d. Deploy concurrency: cancel-in-progress false", True,
                  deploy_wf[0].name, "")
@@ -367,49 +541,48 @@ script: |
           _r("3a. Jobs use explicit needs:", has_needs, ci_cd[0].name,
              f"Jobs: {', '.join(jnames)}" if jnames else "No jobs defined")
           if not has_needs:
-              high_fails += 1
+              _sev("high")
 
           # 3b: test has needs: lint (if lint is its own job)
           if lint_jobs and test_jobs:
               lint_name = lint_jobs[0]
               test_has_lint = False
               for tj in test_jobs:
-                  if lint_name in deps[tj]:
+                  if lint_name in _reachable(deps, tj):
                       test_has_lint = True
                       break
               _r("3b. test needs: lint", test_has_lint, ci_cd[0].name,
                  f"test={test_jobs[0]}, lint={lint_name}" if test_has_lint
                  else f"Lint is own job but test doesn't depend on it")
               if not test_has_lint:
-                  high_fails += 1
+                  _sev("high")
 
-          # 3c: build has needs: test
+          # 3c: build depends on a test job, directly or through other jobs
           if build_jobs and test_jobs:
-              test_name = test_jobs[0]
-              build_has_test = False
-              for bj in build_jobs:
-                  if test_name in deps[bj]:
-                      build_has_test = True
-                      break
+              reached = [t for t in test_jobs if any(t in _reachable(deps, bj) for bj in build_jobs)]
+              build_has_test = bool(reached)
               _r("3c. build needs: test", build_has_test, ci_cd[0].name,
-                 f"build={build_jobs[0]}, test={test_name}" if build_has_test
+                 f"build={build_jobs[0]}, test={reached[0]} (via needs chain)" if build_has_test
                  else "Build does not depend on test — could run before tests pass")
               if not build_has_test:
-                  critical_fails += 1
+                  _sev("critical")
 
-          # 3d: release has needs: build
+          # 3d: release and build are ordered either way: build-then-release, or
+          # tag-then-build (release computes the version, build compiles the tag)
           if release_jobs and build_jobs:
-              build_name = build_jobs[0]
-              rel_has_build = False
-              for rj in release_jobs:
-                  if build_name in deps[rj]:
-                      rel_has_build = True
-                      break
-              _r("3d. release needs: build", rel_has_build, ci_cd[0].name,
-                 f"release={release_jobs[0]}, build={build_name}" if rel_has_build
-                 else "Release does not depend on build")
-              if not rel_has_build:
-                  high_fails += 1
+              build_first = any(
+                  bj in _reachable(deps, rj) for rj in release_jobs for bj in build_jobs
+              )
+              release_first = any(
+                  rj in _reachable(deps, bj) for rj in release_jobs for bj in build_jobs
+              )
+              ordered = build_first or release_first
+              _r("3d. release and build are ordered", ordered, ci_cd[0].name,
+                 (f"release={release_jobs[0]}, build={build_jobs[0]} "
+                  f"({'build then release' if build_first else 'tag then build'})")
+                 if ordered else "Release and build have no needs: relationship")
+              if not ordered:
+                  _sev("high")
 
           # 3e: No continue-on-error on gate jobs
           for jname, jdef in jobs.items():
@@ -418,7 +591,7 @@ script: |
                   _r("3e. No continue-on-error on gates", False,
                      f"{ci_cd[0].name} job:{jname}",
                      "continue-on-error: true defeats stop-the-line")
-                  high_fails += 1
+                  _sev("high")
 
           # 3f: deploy triggered by CI/CD (not independent push)
           if deploy_wf:
@@ -455,7 +628,7 @@ script: |
                   if own_push:
                       _r("3f. Deploy chained to pipeline, not push", False,
                          deploy_wf[0].name, "Has its own push trigger — can fire outside pipeline")
-                      high_fails += 1
+                      _sev("high")
                   else:
                       _r("3f. Deploy trigger mechanism", True, deploy_wf[0].name,
                          f"Triggered by: {', '.join(devents)}")
@@ -473,7 +646,7 @@ script: |
                           _r("3g. Deploy does not rebuild", False,
                              f"{dwf_name} job:{jname}",
                              f"Contains build steps: {', '.join(found_builds)}")
-                          high_fails += 1
+                          _sev("high")
           else:
               # Check if deploy is a job in the CI/CD pipeline with needs
               for jname, jdef in jobs.items():
@@ -487,7 +660,7 @@ script: |
                           _r("3f. Deploy job has needs:", False,
                              f"{ci_cd[0].name} job:{jname}",
                              "Deploy runs in parallel — not gated")
-                          high_fails += 1
+                          _sev("high")
 
       # ── 4. BUILD ARTIFACT REUSE ──────────────────────────────────────────
 
@@ -506,7 +679,7 @@ script: |
                      f"{ci_cd[0].name} + {deploy_wf[0].name if deploy_wf else ''}",
                      "Artifact uploaded" + (" and downloaded in deploy" if has_download_in_deploy else " but deploy may not reuse"))
                   if not has_download_in_deploy:
-                      high_fails += 1
+                      _sev("high")
               else:
                   _r("4a. Build artifact uploaded", True, ci_cd[0].name, "")
           else:
@@ -564,7 +737,7 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_verify_artifact else "No pre-deploy artifact verification")
           if not has_verify_artifact:
-              high_fails += 1
+              _sev("high")
 
           # 5d: environment: production
           has_environment = deploy_env or "environment: production" in deploy_text
@@ -572,15 +745,17 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_environment else "No environment block — consider adding for secret scoping")
           if not has_environment:
-              medium_fails += 1
+              _sev("medium")
 
-          # 5e: Secrets from GitHub secrets
-          has_secret_ref = "${{ secrets." in deploy_text
-          _r("5e. Deploy uses GitHub secrets", has_secret_ref,
+          # 5e: Deploy authenticates by OIDC or by a stored secret. The row names
+          # which one, so a repo is never nudged to add a long-lived token where
+          # federated credentials already do the job.
+          auth = _deploy_auth(deploy_text)
+          _r("5e. Deploy authenticates (OIDC or secret)", auth is not None,
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
-             "" if has_secret_ref else "No secret references found in deploy")
-          if not has_secret_ref:
-              medium_fails += 1
+             auth or "No OIDC (id-token: write) and no secrets.* reference found in deploy")
+          if auth is None:
+              _sev("medium")
 
           # 5f: Hardcoded secrets check
           suspicious = ["ghp_", "ghs_", "ghu_", "sk-", "api_key=", "token=", "password=", "secret="]
@@ -589,7 +764,7 @@ script: |
                   _r("5f. No hardcoded secrets", False,
                      deploy_wf[0].name if deploy_wf else ci_cd[0].name,
                      f"Possible hardcoded secret pattern: {sus}")
-                  critical_fails += 1
+                  _sev("critical")
                   break
           else:
               _r("5f. No hardcoded secrets", True, "N/A", "")
@@ -621,7 +796,7 @@ script: |
                  deploy_wf[0].name,
                  "" if has_rollback else "No rollback mechanism detected")
           if not has_rollback and deploy_wf:
-              high_fails += 1
+              _sev("high")
 
       # ── 6. POST-DEPLOY SAFETY NET ────────────────────────────────────────
 
@@ -635,7 +810,7 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_smoke else "No post-deploy verification — no staging to catch issues")
           if not has_smoke and deploy_wf:
-              high_fails += 1
+              _sev("high")
 
           # 6b: Verification is its own step
           if has_smoke:
@@ -655,7 +830,7 @@ script: |
                      deploy_wf[0].name if deploy_wf else ci_cd[0].name,
                      "" if has_separate_verify else "Verify may be folded into deploy command")
                   if not has_separate_verify:
-                      medium_fails += 1
+                      _sev("medium")
 
           # 6c: Failure surfaced clearly
           has_fail_on_unhealthy = (
@@ -670,65 +845,106 @@ script: |
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
              "" if has_fail_on_unhealthy else "No failure handling detected")
           if not has_fail_on_unhealthy and deploy_wf:
-              medium_fails += 1
+              _sev("medium")
 
-      # ── 7. BRANCH PROTECTION (informational only) ────────────────────────
-      _r("7a. Branch protection — status checks", True, "N/A",
-         "Cannot verify from YAML — check repo settings manually")
-      _r("7b. Branch protection — no direct push", True, "N/A",
-         "Cannot verify from YAML — check repo settings manually")
+      # ── 7. BRANCH PROTECTION (read from the GitHub API) ──────────────────
+      # A rule that cannot be verified is UNKNOWN, never PASS.
+      classic, ruleset, bp_problem = _branch_protection()
+      if bp_problem:
+          for rid, title in (("7a", "status checks"), ("7b", "no direct push")):
+              _r(f"{rid}. Branch protection — {title}", False, "N/A",
+                 f"Could not verify: {bp_problem}", unknown=True)
+              _sev("medium")
+      elif classic is None and not ruleset:
+          for rid, title in (("7a", "status checks"), ("7b", "no direct push")):
+              _r(f"{rid}. Branch protection — {title}", False, "N/A",
+                 "Default branch is not protected")
+              _sev("high")
+      else:
+          bp_checks, bp_push = _protection_findings(classic, ruleset)
+          _r("7a. Branch protection — status checks", bool(bp_checks), "N/A",
+             f"Required checks: {', '.join(bp_checks)}" if bp_checks
+             else "Protected, but no required status checks")
+          if not bp_checks:
+              _sev("high")
+          _r("7b. Branch protection — no direct push", bp_push is None, "N/A",
+             "Pull request required" if bp_push is None else f"Direct push possible: {bp_push}")
+          if bp_push is not None:
+              _sev("high")
 
       # ── 8. SUPPLY CHAIN / HYGIENE ───────────────────────────────────────
 
-      # 8a: Third-party actions pinned
-      unpinned: list[str] = []
+      # 8a: Actions pinned. Default accepts any version tag; strict mode
+      # (GRIMOIRE_AUDIT_STRICT_SHA_PINNING=1) accepts only SHAs and OCI digests.
+      strict_pins = os.environ.get("GRIMOIRE_AUDIT_STRICT_SHA_PINNING", "").lower() in (
+          "1", "true", "yes",
+      )
+      ok_forms = {"sha", "digest"} if strict_pins else {"sha", "digest", "version", "floating-major"}
+      forms: dict[str, list[str]] = defaultdict(list)
       for fname, wf in workflows.items():
-          jobs = _jobs(wf)
-          for jname, jdef in jobs.items():
-              refs = _uses_actions(jdef)
-              for ref in refs:
-                  if not _is_action_pinned(ref):
-                      unpinned.append(f"{fname}/{jname}: {ref}")
+          for jname, jdef in _jobs(wf).items():
+              if not isinstance(jdef, dict):
+                  continue
+              for ref in _uses_actions(jdef):
+                  forms[_classify_ref(ref)].append(f"{fname}/{jname}: {ref}")
+      forms.pop("local", None)
+      bad = [e for form, entries in forms.items() if form not in ok_forms for e in entries]
+      summary = ", ".join(
+          f"{form}: {len(entries)}" + (
+              f" ({', '.join(sorted({e.split(': ', 1)[1].split('@')[-1] for e in entries})[:3]) })"
+              if form == "floating-major" else ""
+          )
+          for form, entries in sorted(forms.items())
+      )
 
-      if unpinned:
+      if bad:
+          shown = "; ".join(bad[:3])
+          more = f" (+{len(bad) - 3} more)" if len(bad) > 3 else ""
+          mode = "strict SHA mode" if strict_pins else "unpinned"
           _r("8a. Third-party actions pinned", False,
-             unpinned[0].split(":")[0], f"Unpinned: {unpinned[0]}")
-          medium_fails += 1
-          for pin in unpinned[1:3]:
-              _r("   (also unpinned)", False, pin.split(":")[0],
-                 f"Unpinned: {pin}")
-          if len(unpinned) > 3:
-              _r("   ... and more", False, f"+{len(unpinned)-3} more", "")
+             bad[0].split(":")[0], f"{mode}: {shown}{more}")
+          _sev("medium")
       else:
-          _r("8a. Third-party actions pinned to SHA or version", True, "N/A", "")
+          _r("8a. Third-party actions pinned to SHA or version", True, "N/A",
+             summary or "no external actions used")
 
-      # 8b: Dependency caching
-      cache_keywords = ["actions/cache", "cache: true", "cache: npm", "Swatinem/rust-cache"]
-      has_cache = False
+      # 8b: Dependency caching, read from parsed steps (never from a dict repr)
+      cache_found: list[tuple[str, str]] = []  # (workflow file, mechanism)
+      cache_invalid: list[tuple[str, str]] = []
       for fname, wf in workflows.items():
-          text = str(wf)
-          if any(kw in text for kw in cache_keywords):
-              has_cache = True
-              break
+          for jdef in _jobs(wf).values():
+              if not isinstance(jdef, dict):
+                  continue
+              for step in jdef.get("steps") or []:
+                  if not isinstance(step, dict) or not isinstance(step.get("uses"), str):
+                      continue
+                  mech = _cache_mechanism(step["uses"], step.get("with"))
+                  if mech == "invalid-setup-python-cache-true":
+                      cache_invalid.append((fname, mech))
+                  elif mech:
+                      cache_found.append((fname, mech))
 
-      _r("8b. Dependency caching used (lint/test faster)", has_cache,
-         "N/A", "" if has_cache else "No caching detected — lint/test may be slower")
-      if not has_cache:
-          medium_fails += 1
+      if cache_found:
+          fname, mech = cache_found[0]
+          _r("8b. Dependency caching used (lint/test faster)", True, fname, mech)
+      else:
+          _r("8b. Dependency caching used (lint/test faster)", False,
+             "N/A", "No caching detected — lint/test may be slower")
+          _sev("medium")
+      for fname, _ in cache_invalid[:1]:
+          _r("8b. setup-python cache value is valid", False, fname,
+             "cache: true is rejected by actions/setup-python — use "
+             "pip|poetry|pipenv|uv (https://github.com/actions/setup-python#caching-packages-dependencies)")
+          _sev("medium")
 
       # ── 9. PERMISSIONS & SECRETS ─────────────────────────────────────────
 
       # 9a: Explicit permissions block
       for fname, wf in workflows.items():
-          perm = _permissions_block(wf)
-          if perm is None:
-              _r(f"9a. Permissions block [{fname}]", False, fname,
-                 "Missing — uses broad default token scope")
-              medium_fails += 1
-          else:
-              _r(f"9a. Permissions block [{fname}]", True, fname,
-                 f"Scoped: {', '.join(perm.keys())}" if isinstance(perm, dict) else str(perm))
-              break  # Only flag one
+          explicit, note = _permission_scope(wf)
+          _r(f"9a. Permissions block [{fname}]", explicit, fname, note)
+          if not explicit:
+              _sev("medium")
 
       # 9b: OIDC check (informational — cloud deploy only)
       has_oidc = False
@@ -749,13 +965,24 @@ script: |
               if "run: echo" in line.lower() and ("${{ secrets." in line or "${{ env." in line):
                   _r(f"9c. Secrets not echoed to logs [{fname}]", False,
                      fname, f"Potential secret echo: {line.strip()[:80]}")
-                  high_fails += 1
+                  _sev("high")
 
       # ── SUMMARY ──────────────────────────────────────────────────────────
 
       total = len(_ALL_RESULTS)
-      passed_count = sum(1 for r in _ALL_RESULTS if r["passed"])
-      failed_count = total - passed_count
+      failures = [r for r in _ALL_RESULTS if not r["passed"]]
+      passed_count = total - len(failures)
+      failed_count = len(failures)
+      # A failing rule that was never tagged still counts, at the lowest level.
+      for r in failures:
+          r.setdefault("severity", "medium")
+      by_level = {
+          lvl: [r for r in failures if r["severity"] == lvl]
+          for lvl in ("critical", "high", "medium")
+      }
+      critical_fails = len(by_level["critical"])
+      high_fails = len(by_level["high"])
+      medium_fails = len(by_level["medium"])
 
       print()
       print("=" * 88)
@@ -771,33 +998,42 @@ script: |
       print()
       if failed_count > 0:
           print(f"  Breakdown:")
-          print(f"    Critical:    {critical_fails}  (broken sequencing, hardcoded secrets)")
-          print(f"    High:        {high_fails}  (missing rollback, missing smoke test, artifact reuse)")
-          print(f"    Medium:      {medium_fails}  (naming, caching, permissions)")
+          print(f"    Critical:    {critical_fails}")
+          print(f"    High:        {high_fails}")
+          print(f"    Medium:      {medium_fails}")
       print()
 
       # Print table
-      print(f"| {'Check ID':<65s} | {'Status':<6s} | {'File':<30s} | Notes")
-      print(f"|{'-'*65}|{'------':<6s}|{'-'*30}|-------")
+      print(f"| {'Check ID':<65s} | {'Status':<7s} | {'File':<30s} | Notes")
+      print(f"|{'-'*65}|{'-------':<7s}|{'-'*30}|-------")
       for r in _ALL_RESULTS:
-          status = "PASS" if r["passed"] else "FAIL"
-          print(f"| {r['check_id']:<65s} | {status:<6s} | {r['file_ref']:<30s} | {r['notes']}")
+          status = "PASS" if r["passed"] else ("UNKNOWN" if r.get("unknown") else "FAIL")
+          print(f"| {r['check_id']:<65s} | {status:<7s} | {r['file_ref']:<30s} | {r['notes']}")
       print()
 
+      def _list(level: str) -> None:
+          for n, r in enumerate(by_level[level], 1):
+              rid, _, title = r["check_id"].partition(". ")
+              detail = f" — {r['notes']}" if r["notes"] else ""
+              print(f"   {n}. [{rid}] {title}{detail}")
+
       if critical_fails > 0:
-          print("❌ CRITICAL: Pipeline sequencing is broken or secrets exposed — fix before merge.")
-          print(f"   Top priorities: 1. Fix {critical_fails} critical issue(s)")
-          print(f"                   2. Address {high_fails} high-severity issue(s)")
-          print(f"                   3. Address {medium_fails} medium-severity issue(s)")
+          print(f"❌ CRITICAL: {critical_fails} critical issue(s) — fix before merge:")
+          _list("critical")
+          if high_fails:
+              print(f"   Also {high_fails} high-severity issue(s):")
+              _list("high")
           return 2
       elif high_fails > 0:
-          print("⚠️ HIGH: Pipeline works but missing safety nets. Recommendations:")
-          print(f"   1. Fix {high_fails} high-severity issue(s) (rollback, smoke test, artifact reuse)")
-          print(f"   2. Address {medium_fails} medium-severity issue(s)")
+          print(f"⚠️ HIGH: {high_fails} high-severity issue(s):")
+          _list("high")
+          if medium_fails:
+              print(f"   Also {medium_fails} medium-severity issue(s):")
+              _list("medium")
           return 1
       elif medium_fails > 0:
-          print("ℹ️  LOW: Pipeline is functional, minor hygiene issues remain.")
-          print(f"   {failed_count} issue(s) to address at your convenience.")
+          print(f"ℹ️  LOW: Pipeline is functional, {medium_fails} hygiene issue(s) remain:")
+          _list("medium")
           return 0
       else:
           print("✅ ALL CHECKS PASSED — Pipeline follows solo-dev CI/CD best practices.")
