@@ -696,3 +696,20 @@ def test_json_with_no_workflows_is_still_valid_json(audit: Audit) -> None:
     assert result.returncode == 0
     assert doc["summary"]["failed"] == 0
     assert doc["rules"][0]["rule"] == "CI-WORKFLOWS-001"
+
+
+def test_script_reexecs_under_grimoire_python_when_yaml_is_missing(
+    audit_script: Path, tmp_path: Path
+) -> None:
+    """run.sh starts uvicorn without the venv on PATH, so bare python3 lacks PyYAML."""
+    env = {**os.environ, "GRIMOIRE_PYTHON": sys.executable, "REPO_FULL_NAME": "a/b"}
+    proc = subprocess.run(
+        [sys.executable, "-S", str(audit_script), "--json"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert json.loads(proc.stdout)["summary"]["failed"] == 0

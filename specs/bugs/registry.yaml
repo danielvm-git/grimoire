@@ -1572,3 +1572,10 @@ bugs:
     status: fixed
     evidence: "test_sequencing_*, test_push_trigger_*, plus gh-55 and gh-58 tests: pass"
     description: "Items 3 and 4 are covered by gh-55 and gh-58. Items 1 and 2: transitive closure for 3c, accept release-then-build for 3d, require push only on the primary pipeline file. Verify: -k sequencing, -k push_trigger."
+  - slug: audit-bare-python3-missing-yaml
+    title: Audit script fails with FATAL PyYAML when the server runs without the venv on PATH
+    module: data/checks/ci-cd-pipeline-audit.yaml
+    severity: high
+    status: fixed
+    evidence: "test_script_reexecs_under_grimoire_python_when_yaml_is_missing (tests/test_checks/test_pipeline_audit.py): pass"
+    description: Found in the final review of #50-#60. Same class as the conformance GRIMOIRE_PYTHON gap; the script now re-execs under GRIMOIRE_PYTHON once.

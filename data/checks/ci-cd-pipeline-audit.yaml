@@ -26,6 +26,12 @@ script: |
   try:
       import yaml
   except ImportError:
+      # Bare python3 may lack PyYAML (run.sh starts the server without the venv on
+      # PATH). Retry once under the server's own interpreter.
+      _alt = os.environ.get("GRIMOIRE_PYTHON")
+      if _alt and not os.environ.get("_GRIMOIRE_AUDIT_REEXEC"):
+          os.environ["_GRIMOIRE_AUDIT_REEXEC"] = "1"
+          os.execv(_alt, [_alt, *sys.argv])
       print("FATAL: PyYAML not installed — run: pip install pyyaml")
       sys.exit(1)
 
