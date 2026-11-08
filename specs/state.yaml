@@ -153,12 +153,21 @@ git:
   worktrees: 1
 
 handoff:
-  last_step_completed: "Build&Ship cycle (2026-11-08) completed for SCOPE=all pending work. One work item existed: the unmerged conformance branch. Shipped as PR #61 (merge faf591a, auto-released v0.15.0) with two in-branch fixes found during verification (GRIMOIRE_PYTHON for bundled checks, tracked spec 09). Baseline and final Preflight: 644 passed, 89% coverage. Main CI green on all four workflows after merge. Removed 2 worktrees and 4 merged branches; one stale remote branch (danielvm-git/repo-custom-prompt-copy-398e24) left in place because patch-ids no longer prove it merged. Previous entry follows."
+  last_step_completed: "Issue-closing run (2026-11-08, SCOPE=all pending work = GitHub issues #50-#60): PRs #64 (audit fixes: #50 #51 #52 #53 #55 #56 #58 #60), #65 (migration check: #54 #59), #66 (stable rule IDs + --json for #57), and a final fix for the audit script's bare-python3 PyYAML gap. Baseline 652 passed, final 713. Main CI green after #64; #57 stays open for an owner decision. Previous: Build&Ship cycle (2026-11-08) completed for SCOPE=all pending work. One work item existed: the unmerged conformance branch. Shipped as PR #61 (merge faf591a, auto-released v0.15.0) with two in-branch fixes found during verification (GRIMOIRE_PYTHON for bundled checks, tracked spec 09). Baseline and final Preflight: 644 passed, 89% coverage. Main CI green on all four workflows after merge. Removed 2 worktrees and 4 merged branches; one stale remote branch (danielvm-git/repo-custom-prompt-copy-398e24) left in place because patch-ids no longer prove it merged. Previous entry follows."
 
   previous_cycle_2: "release-branch verified and recorded v0.14.0. PR #48 (feat/repo-checks-run) was already merged as 41bc2d8 and tagged v0.14.0; the release commit is 9389321. just check is green (559 passed, 88% coverage, zero lint/type errors) and main CI is green (Test Build Release Docs, Deploy, Deploy Docs). Recorded the missing e13s05 story, refreshed the security review for the run-checks diff, and cleaned up the feature branch/worktree. Previous build&ship entry follows."
 
   previous_cycle: "Build&Ship cycle completed: 3 PRs merged (#39, #40, #41), CI repaired (missing uv install in release job), all pending work shipped as v0.12.1 through v0.12.3. Main is clean at 1f0bff6, 514 tests passing with zero warnings. All registry entries closed. One residual noted: orphan tag v0.12.2 (release job died after big-release tagged but before version commit)."
   open_decisions:
+    - gate: "issues-50-60-tracker"
+      decision: "No tracker issue existed, so batch tables were posted on #60 (the umbrella report). Commits use git -C because the bigpowers pre-tool-use hook reads the branch from outside the worktree and reports main."
+      reason: "Standing approval covers comments on in-scope issues; the hook is a false positive on a feature branch, no gate was weakened."
+    - gate: "issue-57-pr-attach"
+      decision: "Shipped stable IDs and --json only. Attaching audit results to a PR needs a PR comment/status surface Grimoire lacks, so #57 stays open (Refs, not Closes) and the docs give a workflow snippet."
+      reason: "Fix would change scope and acceptance criteria."
+    - gate: "issue-55-strict-config"
+      decision: "Strict SHA pinning is opt-in through the GRIMOIRE_AUDIT_STRICT_SHA_PINNING env var, because check definitions have no per-check config field and adding one is a spec 04 change."
+      reason: "Smallest change meeting the acceptance criteria."
     - gate: "build-ship-phase-1-triage"
       decision: "Treated all pending work as 2 work items: (1) e2e-session-transaction-warning (open bug), (2) land 14-commit review branch. Not stashed; committed as conventional commits."
       reason: "Scope is all pending work; 1 open bug + 1 unmerged branch."
@@ -193,7 +202,8 @@ handoff:
     - specs/verifications/e12-verify.yaml
   next_skill: survey-context
   next_action: >
-    All 12 epics are done and all pending work is shipped. The next step is
+    Issues #50-#60 are closed except #57, which waits on an owner decision for
+    PR-attached audit results. All 12 epics are done and all pending work is shipped. The next step is
     planning a new release: run survey-context, then scope-work for the next
     release (no specs/product/SCOPE_LATEST.yaml exists yet), then slice-tasks
     and plan-work.
