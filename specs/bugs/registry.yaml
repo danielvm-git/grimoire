@@ -1499,25 +1499,29 @@ bugs:
     title: "#50 audit 9a stops scanning at the first workflow with a permissions block"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_9a_reports_every_workflow_not_just_the_first_scoped (tests/test_checks/test_pipeline_audit.py): pass"
     description: "`break` inside the else branch of the 9a loop ends the audit after the first scoped workflow. Verify: tests/test_checks/test_pipeline_audit.py -k 9a_all_workflows."
   - slug: gh-51-audit-9a-job-level-permissions
     title: "#51 audit 9a ignores job-level permissions"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_9a_job_level_permissions_on_every_job_pass, test_9a_names_the_job_that_inherits_the_default: pass"
     description: "A workflow where every job declares permissions is least-privilege but reported as default scope. Verify: tests/test_checks/test_pipeline_audit.py -k 9a_job_level."
   - slug: gh-52-audit-7ab-hardcoded-pass
     title: "#52 audit 7a/7b are hardcoded PASS"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: high
-    status: open
+    status: fixed
+    evidence: "test_branch_protection_* (7 tests, fake GitHub API): pass"
     description: "Read branch protection from the GitHub API; 404 fails, unreadable is not a pass. Verify: tests/test_checks/test_pipeline_audit.py -k branch_protection."
   - slug: gh-53-audit-5e-oidc
     title: "#53 audit 5e penalises OIDC deploys and measures secret presence"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_deploy_auth_* (5 tests): pass"
     description: "Accept id-token: write as the deploy credential and name the mechanism. Verify: -k deploy_auth."
   - slug: gh-54-migration-deploy-gate
     title: "#54 migration check does not require deploy.yml to be gated on success and default branch"
@@ -1529,13 +1533,15 @@ bugs:
     title: "#55 audit 8a treats floating major tags as pinned; unreachable branch; no digest support"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_pinning_* (7 tests incl. strict mode, OCI digest, local, reusable): pass"
     description: "Classify refs as sha / digest / floating / unpinned, add strict_sha_pinning opt-in, accept docker@sha256 digests (also #60 item 3). Verify: -k pinning."
   - slug: gh-56-audit-footer-hardcoded-causes
     title: "#56 audit recommendation footer names hardcoded causes"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_footer_names_only_rules_that_failed, test_headline_counts_equal_fail_rows: pass"
     description: "Track failing rules as (id, title, severity) and print the real ones; headline count equals FAIL rows. Verify: -k footer."
   - slug: gh-57-audit-pr-gate-and-json
     title: "#57 run workflow-shape checks on workflow PRs; stable rule IDs and --json"
@@ -1547,7 +1553,8 @@ bugs:
     title: "#58 audit 8b misses setup-python/pip/uv cache and accepts cache: true on setup-python"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_caching_* (10 cases): pass"
     description: "Scan parsed steps (with.cache, enable-cache, actions/cache), warn on cache: true for setup-python (also #60 item 4). Verify: -k caching."
   - slug: gh-59-migration-cli-profile
     title: "#59 migration check forces a synthetic deploy.yml on CLI/library repos"
@@ -1559,5 +1566,6 @@ bugs:
     title: "#60 audit false positives: transitive needs, tag-then-build, push trigger, digest pins, cache"
     module: data/checks/ci-cd-pipeline-audit.yaml
     severity: high
-    status: open
+    status: fixed
+    evidence: "test_sequencing_*, test_push_trigger_*, plus gh-55 and gh-58 tests: pass"
     description: "Items 3 and 4 are covered by gh-55 and gh-58. Items 1 and 2: transitive closure for 3c, accept release-then-build for 3d, require push only on the primary pipeline file. Verify: -k sequencing, -k push_trigger."
