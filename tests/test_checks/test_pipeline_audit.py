@@ -187,3 +187,88 @@ def test_headline_counts_equal_fail_rows(audit: Audit) -> None:
         for level in ("Critical", "High", "Medium")
     }
     assert sum(counts.values()) == fails
+
+
+# ── #55 / #60.3: rule 8a action pinning ──────────────────────────────────────
+
+DIGEST = "sha256:" + "0e0ab10b" * 8
+
+
+def _with_uses(*refs: str) -> str:
+    steps = "\n".join(f"      - uses: {r}" for r in refs)
+    return PIPELINE.replace("      - uses: actions/checkout@v4", steps)
+
+
+def _pin_row(result: AuditResult) -> tuple[str, str, str, str]:
+    (row,) = result.find("8a.")
+    return row
+
+
+def test_pinning_floating_major_passes_by_default_but_is_named(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", _with_uses("actions/checkout@v6"))
+    row = _pin_row(audit.run())
+    assert row[1] == "PASS"
+    assert "floating-major" in row[3]
+    assert "v6" in row[3]
+
+
+def test_pinning_strict_mode_fails_floating_and_passes_sha(audit: Audit) -> None:
+    audit.env["GRIMOIRE_AUDIT_STRICT_SHA_PINNING"] = "1"
+    audit.workflow("test-build-release.yml", _with_uses(f"actions/checkout@{SHA}"))
+    assert _pin_row(audit.run())[1] == "PASS"
+    audit.workflow("test-build-release.yml", _with_uses("actions/checkout@v6"))
+    row = _pin_row(audit.run())
+    assert row[1] == "FAIL"
+    assert "actions/checkout@v6" in row[3]
+
+
+def test_pinning_sha_is_reported_as_sha(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", _with_uses(f"actions/checkout@{SHA}"))
+    row = _pin_row(audit.run())
+    assert row[1] == "PASS"
+    assert "sha" in row[3]
+    assert "floating" not in row[3]
+
+
+def test_pinning_oci_digest_counts_as_pinned(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        _with_uses(
+            f"docker://pragent/pr-agent@{DIGEST}",
+            f"docker://ghcr.io/acme/tool:1.2@{DIGEST}",
+        ),
+    )
+    row = _pin_row(audit.run())
+    assert row[1] == "PASS"
+    assert "digest" in row[3]
+
+
+def test_pinning_branch_and_untagged_refs_fail(audit: Audit) -> None:
+    audit.env["GRIMOIRE_AUDIT_STRICT_SHA_PINNING"] = ""
+    audit.workflow(
+        "test-build-release.yml",
+        _with_uses("acme/tool@main", "docker://alpine:3.19"),
+    )
+    row = _pin_row(audit.run())
+    assert row[1] == "FAIL"
+    assert "acme/tool@main" in row[3]
+    assert "docker://alpine:3.19" in row[3]
+
+
+def test_pinning_ignores_local_actions(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", _with_uses("./.github/actions/setup"))
+    assert _pin_row(audit.run())[1] == "PASS"
+
+
+def test_pinning_checks_reusable_workflow_refs(audit: Audit) -> None:
+    audit.workflow(
+        "test-build-release.yml",
+        PIPELINE
+        + """\
+  call:
+    uses: acme/shared/.github/workflows/ci.yml@main
+""",
+    )
+    row = _pin_row(audit.run())
+    assert row[1] == "FAIL"
+    assert "ci.yml@main" in row[3]

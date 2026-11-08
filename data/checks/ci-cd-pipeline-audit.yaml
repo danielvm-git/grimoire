@@ -15,7 +15,7 @@ script: |
   from __future__ import annotations
 
   import os
-
+  import re
   import sys
   from pathlib import Path
   from collections import defaultdict
@@ -165,27 +165,42 @@ script: |
   def _uses_actions(job_def: dict) -> list[str]:
       """Collect all `uses:` values from steps."""
       refs: list[str] = []
-      for step in job_def.get("steps", []):
-          if isinstance(step, dict) and "uses" in step:
+      if isinstance(job_def.get("uses"), str):
+          refs.append(job_def["uses"])  # reusable workflow call
+      for step in job_def.get("steps") or []:
+          if isinstance(step, dict) and isinstance(step.get("uses"), str):
               refs.append(step["uses"])
       return refs
 
 
-  def _is_action_pinned(ref: str) -> bool:
-      """Check if a third-party action is pinned to a SHA or version tag."""
-      if "/" not in ref:
-          return True  # official actions like actions/checkout are fine
-      _, version = ref.split("@", 1) if "@" in ref else (ref, "")
-      if not version:
-          return False
-      # SHA-like (40 hex chars, possibly shortened) = pinned
-      if all(c in "0123456789abcdef" for c in version) and len(version) >= 7:
-          return True
-      # Semantic version tag = acceptable (x.y.z, x.y, or vN)
-      parts = version.lstrip("v").split(".")
-      if len(parts) >= 1 and all(p.isdigit() for p in parts):
-          return True
-      return False
+  _SHA_RE = re.compile(r"^[0-9a-f]{40}$")
+  _DIGEST_RE = re.compile(r"@sha256:[0-9a-f]{64}$")
+  _FLOATING_RE = re.compile(r"^v?\d+(\.\d+)?$")
+  _VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+([-+][0-9A-Za-z.-]+)?$")
+
+
+  def _classify_ref(ref: str) -> str:
+      """Classify a ``uses:`` ref.
+
+      Returns one of ``local`` (skipped), ``sha`` (40-char commit), ``digest``
+      (OCI ``@sha256:``), ``version`` (exact tag such as ``v6.1.2``),
+      ``floating-major`` (``v6`` or ``v6.1``, which the owner can move) or
+      ``unpinned`` (branch, no ref, or an untagged/tagged image).
+      """
+      if ref.startswith("./"):
+          return "local"
+      if ref.startswith("docker://"):
+          return "digest" if _DIGEST_RE.search(ref) else "unpinned"
+      _, sep, version = ref.partition("@")
+      if not sep or not version:
+          return "unpinned"
+      if _SHA_RE.match(version):
+          return "sha"
+      if _VERSION_RE.match(version):
+          return "version"
+      if _FLOATING_RE.match(version):
+          return "floating-major"
+      return "unpinned"
 
 
   def _find_trigger_events(wf: dict) -> list[str]:
@@ -712,24 +727,39 @@ script: |
 
       # ── 8. SUPPLY CHAIN / HYGIENE ───────────────────────────────────────
 
-      # 8a: Third-party actions pinned
-      unpinned: list[str] = []
+      # 8a: Actions pinned. Default accepts any version tag; strict mode
+      # (GRIMOIRE_AUDIT_STRICT_SHA_PINNING=1) accepts only SHAs and OCI digests.
+      strict_pins = os.environ.get("GRIMOIRE_AUDIT_STRICT_SHA_PINNING", "").lower() in (
+          "1", "true", "yes",
+      )
+      ok_forms = {"sha", "digest"} if strict_pins else {"sha", "digest", "version", "floating-major"}
+      forms: dict[str, list[str]] = defaultdict(list)
       for fname, wf in workflows.items():
-          jobs = _jobs(wf)
-          for jname, jdef in jobs.items():
-              refs = _uses_actions(jdef)
-              for ref in refs:
-                  if not _is_action_pinned(ref):
-                      unpinned.append(f"{fname}/{jname}: {ref}")
+          for jname, jdef in _jobs(wf).items():
+              if not isinstance(jdef, dict):
+                  continue
+              for ref in _uses_actions(jdef):
+                  forms[_classify_ref(ref)].append(f"{fname}/{jname}: {ref}")
+      forms.pop("local", None)
+      bad = [e for form, entries in forms.items() if form not in ok_forms for e in entries]
+      summary = ", ".join(
+          f"{form}: {len(entries)}" + (
+              f" ({', '.join(sorted({e.split(': ', 1)[1].split('@')[-1] for e in entries})[:3]) })"
+              if form == "floating-major" else ""
+          )
+          for form, entries in sorted(forms.items())
+      )
 
-      if unpinned:
-          shown = "; ".join(unpinned[:3])
-          more = f" (+{len(unpinned) - 3} more)" if len(unpinned) > 3 else ""
+      if bad:
+          shown = "; ".join(bad[:3])
+          more = f" (+{len(bad) - 3} more)" if len(bad) > 3 else ""
+          mode = "strict SHA mode" if strict_pins else "unpinned"
           _r("8a. Third-party actions pinned", False,
-             unpinned[0].split(":")[0], f"Unpinned: {shown}{more}")
+             bad[0].split(":")[0], f"{mode}: {shown}{more}")
           _sev("medium")
       else:
-          _r("8a. Third-party actions pinned to SHA or version", True, "N/A", "")
+          _r("8a. Third-party actions pinned to SHA or version", True, "N/A",
+             summary or "no external actions used")
 
       # 8b: Dependency caching
       cache_keywords = ["actions/cache", "cache: true", "cache: npm", "Swatinem/rust-cache"]
