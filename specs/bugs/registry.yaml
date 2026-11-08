@@ -1527,7 +1527,8 @@ bugs:
     title: "#54 migration check does not require deploy.yml to be gated on success and default branch"
     module: data/checks/ci-cd-migration.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_ungated_deploy_fails, test_gate_resolved_through_needs_chain_passes (tests/test_checks/test_migration_check.py): pass"
     description: "Require workflow_run workflows+types and a success/default-branch gate resolved through needs. Check is disabled (superseded by ci-layout); fix keeps the script correct. Verify: tests/test_checks/test_migration_check.py."
   - slug: gh-55-audit-8a-floating-tags
     title: "#55 audit 8a treats floating major tags as pinned; unreachable branch; no digest support"
@@ -1560,7 +1561,8 @@ bugs:
     title: "#59 migration check forces a synthetic deploy.yml on CLI/library repos"
     module: data/checks/ci-cd-migration.yaml
     severity: medium
-    status: open
+    status: fixed
+    evidence: "test_cli_library_repo_without_deploy_passes, test_hosted_app_without_deploy_still_fails: pass"
     description: "TBR with no deploy artifact and no hosting marker passes as library profile. Check is disabled; ci-layout already behaves this way. Verify: tests/test_checks/test_migration_check.py."
   - slug: gh-60-audit-false-positives
     title: "#60 audit false positives: transitive needs, tag-then-build, push trigger, digest pins, cache"
