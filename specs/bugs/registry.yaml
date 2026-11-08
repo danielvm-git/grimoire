@@ -1392,3 +1392,91 @@ bugs:
       (tests/test_github/test_service.py). All four client/service tests were verified RED before the fix.
     risk_level: medium
     commit_message: "fix(database): enable WAL and retry locks so cache writes cannot abort a fetch"
+
+  # --- Post-epic review (e01-e11, e13), 2026-11-08. Source: fresh-context reviewer.
+  # Status "open": reported by the reviewer from code reading; not yet reproduced
+  # with a failing test. Reproduce each (develop-tdd) before fixing.
+  - slug: refresh-transient-error-prunes-repo-data
+    title: Transient GitHub error during repo resolution makes prune_stale_data delete cache, check history and clone
+    module: src/grimoire/github/service.py
+    severity: high
+    status: open
+    description: _resolve_static/_resolve_team swallow every exception and drop the repo; prune_stale_data (app.py:249-252) treats it as untracked.
+  - slug: clone-url-token-leaks-into-check-output
+    title: Clone URL embeds GitHub token; WorkspaceError text is stored as CheckResultRecord.output and shown in UI/MCP
+    module: src/grimoire/workspace/manager.py
+    severity: high
+    status: open
+    description: A failed first clone stores the full git clone command, including the x-access-token URL, in check output (workspace/manager.py:231-268, checks/engine.py:180). Token also persisted in .bare/config and not refreshed on rotation.
+  - slug: shared-worktree-hard-reset-during-script
+    title: Hard reset and clean of a shared worktree while another check or an action is using it
+    module: src/grimoire/workspace/manager.py
+    severity: medium
+    status: open
+    description: Lock covers only git commands, not script execution (checks/engine.py:180-209). Overlaps with fixed workspace-sync-concurrency-race; verify what remains.
+  - slug: queued-checks-expire-before-semaphore
+    title: Run-all-checks with more than 5 checks, QUEUED rows older than 60s are marked interrupted and silently never run
+    module: src/grimoire/checks/engine.py
+    severity: medium
+    status: open
+    description: reserve_checks_for_repo queues all; Semaphore(5) delays the rest; reclaim_expired_runs sweeps them (checks/engine.py:453-478, database.py ~447).
+  - slug: timeout-kills-shell-not-process-group
+    title: Timeout path kills only the shell, so terminate_process returns early and children survive
+    module: src/grimoire/script.py
+    severity: medium
+    status: open
+    description: proc.kill() then wait() sets returncode before terminate_process runs (actions/engine.py:300, checks/engine.py:230, targeting.py:145).
+  - slug: health-cache-age-never-reported
+    title: /health never reports cache_age_seconds
+    module: src/grimoire/app.py
+    severity: medium
+    status: open
+    description: Importing _last_refresh by name binds None at import time; spec 07 7.1 promises the field.
+  - slug: in-memory-run-lease-not-renewed
+    title: In-memory run flags expire after 60s while runs continue
+    module: src/grimoire/checks/engine.py
+    severity: medium
+    status: open
+    description: RUN_LEASE_SECONDS never renewed; UI shows idle and fires repoChecksCompleted early; same for actions/engine.py.
+  - slug: stale-result-counted-after-retarget
+    title: Latest result counted even when check no longer targets repo/branch
+    module: src/grimoire/web/router.py
+    severity: medium
+    status: open
+    description: _build_checks_for_repo tests the stored result before `applies` (line ~448).
+  - slug: unauthenticated-state-changing-endpoints
+    title: No auth/CSRF on action run, refresh and backlog save-weights; MCP open by default
+    module: src/grimoire/web/router.py
+    severity: medium
+    status: open
+    description: Cross-site text/plain POST can trigger action scripts holding GH_TOKEN. Decide fix vs ADR (single-operator trade-off).
+  - slug: prompt-injection-via-issue-titles
+    title: Third-party issue/PR titles interpolated unfenced into agent prompts
+    module: src/grimoire/web/prompts.py
+    severity: medium
+    status: open
+    description: Lines 127, 186, 204, 227.
+  - slug: mcp-runs-disabled-checks
+    title: MCP refresh/run ignores check.enabled
+    module: src/grimoire/mcp/tools.py
+    severity: low
+    status: open
+    description: Lines 97-106, 193-200.
+  - slug: action-cron-conflict-unhandled
+    title: Cron action job does not catch ActionConflictError; _sync_job fallbacks are dead and wrong
+    module: src/grimoire/actions/scheduler.py
+    severity: low
+    status: open
+    description: Lines 50-59; app only uses AsyncIOScheduler (coverage shows _sync_job untested).
+  - slug: script-targets-before-first-clone
+    title: Script targeting runs before workspace exists on first boot
+    module: src/grimoire/targeting.py
+    severity: low
+    status: open
+    description: OSError swallowed so script-targeted checks silently skip until next refresh.
+  - slug: review-minor-batch-2026-11-08
+    title: Minor items (ssh_known_hosts quoting, branch '--', empty env var, save-weights 500 and comment loss, dead branch in github/client.py, duplicated _execute_*_action, CDN without SRI, regex not validated at load)
+    module: multiple
+    severity: low
+    status: open
+    description: Reviewer list item 14.
