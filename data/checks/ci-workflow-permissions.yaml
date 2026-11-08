@@ -1,0 +1,12 @@
+# P0 pattern from danielvm-git/.github — source: align-existing-repo.md §3 (P0)
+# Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
+name: "CI token permissions scoped"
+description: >
+  Every workflow declares permissions at workflow level or on every job; never write-all.
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 */6 * * *"
+severity: error
+priority: P0
+script: |
+  python3 -m grimoire.conformance ci-workflow-permissions

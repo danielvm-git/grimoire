@@ -34,6 +34,7 @@ Every check definition has these fields:
 | `schedule` | No | Cron expression; defaults to `refresh_schedule` |
 | `enabled` | No | `true` (default) or `false` |
 | `severity` | No | `"error"` (default) or `"warning"` — controls how failures appear on the dashboard |
+| `priority` | No | `P0`, `P1` or `P2` — makes this a [pattern check](../reference/conformance.md) that feeds the compliance score |
 
 ## Exit codes
 
@@ -122,6 +123,17 @@ severity: warning
 ```
 
 Warnings appear with a yellow indicator on the dashboard instead of red, and carry a lower weight in the backlog.
+
+## Make it a pattern check
+
+If the check enforces a pattern graded in your template repo, set `priority` to that grade. The severity must match: `P0` needs `severity: error`, and `P1` or `P2` needs `severity: warning`.
+
+```yaml
+severity: error
+priority: P0
+```
+
+Pattern checks feed the per-repo compliance score. See [Pattern conformance](../reference/conformance.md).
 
 ## Set a custom schedule
 

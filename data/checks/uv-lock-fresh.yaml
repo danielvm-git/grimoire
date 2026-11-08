@@ -6,7 +6,7 @@ targets:
 severity: error
 script: |
   set -e
-  if ! command -v uv &>/dev/null; then
+  if ! command -v uv >/dev/null 2>&1; then
     echo "WARN: uv not installed, skipping"
     exit 0
   fi

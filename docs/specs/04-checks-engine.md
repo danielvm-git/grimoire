@@ -25,6 +25,7 @@ script: |
 schedule: "0 */8 * * *"   # optional cron; omit to use default refresh interval
 enabled: true              # optional; default true
 severity: error            # optional; "error" (red, default) or "warning" (yellow)
+priority: P0               # optional; marks a pattern check (P0 | P1 | P2), see spec 09
 ```
 
 **Branch scoping.** `list` and `regex` include every observed branch of a matched repo. `script` is evaluated *per (repo, branch)*, so it doubles as the branch filter: return exit code 0 for branches the check should run against, non-zero for the rest. Branches not configured on the repository in `config.yaml` are never considered.
@@ -62,6 +63,12 @@ class CheckDefinition(BaseModel):
     schedule: str | None = None  # cron expression
     enabled: bool = True
     severity: Literal["warning", "error"] = "error"
+    priority: Literal["P0", "P1", "P2"] | None = None
+
+    @model_validator(mode="after")
+    def priority_matches_severity(self) -> Self:
+        # P0 requires severity "error"; P1 and P2 require "warning".
+        ...
 ```
 
 ### Severity
@@ -70,6 +77,21 @@ The `severity` field controls how a failing check affects the repository's healt
 
 - **`"error"` (default):** A failure turns the repo accent **red**. Use for critical checks (e.g., tests, lock files).
 - **`"warning"`:** A failure is **reported** but does **not** affect the repository's health status. Shown with a yellow ⚠ icon instead of a red ✗. Use for advisory checks (e.g., library freshness).
+
+### Priority
+
+`priority` marks a check as a portfolio pattern check and feeds the per-repo compliance score (spec 09 §9.4). Its grade fixes the severity, and the loader rejects a mismatch:
+
+| Priority | Required severity |
+|---|---|
+| `P0` | `error` |
+| `P1`, `P2` | `warning` |
+
+Checks without `priority` are not scored.
+
+### Shell portability
+
+Scripts without a shebang run under `/bin/sh`, which is dash in the Docker image. Use POSIX redirects (`>/dev/null 2>&1`), never bash's `&>`: dash reads `cmd &>/dev/null` as "run `cmd` in the background", which always succeeds. A loader test rejects `&>` in bundled scripts that have no bash shebang.
 
 ## 4.2 — Check Loader
 
@@ -309,3 +331,5 @@ class CheckRunDetail(BaseModel):
 - [ ] REST API endpoints return correct responses with proper status codes
 - [ ] `POST /api/checks/{slug}/run?repo=owner/repo` targets only the specified repo
 - [ ] Tests mock subprocess execution and workspace
+- [ ] `priority` loads, and a priority/severity mismatch raises at load time
+- [ ] No bundled `/bin/sh` script uses `&>`

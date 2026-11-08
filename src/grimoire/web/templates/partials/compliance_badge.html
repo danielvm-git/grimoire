@@ -1,0 +1,10 @@
+{#- Expects `c` (Compliance | None). Renders nothing when the repo has no pattern checks. -#}
+{%- if c -%}
+{%- set tip = "P0 " ~ c.p0_passed ~ "/" ~ c.p0_total ~ " · P1 " ~ c.p1_passed ~ "/" ~ c.p1_total ~ (" · " ~ c.not_run ~ " not run" if c.not_run else "") -%}
+{%- if c.percent is none -%}
+<span class="badge badge-sm badge-ghost font-mono-nums compliance-badge" title="Pattern compliance: no results yet · {{ tip }}">—</span>
+{%- else -%}
+<span class="badge badge-sm font-mono-nums compliance-badge {% if c.tier == 'fail' %}badge-error{% elif c.tier == 'partial' %}badge-warning{% else %}badge-success{% endif %}"
+      title="Pattern compliance · {{ tip }}">{% if c.tier == 'fail' %}<i class="fa-solid fa-xmark mr-1" aria-hidden="true"></i>{% elif c.tier == 'partial' %}<i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>{% else %}<i class="fa-solid fa-check mr-1" aria-hidden="true"></i>{% endif %}{{ c.percent }}%</span>
+{%- endif -%}
+{%- endif -%}

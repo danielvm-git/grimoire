@@ -33,6 +33,7 @@ from grimoire.web.backlog import (
     group_by_repo,
     group_by_type,
 )
+from grimoire.web.compliance import Compliance, compute_compliance
 from grimoire.web.prompts import build_pendencies, build_repo_prompt
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,10 @@ class RepoViewModel:
         if self.stale_issues or self.stale_prs:
             return "warning"
         return "ok"
+
+    @property
+    def compliance(self) -> Compliance | None:
+        return compute_compliance(self.checks_by_branch)
 
     @property
     def total_workflows(self) -> int:
@@ -225,6 +230,11 @@ SORT_KEYS: dict[str, Any] = {
     "branches": lambda r: r.total_branches,
     "workflow_failures": lambda r: r.workflow_failures,
     "check_failures": lambda r: r.check_failures,
+    "compliance": lambda r: (
+        r.compliance.percent
+        if r.compliance and r.compliance.percent is not None
+        else -1
+    ),
     "last_activity": lambda r: (
         r.last_commit_at or datetime.min.replace(tzinfo=timezone.utc)
     ),
@@ -240,6 +250,7 @@ SORT_LABELS: dict[str, str] = {
     "branches": "Branches",
     "workflow_failures": "Failing Workflows",
     "check_failures": "Failing Checks",
+    "compliance": "Compliance",
     "last_activity": "Last Activity",
 }
 
@@ -441,6 +452,7 @@ def _build_checks_for_repo(
                     "passed": result["passed"],
                     "status": "pass" if result["passed"] else "fail",
                     "severity": check_def.severity,
+                    "priority": check_def.priority,
                     "id": result["id"],
                     "timestamp": result["timestamp"],
                 }
@@ -456,6 +468,7 @@ def _build_checks_for_repo(
                     "passed": None,
                     "status": "not-run",
                     "severity": check_def.severity,
+                    "priority": check_def.priority,
                     "id": None,
                     "timestamp": None,
                 }
@@ -663,6 +676,7 @@ async def repository_detail(request: Request, owner: str, name: str) -> HTMLResp
         "repository.html",
         context={
             "check_not_run": check_not_run,
+            "compliance": compute_compliance(checks_by_branch),
             "running": is_repo_run_active(full_name),
             "progress_completed": run_progress.completed if run_progress else 0,
             "progress_total": run_progress.total if run_progress else 0,

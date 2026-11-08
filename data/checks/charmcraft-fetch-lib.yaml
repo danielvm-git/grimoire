@@ -6,7 +6,7 @@ targets:
 severity: warning
 script: |
   set -e
-  if ! command -v charmcraft &>/dev/null; then
+  if ! command -v charmcraft >/dev/null 2>&1; then
     echo "WARN: charmcraft not installed, skipping"
     exit 0
   fi

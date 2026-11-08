@@ -41,6 +41,12 @@ grimoire/
 │   │   ├── engine.py             # Execute checks, capture output
 │   │   ├── scheduler.py          # Schedule check runs
 │   │   └── router.py             # REST API: trigger, toggle, list
+│   ├── conformance/              # Portfolio pattern rules (see spec 09)
+│   │   ├── __init__.py           # RuleContext, RuleResult, rule registry
+│   │   ├── __main__.py           # CLI: python -m grimoire.conformance <rule>
+│   │   ├── repo.py               # File and git-history rules
+│   │   ├── workflows.py          # .github/workflows rules
+│   │   └── github.py             # Branch protection via the GitHub API
 │   ├── actions/
 │   │   ├── __init__.py
 │   │   ├── loader.py             # Load YAML action definitions
@@ -98,7 +104,9 @@ Module 1: Scaffolding & Configuration  ──(no deps)
     │
     ├──► Module 7: Observability & DevOps
     │
-    └──► Module 8: MCP Server  ◄── Modules 1, 2, 4
+    ├──► Module 8: MCP Server  ◄── Modules 1, 2, 4
+    │
+    └──► Module 9: Conformance Rules  ◄── Module 1, Module 4 (priority field)
 ```
 
 ## Configuration File (`config.yaml`)

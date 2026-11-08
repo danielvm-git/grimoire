@@ -1,0 +1,12 @@
+# P0 pattern from danielvm-git/.github — source: align-existing-repo.md §3 (P0), github-actions-versions.md
+# Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
+name: "CI actions pinned"
+description: >
+  Third-party actions are pinned to a full commit SHA; no action or reusable workflow is used at @main or @master.
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 */6 * * *"
+severity: error
+priority: P0
+script: |
+  python3 -m grimoire.conformance ci-actions-pinned

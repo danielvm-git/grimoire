@@ -194,7 +194,11 @@ Clicking a column header triggers an HTMX request that re-renders just the table
 
 The server sorts the data and returns the `<tbody>` HTML fragment. No full page reload.
 
-Supported sort keys: `name`, `issues`, `stale_issues`, `prs`, `stale_prs`, `workflow_failures`, `check_failures`, `last_activity`.
+Supported sort keys: `name`, `health`, `issues`, `stale_issues`, `prs`, `stale_prs`, `branches`, `workflow_failures`, `check_failures`, `compliance`, `last_activity`. `compliance` sorts by the compliance percent; repos without pattern checks sort as -1.
+
+### Compliance badge
+
+`RepoViewModel.compliance` returns `compute_compliance(checks_by_branch)` (spec 09 §9.4). `partials/compliance_badge.html` renders it as a small badge: the percent, colored and iconed by tier (`fail` error/✗, `partial` warning/⚠, `pass` success/✓), with a `title` of `P0 x/y · P1 a/b · N not run`. It shows `—` when nothing has run, and nothing when the repo has no pattern checks. The badge appears in the matrix view's sortable **Compliance** column and in the list view header row.
 
 ### Refresh (HTMX)
 
@@ -281,6 +285,7 @@ Card titles are sentence case ("Stale issues", "Stale pull requests"). Last acti
 - Flat list per column — one row per item with status icon, name, status text, and link. Workflow rows also show the latest run's relative time (`2h ago`, absolute time in the `title`) when known.
 - Branch labels shown only when multiple branches are tracked.
 - The Checks column header carries a **Run checks** button (HTMX): `POST /partials/repo-checks-run/{owner}/{name}` reserves a run for every enabled check, skips those already running (reported in a toast via `HX-Trigger: repoChecksSkipped`) and executes them in the background against this repo only (all matching branches). `GET /partials/repo-checks-status/{owner}/{name}` returns the idle/running button (polling every 2s with `completed/total` checks) and sends `HX-Trigger: repoChecksCompleted` when done, which reloads the page. 404 for an unknown repo, 409 if a run for the repo is already in flight.
+- When the repo has pattern checks, a **Pattern compliance** line (`#compliance-summary`) sits under the Checks header with the badge, `P0 passed/total` (error color if any P0 fails), `P1 passed/total` (warning color if any P1 fails) and the not-run count.
 - The header breakdown separates `not-run` checks (`N not run`, muted) from passing ones; not-run checks are never counted as passing.
 - Check rows show a right-aligned monospace status (`pass` success, `warning` warning, `fail` error) and an "Output" button with a terminal icon (HTMX `hx-get` to fetch full output on demand).
 
@@ -378,7 +383,7 @@ Each item gets a priority score: `score = category_weight × repo_weight × work
 
 - **`category_weight`** — base weight from `backlog.category_weights` config.
 - **`repo_weight`** — resolved by `resolve_repo_weight(repo_full_name, config)` against `backlog.repository_weights`. Rules are evaluated top-to-bottom, the last match wins, and the default is `1.0` if nothing matches. Set a matching rule to `0.0` to hide a repo from the backlog.
-- **`workflow_multiplier`** — per-workflow-name weight from `backlog.workflow_weights` (regex patterns via `re.search()`, default 1.0). Only applies to workflow/check items. First matching pattern wins. Example patterns: `"Release .*"`, `"^(CI|Build)$"`, `"Deploy"`.
+- **`workflow_multiplier`** — per-workflow-name weight from `backlog.workflow_weights` (glob patterns via `fnmatch`, default 1.0). Only applies to workflow/check items. First matching pattern wins. Example patterns: `"Release *"`, `"CI"`, `"Deploy*"`.
 - **`age_factor`** — automatic boost for older problems. Stale items use excess age over threshold: `1.0 + log2(1 + max(0, age_days - threshold))`. Workflows/checks use flat factor (1.0) since failure start time is not tracked.
 - **`compute_score(category, repo_weight, age_days, reference_days, config, workflow_name="")`** — scoring helper that accepts the resolved repository weight instead of reading per-repo metadata.
 
@@ -532,3 +537,4 @@ Every section must render a helpful message when there's no data:
 - [ ] HTMX partial updates work without full page reloads
 - [ ] Pages render correctly in both light and dark mode
 - [ ] Pages are responsive (usable on tablet/mobile, scrollable tables)
+- [ ] Repo page shows the pattern compliance breakdown; matrix view sorts by compliance

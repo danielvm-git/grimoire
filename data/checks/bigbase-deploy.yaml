@@ -1,0 +1,12 @@
+# P0 pattern from danielvm-git/.github — source: align-existing-repo.md §4 (P0, BigBase projects only)
+# Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
+name: "BigBase deploy contract"
+description: >
+  BigBase projects deploy through bigbase-deploy@v1 with the scoped BIGBASE_DEPLOY_TOKEN, never email/password, followed by a distinct Health check step.
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ] && grep -rqil bigbase .github/workflows'
+schedule: "0 */6 * * *"
+severity: error
+priority: P0
+script: |
+  python3 -m grimoire.conformance bigbase-deploy

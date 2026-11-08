@@ -6,7 +6,7 @@ targets:
 severity: warning
 script: |
   set -e
-  if ! command -v composer &>/dev/null; then
+  if ! command -v composer >/dev/null 2>&1; then
     echo "WARN: composer not installed, skipping"
     exit 0
   fi

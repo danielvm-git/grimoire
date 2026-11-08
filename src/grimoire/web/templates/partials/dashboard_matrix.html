@@ -29,6 +29,12 @@
                 hx-target="#repo-grid" hx-swap="innerHTML">
                 Branches {% if sort == 'branches' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
             </th>
+            <th class="cursor-pointer hover:text-primary text-center py-1"
+                hx-get="{{ hx_base }}?sort=compliance&dir={% if sort == 'compliance' %}{{ next_dir }}{% else %}asc{% endif %}"
+                hx-target="#repo-grid" hx-swap="innerHTML"
+                title="Share of P0 and P1 pattern checks passing">
+                Compliance {% if sort == 'compliance' %}{% if dir == 'asc' %}▲{% else %}▼{% endif %}{% endif %}
+            </th>
             <th class="text-center py-1">Workflows</th>
             <th class="text-center py-1">Checks</th>
         </tr>
@@ -67,6 +73,10 @@
             <td class="text-right font-mono-nums text-sm py-0.5">
                 {{ repo.total_branches }}
             </td>
+
+            {# ── Compliance ── #}
+            {% set c = repo.compliance %}
+            <td class="text-center py-0.5">{% include "partials/compliance_badge.html" %}</td>
 
             {# ── Workflows ── #}
             <td class="text-center py-0.5">
