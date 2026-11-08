@@ -235,6 +235,16 @@ script: |
       return None
 
 
+  def _deploy_auth(deploy_text: str) -> str | None:
+      """Name how the deploy authenticates, or None when nothing is evident."""
+      if re.search(r"id-token['\"]?\s*:\s*['\"]?write", deploy_text):
+          return "OIDC (id-token: write)"
+      names = sorted(set(re.findall(r"\$\{\{\s*secrets\.([A-Za-z0-9_]+)", deploy_text)))
+      if names:
+          return "secrets: " + ", ".join(names)
+      return None
+
+
   def _find_trigger_events(wf: dict) -> list[str]:
       on = wf.get("on", {})
       if isinstance(on, str):
@@ -653,12 +663,14 @@ script: |
           if not has_environment:
               _sev("medium")
 
-          # 5e: Secrets from GitHub secrets
-          has_secret_ref = "${{ secrets." in deploy_text
-          _r("5e. Deploy uses GitHub secrets", has_secret_ref,
+          # 5e: Deploy authenticates by OIDC or by a stored secret. The row names
+          # which one, so a repo is never nudged to add a long-lived token where
+          # federated credentials already do the job.
+          auth = _deploy_auth(deploy_text)
+          _r("5e. Deploy authenticates (OIDC or secret)", auth is not None,
              deploy_wf[0].name if deploy_wf else ci_cd[0].name,
-             "" if has_secret_ref else "No secret references found in deploy")
-          if not has_secret_ref:
+             auth or "No OIDC (id-token: write) and no secrets.* reference found in deploy")
+          if auth is None:
               _sev("medium")
 
           # 5f: Hardcoded secrets check

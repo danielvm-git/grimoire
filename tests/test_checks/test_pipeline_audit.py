@@ -332,3 +332,75 @@ def test_caching_keyword_in_a_script_does_not_count(audit: Audit) -> None:
     )
     (row,) = audit.run().find("8b.")
     assert row[1] == "FAIL"
+
+
+# ── #53: rule 5e deploy authentication ───────────────────────────────────────
+
+DEPLOY = """\
+name: Deploy
+on:
+  workflow_run:
+    workflows: [Test Build Release]
+    types: [completed]
+{perms}jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    environment: production
+{job_perms}    steps:
+      - name: Verify artifact
+        run: test -f dist/index.html
+      - name: Publish
+        run: {publish}
+"""
+
+
+def _deploy(perms: str = "", job_perms: str = "", publish: str = "echo deploy") -> str:
+    return DEPLOY.format(perms=perms, job_perms=job_perms, publish=publish)
+
+
+def _auth_row(result: AuditResult) -> tuple[str, str, str, str]:
+    (row,) = result.find("5e.")
+    return row
+
+
+def test_deploy_auth_oidc_job_permission_passes_and_is_named(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow(
+        "deploy.yml",
+        _deploy(
+            job_perms="    permissions:\n      pages: write\n      id-token: write\n"
+        ),
+    )
+    row = _auth_row(audit.run())
+    assert row[1] == "PASS"
+    assert "OIDC (id-token: write)" in row[3]
+
+
+def test_deploy_auth_oidc_top_level_permission_passes(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow("deploy.yml", _deploy(perms="permissions:\n  id-token: write\n"))
+    assert "OIDC" in _auth_row(audit.run())[3]
+
+
+def test_deploy_auth_secret_passes_and_names_the_secret(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow(
+        "deploy.yml", _deploy(publish="npm publish --token ${{ secrets.NPM_TOKEN }}")
+    )
+    row = _auth_row(audit.run())
+    assert row[1] == "PASS"
+    assert "secrets: NPM_TOKEN" in row[3]
+
+
+def test_deploy_auth_neither_fails(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow("deploy.yml", _deploy())
+    row = _auth_row(audit.run())
+    assert row[1] == "FAIL"
+    assert "id-token: write" in row[3]
+
+
+def test_deploy_auth_id_token_read_is_not_oidc(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow("deploy.yml", _deploy(perms="permissions:\n  id-token: none\n"))
+    assert _auth_row(audit.run())[1] == "FAIL"
