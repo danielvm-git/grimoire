@@ -1,0 +1,13 @@
+story_id: e13s05
+title: "Run all checks for one repo"
+status: done
+bcps: 3
+tasks:
+- id: 1
+  description: "Add reserve_checks_for_repo/run_reserved_checks_for_repo plus in-memory repo run progress to checks/engine.py"
+  verify: uv run pytest tests/test_checks/test_repo_run.py -q
+  status: done
+- id: 2
+  description: "Add run/status partials and the Run checks button; count not-run checks separately in the header"
+  verify: uv run pytest tests/test_web/test_router.py -q -k TestRepoChecksRun
+  status: done

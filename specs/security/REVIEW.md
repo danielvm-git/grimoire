@@ -75,3 +75,23 @@ change was introduced by the review fixes. Findings: `specs/bugs/registry.yaml`
 | Secret leakage via VCS (CWE-552) | PASS (improved) | `.gitignore` now covers `grimoire.db*`, so the WAL sidecars (`-wal`, `-shm`) cannot be committed. Sidecars hold only the same data as the database file; no new exposure class, and the user docs now tell operators to copy them with the DB for backups. |
 
 **Findings ≥ confidence 8**: none. **Conclusion**: clean for merge to main.
+
+## Branch review (2026-11-07) — `feat/repo-checks-run` (story e13s05, PR #48)
+
+- **Scope**: `src/grimoire/checks/engine.py` (`reserve_checks_for_repo`,
+  `run_reserved_checks_for_repo`, `_running_repos`), `src/grimoire/web/router.py`
+  (`/partials/repo-checks-run/...`, `/partials/repo-checks-status/...`),
+  `src/grimoire/web/templates/partials/repo_checks_button.html`,
+  `src/grimoire/web/templates/repository.html` (diff `main...HEAD`).
+- **Threat-model delta**: none. No auth boundary, credential path, or trust-boundary change.
+
+| Area | Verdict | Notes |
+|---|---|---|
+| Broken access control (CWE-639) | PASS | The route rejects any `owner/name` not present in the tracked-repository registry (`known_repos`) with 404 before reserving work. There is no user-supplied filesystem or shell path. |
+| Command injection (CWE-78) | PASS | The run reuses `run_check_for_all_targets`, whose script body comes from operator-authored check definitions. The repo and branch values are tracked-model data and are not interpolated into a shell string. |
+| DoS / concurrency (CWE-400) | PASS | `is_repo_run_active` returns 409 while a one-repo run is in flight, so repeated POSTs cannot fan out unbounded subprocesses. Execution is bounded by the existing `_CONCURRENCY` semaphore and each reserved slot is released in `finally`. |
+| Header injection (CWE-113) | PASS | `HX-Trigger` carries `json.dumps` of skipped check slugs (operator-configured). Starlette rejects header values containing CR/LF; no user-controlled text reaches the header. |
+| XSS (CWE-79) | PASS | `repo_name` is rendered through Jinja autoescaping in both the `hx-*` attributes and the button label; no `|safe` was added. |
+| Sensitive data exposure (CWE-532) | PASS | The only new log line records the repo name and exception; no token, check output, or config value is logged by the new code. |
+
+**Findings ≥ confidence 8**: none. **Conclusion**: clean for merge to main.
