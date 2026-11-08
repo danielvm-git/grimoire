@@ -317,6 +317,16 @@ function copyText(text) {
                         {%- if check_not_run %}{% if chk_passing or check_warnings or check_failures %}<span class="opacity-40 mx-0.5">·</span>{% endif %}<span class="opacity-60"><i class="fa-solid fa-minus status-icon status-icon-not-run"></i> {{ check_not_run }} not run</span>{% endif -%}
                     </span>
                 </div>
+                {% if compliance %}
+                <div id="compliance-summary" class="flex items-center flex-wrap gap-2 text-sm font-mono-nums mb-2">
+                    <span class="opacity-70">Pattern compliance</span>
+                    {% set c = compliance %}{% include "partials/compliance_badge.html" %}
+                    <span class="{% if compliance.p0_failing %}text-error{% else %}opacity-70{% endif %}">P0 {{ compliance.p0_passed }}/{{ compliance.p0_total }}</span>
+                    <span class="opacity-40">·</span>
+                    <span class="{% if compliance.p1_passed < compliance.p1_total %}text-warning{% else %}opacity-70{% endif %}">P1 {{ compliance.p1_passed }}/{{ compliance.p1_total }}</span>
+                    {% if compliance.not_run %}<span class="opacity-40">·</span><span class="opacity-60">{{ compliance.not_run }} not run</span>{% endif %}
+                </div>
+                {% endif %}
                 {% for branch, checks in checks_by_branch.items() %}
                     {% if checks_by_branch | length > 1 %}
                     <div class="text-xs opacity-40 mt-1 mb-0.5">{{ branch }}</div>

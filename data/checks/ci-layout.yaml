@@ -1,0 +1,12 @@
+# P0 pattern from danielvm-git/.github — source: align-existing-repo.md §3 (P0), workflow-templates/
+# Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
+name: "CI layout: test-build-release + deploy"
+description: >
+  Pipeline lives in test-build-release.yml; deploy.yml (when the pipeline hands a deploy artifact) runs on workflow_run of it, gated on success on the default branch. No ci-cd*.yml.
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 */6 * * *"
+severity: error
+priority: P0
+script: |
+  "${GRIMOIRE_PYTHON:-python3}" -m grimoire.conformance ci-layout

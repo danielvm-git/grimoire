@@ -1,0 +1,296 @@
+<title>Grimoire Red Team Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~760px) with wide tables allowed to scroll; verdict band up top, then evidence, then roadmap. */
+:root{
+  --bg:#f5f6f7; --paper:#ffffff; --ink:#16191d; --muted:#5b636d; --rule:#dde1e5;
+  --accent:#9b1c2e; --accent-soft:#f6e4e7;
+  --ok:#1f7a4a; --ok-soft:#e2f2e9; --warn:#9a6200; --warn-soft:#fbf0d9; --bad:#b3261e; --bad-soft:#fbe5e3; --na:#6b7280; --na-soft:#eceef1;
+  --f-display:"Newsreader",Georgia,"Times New Roman",serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121417; --paper:#1a1d21; --ink:#e8eaed; --muted:#9aa3ad; --rule:#2c3137;
+  --accent:#ef7d8d; --accent-soft:#3a1d23;
+  --ok:#6fd39b; --ok-soft:#173326; --warn:#f0bf5a; --warn-soft:#3a2d12; --bad:#ff8a80; --bad-soft:#3d1c1a; --na:#a3abb5; --na-soft:#262a30;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121417; --paper:#1a1d21; --ink:#e8eaed; --muted:#9aa3ad; --rule:#2c3137;
+  --accent:#ef7d8d; --accent-soft:#3a1d23;
+  --ok:#6fd39b; --ok-soft:#173326; --warn:#f0bf5a; --warn-soft:#3a2d12; --bad:#ff8a80; --bad-soft:#3d1c1a; --na:#a3abb5; --na-soft:#262a30;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 64px}
+.wrap{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:48px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;text-wrap:balance;margin:0;line-height:1.2}
+h1{font-size:clamp(2rem,5vw,2.75rem)}
+h2{font-size:1.6rem}
+h3{font-size:1.15rem}
+p{margin:0}
+code,.mono{font-family:var(--f-mono);font-size:.88em}
+code{background:var(--na-soft);padding:1px 5px;border-radius:4px}
+a{color:var(--accent)}
+.eyebrow{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.lede{color:var(--muted);max-width:65ch}
+section{display:flex;flex-direction:column;gap:16px}
+.head{display:flex;flex-direction:column;gap:12px}
+.verdict{background:var(--paper);border:1px solid var(--rule);border-left:6px solid var(--accent);border-radius:0;padding:20px 24px;display:flex;flex-direction:column;gap:10px}
+.verdict .v{font-family:var(--f-display);font-size:1.9rem;font-weight:600;color:var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+.stat{background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.stat b{font-family:var(--f-display);font-size:2rem;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.stat span{font-size:.85rem;color:var(--muted)}
+.scroll{overflow-x:auto;background:var(--paper);border:1px solid var(--rule);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:600px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+th{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500;background:var(--paper);position:sticky;top:0}
+tr:last-child td{border-bottom:none}
+.chip{display:inline-block;font-family:var(--f-mono);font-size:.72rem;font-weight:500;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.c-ok{background:var(--ok-soft);color:var(--ok)}
+.c-part{background:var(--warn-soft);color:var(--warn)}
+.c-no{background:var(--bad-soft);color:var(--bad)}
+.c-contra{background:var(--accent);color:var(--paper)}
+.c-na{background:var(--na-soft);color:var(--na)}
+.filters{display:flex;flex-wrap:wrap;gap:8px}
+.filters button{font:inherit;font-size:.85rem;padding:6px 12px;border-radius:99px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);cursor:pointer}
+.filters button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.filters button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.modes{display:grid;gap:12px}
+.mode{background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.mode .sev{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mode ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:4px;color:var(--ink)}
+.mode li{font-size:.93rem}
+.src{font-size:.8rem;color:var(--muted)}
+ol.road{margin:0;padding:0;list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:12px}
+ol.road li{counter-increment:s;background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:14px 16px 14px 56px;position:relative}
+ol.road li::before{content:counter(s);position:absolute;left:16px;top:12px;font-family:var(--f-display);font-size:1.6rem;font-weight:600;color:var(--accent)}
+ol.road li b{display:block}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:.82rem;color:var(--muted);align-items:center}
+footer{font-size:.8rem;color:var(--muted);border-top:1px solid var(--rule);padding-top:16px}
+@media (prefers-reduced-motion:no-preference){.filters button{transition:background .15s,border-color .15s}}
+</style>
+
+<div class="wrap">
+
+<header class="head">
+  <div class="eyebrow">Red team review · grimoire vs danielvm-git/.github @ b48b6e0 · 2026-11-08</div>
+  <h1>Does Grimoire check that my repos follow my patterns?</h1>
+  <p class="lede">Three reviewers looked at all 12 checks, the specs, the user docs and the template repo from three angles: coverage, correctness and architecture. This page merges what they found with a read of every doc in the project.</p>
+</header>
+
+<div class="verdict">
+  <div class="eyebrow">Verdict</div>
+  <div class="v">Partially</div>
+  <p>Grimoire is good at running scripts across the fleet and showing the results. But it checks repos against its own hardcoded rules, not against your template. Those rules already disagree with the template in several places, and a few rules can never fail. Today, a green repo in Grimoire does not mean the repo follows your patterns.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><b>30</b><span>patterns found in the template</span></div>
+  <div class="stat"><b>4</b><span>fully enforced by Grimoire</span></div>
+  <div class="stat"><b>17</b><span>not checked at all</span></div>
+  <div class="stat"><b>3</b><span>contradict the template or always pass</span></div>
+  <div class="stat"><b>0</b><span>stack profiles (Python, Go, Godot…)</span></div>
+</div>
+
+<section id="coverage">
+  <h2>Pattern coverage</h2>
+  <p class="lede">Every checkable pattern the template asks a fleet repo to follow, and what Grimoire does with it. Filter by status.</p>
+  <div class="filters" role="group" aria-label="Filter patterns by status">
+    <button type="button" id="f-all" data-f="all" aria-pressed="true">All</button>
+    <button type="button" id="f-no" data-f="no" aria-pressed="false">Not checked</button>
+    <button type="button" id="f-contra" data-f="contra" aria-pressed="false">Contradicts</button>
+    <button type="button" id="f-part" data-f="part" aria-pressed="false">Partial</button>
+    <button type="button" id="f-ok" data-f="ok" aria-pressed="false">Enforced</button>
+  </div>
+  <div class="scroll">
+  <table id="cov">
+    <thead><tr><th>Pattern</th><th>Status</th><th>Grimoire check</th><th>Template source</th></tr></thead>
+    <tbody>
+      <tr data-s="no"><td><code>CLAUDE.md</code>/<code>GEMINI.md</code> symlink to <code>AGENTS.md</code> (P0)</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">agent-context-files.md, audit-workflows.sh</td></tr>
+      <tr data-s="no"><td><code>CONVENTIONS.md</code> with Always Green / fix-or-log rules</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">align-existing-repo.md §5</td></tr>
+      <tr data-s="ok"><td>README exists</td><td><span class="chip c-ok">enforced</span></td><td><code>has-readme</code> (warning)</td><td class="src">align §2</td></tr>
+      <tr data-s="part"><td>README follows the template (badge, Commands, Tech stack, License)</td><td><span class="chip c-part">partial</span></td><td><code>has-readme</code> checks existence only</td><td class="src">templates/readmes/*</td></tr>
+      <tr data-s="ok"><td>LICENSE file</td><td><span class="chip c-ok">enforced</span></td><td><code>license-exists</code> (warning)</td><td class="src">LICENSE</td></tr>
+      <tr data-s="no"><td>Conventional Commits on the default branch</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">CONVENTIONS.md, check-conventional-commits.sh</td></tr>
+      <tr data-s="no"><td>No <code>Co-authored-by:</code> footers (P1)</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">CONVENTIONS.md § Git Attribution</td></tr>
+      <tr data-s="contra"><td>Branch protection (PR, approval, status checks, no force-push)</td><td><span class="chip c-contra">always passes</span></td><td><code>ci-cd-pipeline-audit</code> 7a/7b hardcoded <code>True</code></td><td class="src">branch-protection-rules.md</td></tr>
+      <tr data-s="no"><td>Repo settings: squash only, auto-delete branches</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">start-new-project.md §10</td></tr>
+      <tr data-s="ok"><td><code>test-build-release.yml</code> + <code>deploy.yml</code> pair</td><td><span class="chip c-ok">enforced</span></td><td><code>ci-cd-migration</code></td><td class="src">start-new-project §4 option B</td></tr>
+      <tr data-s="contra"><td>Thin <code>ci-cd.yml</code> calling reusable workflows <code>@v2</code> (marked "recommended")</td><td><span class="chip c-contra">contradicts</span></td><td><code>ci-cd-migration</code> fails it; audit 5c misfires</td><td class="src">start-new-project §4 option A</td></tr>
+      <tr data-s="part"><td>Workflow-level <code>permissions: contents: read</code></td><td><span class="chip c-part">partial</span></td><td>audit 9a (medium, stops early)</td><td class="src">align §3, security-baseline.yml</td></tr>
+      <tr data-s="no"><td><code>timeout-minutes</code> on every job</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">align §3, audit-workflows.sh</td></tr>
+      <tr data-s="part"><td><code>concurrency</code> on every workflow</td><td><span class="chip c-part">partial</span></td><td>migration (deploy side), audit 2c/2d (primary file only)</td><td class="src">align §3</td></tr>
+      <tr data-s="no"><td><code>runs-on: ubuntu-22.04</code>, never <code>-latest</code></td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">align §3, audit-workflows.sh</td></tr>
+      <tr data-s="contra"><td>Third-party actions pinned to a 40-character SHA</td><td><span class="chip c-contra">contradicts</span></td><td>audit 8a accepts <code>@v4</code></td><td class="src">github-actions-versions.md</td></tr>
+      <tr data-s="no"><td>Action versions match the version matrix</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">github-actions-versions.md</td></tr>
+      <tr data-s="no"><td>Copied templates match the <code># version:</code> header</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">audit-template-versions.sh</td></tr>
+      <tr data-s="no"><td>Deploy through <code>bigbase-deploy@v1</code> with a scoped token</td><td><span class="chip c-no">not checked</span></td><td>none (5e only greps <code>secrets.</code>)</td><td class="src">bigbase-deploy-contract.md</td></tr>
+      <tr data-s="part"><td>Health check step after deploy</td><td><span class="chip c-part">partial</span></td><td>audit 6a/6b keyword match</td><td class="src">align §4</td></tr>
+      <tr data-s="no"><td>semantic-release config (<code>.releaserc.json</code>, <code>v${version}</code>)</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">templates/semantic-release/</td></tr>
+      <tr data-s="no"><td>Pre-commit config (Python stack)</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">templates/pre-commit/</td></tr>
+      <tr data-s="no"><td><code>.gitignore</code> per stack</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">templates/gitignore/*</td></tr>
+      <tr data-s="part"><td>Preflight command defined and green</td><td><span class="chip c-part">partial</span></td><td><code>lint-passes</code> runs its own linters</td><td class="src">align §6</td></tr>
+      <tr data-s="ok"><td>CI green on the default branch</td><td><span class="chip c-ok">enforced</span></td><td><code>ci-green</code></td><td class="src">CONVENTIONS.md</td></tr>
+      <tr data-s="part"><td>Kebab-case workflow filenames</td><td><span class="chip c-part">partial</span></td><td>audit 1d (medium, never fails)</td><td class="src">portfolio-standards.md</td></tr>
+      <tr data-s="no"><td>Kebab-case repo names</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">portfolio-standards.md</td></tr>
+      <tr data-s="no"><td><code>specs/</code> layout, exceptions logged in <code>specs/state.yaml</code></td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">AGENTS.md, branch-protection-rules.md</td></tr>
+      <tr data-s="no"><td>CodeQL workflow on every repo</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">portfolio-standards.md</td></tr>
+      <tr data-s="no"><td>Brand tokens in frontend repos (P2)</td><td><span class="chip c-no">not checked</span></td><td>none</td><td class="src">align §7</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="src">Checks with no basis in the template: <code>no-todo-fixme</code>, <code>composer-lock-fresh</code>, <code>uv-lock-fresh</code> and <code>charmcraft-fetch-lib</code> (which targets <code>-operator</code> repos you don't have). Audit rules 1c, 4b, 5h, 8b and 9b aren't asked for anywhere in the template. Repos that copy <code>test-build-release-python.yml</code> exactly fail 8b, because that template has no cache.</p>
+</section>
+
+<section id="failure-modes">
+  <h2>Why a green repo can still be off-pattern</h2>
+  <p class="lede">Reviewer findings merged by the kind of damage they do. Ordered from most to least harmful to your trust in the dashboard.</p>
+  <div class="modes">
+    <div class="mode">
+      <div class="sev"><span class="chip c-contra">1 · false green</span><h3>Failures that never show up</h3></div>
+      <ul>
+        <li>Most pattern checks are <code>severity: warning</code> (<code>has-readme</code>, <code>license-exists</code>, <code>ci-cd-migration</code>, <code>lint-passes</code>). Spec 04 and spec 06 say warnings never change repo health, so an off-pattern repo still looks OK.</li>
+        <li><code>ci-cd-pipeline-audit</code> exits 0 when only medium rules fail. Permissions, concurrency, file naming and caching are printed but recorded as a pass.</li>
+        <li>7a/7b are hardcoded to pass (#52). 9a stops scanning after the first scoped workflow (#50).</li>
+        <li><code>no-secrets</code>, <code>lint-passes</code>, <code>uv-lock-fresh</code> and <code>ci-green</code> exit 0 when their tool is missing or <code>gh</code> isn't logged in. Missing tooling looks like a pass.</li>
+      </ul>
+    </div>
+    <div class="mode">
+      <div class="sev"><span class="chip c-no">2 · wrong rulebook</span><h3>Grimoire and the template disagree</h3></div>
+      <ul>
+        <li>The template's own "recommended" thin <code>ci-cd.yml</code> fails <code>ci-cd-migration</code>.</li>
+        <li>SHA pinning: the template requires a 40-character SHA, but Grimoire accepts <code>@v4</code> (#55).</li>
+        <li>The template also disagrees with itself. <code>portfolio-standards.md</code> and <code>migration-check.py</code> treat <code>ci-cd-*.yml</code> as current, while start-new-project and Grimoire treat it as legacy.</li>
+        <li>Rules only the template checks, with no Grimoire check: <code>timeout-minutes</code>, <code>ubuntu-latest</code>, agent symlinks.</li>
+      </ul>
+    </div>
+    <div class="mode">
+      <div class="sev"><span class="chip c-no">3 · blind spots</span><h3>Repos that are never looked at</h3></div>
+      <ul>
+        <li>Config supports only a static <code>repo:</code> list or a GitHub <code>team:</code>, and you're a personal account. So 66 repos are listed by hand.</li>
+        <li>Checked today: 4 active repos are missing (<code>big-gowrite</code>, <code>big-quiqui-v2</code>, <code>big-remote-control</code>, <code>bigpowers-factory</code>). 13 listed repos return 404 and 5 are forks.</li>
+        <li>New repos are never audited until you remember to add them.</li>
+      </ul>
+    </div>
+    <div class="mode">
+      <div class="sev"><span class="chip c-part">4 · one size fits all</span><h3>No stack profiles</h3></div>
+      <ul>
+        <li>The template has 12 per-stack pipelines (Python, Go, Godot, static, Swift, MkDocs…), but Grimoire has no <code>stack</code> field. A Godot game and a Python CLI get the same lint → test → build → release → deploy checklist (see #59).</li>
+        <li>Each check guesses the stack by looking for files like <code>pyproject.toml</code>.</li>
+      </ul>
+    </div>
+    <div class="mode">
+      <div class="sev"><span class="chip c-part">5 · no "how far behind"</span><h3>A boolean can't show compliance</h3></div>
+      <ul>
+        <li><code>CheckResult</code> is one <code>passed</code> flag plus text. The audit's 30+ sub-rules live only in an ASCII table inside <code>output</code>.</li>
+        <li>No per-rule results, no compliance score, no template version per repo, no repo × pattern matrix, no trend.</li>
+      </ul>
+    </div>
+    <div class="mode">
+      <div class="sev"><span class="chip c-na">6 · upkeep</span><h3>Rules are hard to change safely</h3></div>
+      <ul>
+        <li>The pipeline audit is 35 KB of Python inside a YAML block scalar. Nothing lints or type-checks it, and nothing tests its behaviour. The only test checks that the file loads.</li>
+        <li>Every template change means a hand edit in another repo, and nothing tells you when the two drift apart.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="correctness">
+  <h2>Check-by-check verdict</h2>
+  <p class="lede">The correctness reviewer ran 11 of the 12 checks against the template repo and against small purpose-built repos, each made to trigger one bug. Only three checks can be trusted. Issues #50–#60 are left out below.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Check</th><th>Verdict</th><th>Main flaw</th><th>On the template repo</th></tr></thead>
+    <tbody>
+      <tr><td><code>ci-cd-pipeline-audit</code></td><td><span class="chip c-contra">misleading</span></td><td>Several rules always pass. There are false critical failures. An empty <code>on:</code> or <code>jobs:</code> crashes it.</td><td>FAIL, 23 high</td></tr>
+      <tr><td><code>ci-cd-migration</code></td><td><span class="chip c-contra">misleading</span></td><td>Requires <code>workflow_run</code>, but the template's deploy files use <code>workflow_call</code>.</td><td>FAIL</td></tr>
+      <tr><td><code>ci-green</code></td><td><span class="chip c-contra">misleading</span></td><td>Fails forever after a single red run anywhere in the history.</td><td>FAIL (stale red run from 2026-10-05)</td></tr>
+      <tr><td><code>lint-passes</code></td><td><span class="chip c-contra">misleading</span></td><td>The PHP lint lets file names run commands, and it fails any repo with 2+ PHP files. eslint never runs.</td><td>PASS (shellcheck only)</td></tr>
+      <tr><td><code>composer-lock-fresh</code></td><td><span class="chip c-contra">misleading</span></td><td>Searches for an error message composer never prints.</td><td>not targeted</td></tr>
+      <tr><td><code>no-secrets</code></td><td><span class="chip c-part">leaky</span></td><td>Scans only current files. A repo can exempt itself with its own allowlist files. The output never says which file the hit is in.</td><td>FAIL (real hits)</td></tr>
+      <tr><td><code>uv-lock-fresh</code></td><td><span class="chip c-part">leaky</span></td><td>A network outage counts as a failure. Paths with spaces break it.</td><td>not targeted</td></tr>
+      <tr><td><code>no-todo-fixme</code></td><td><span class="chip c-part">leaky</span></td><td>Case-sensitive and matches inside words. Gives different results with rg than with grep.</td><td>FAIL (prose in Markdown)</td></tr>
+      <tr><td><code>charmcraft-fetch-lib</code></td><td><span class="chip c-part">leaky</span></td><td>Passes when charmcraft isn't installed.</td><td>skipped → PASS</td></tr>
+      <tr><td><code>has-readme</code>, <code>license-exists</code></td><td><span class="chip c-ok">trustworthy</span></td><td>Weak: an empty file passes, and <code>LICENCE</code> is missed.</td><td>PASS</td></tr>
+      <tr><td><code>watchdog</code></td><td><span class="chip c-ok">trustworthy</span></td><td>—</td><td>PASS</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="modes">
+    <div class="mode">
+      <div class="sev"><span class="chip c-contra">critical · verified</span><h3>On the Docker image, most tool checks skip and pass</h3></div>
+      <p>Scripts without a shebang run under <code>/bin/sh</code>, which is dash on the <code>python:3.13-slim</code> image. Dash reads <code>if ! command -v X &amp;&gt;/dev/null</code> as "run in the background", so the "not installed, skipping" branch always runs, and that exits 0. This affects <code>ci-green</code>, <code>no-secrets</code>, <code>no-todo-fixme</code>, <code>lint-passes</code>, <code>composer-lock-fresh</code>, <code>uv-lock-fresh</code> and <code>charmcraft-fetch-lib</code>. The image also doesn't install gitleaks, rg, shellcheck, composer, php or charmcraft. Fix: use <code>&gt;/dev/null 2&gt;&amp;1</code> or a bash shebang, install the tools, and report a missing tool as a failure.</p>
+    </div>
+    <div class="mode">
+      <div class="sev"><span class="chip c-contra">security</span><h3>A real-looking key in the template repo, and command injection in a check</h3></div>
+      <ul>
+        <li><code>no-secrets</code> found a Context7 API key committed in <code>danielvm-git/.github</code> (<code>specs/plans/WIRE_GLOBAL_MCPS.md</code>). Rotate it. The check's output didn't say where the hit was.</li>
+        <li><code>lint-passes.yaml:59</code> pastes PHP file names straight into <code>sh -c</code>, so a file named <code>x$(cmd).php</code> runs that command with <code>GH_TOKEN</code> in its environment.</li>
+      </ul>
+    </div>
+    <div class="mode">
+      <div class="sev"><span class="chip c-no">audit internals</span><h3>New bugs in <code>ci-cd-pipeline-audit</code></h3></div>
+      <ul>
+        <li>The "primary" pipeline is picked alphabetically, so it lands on <code>ci.yml</code> instead of <code>test-build-release.yml</code>.</li>
+        <li>Only the first deploy file is checked, and <code>deploy-*.yml</code> sorts before <code>deploy.yml</code>.</li>
+        <li>Matching words against <code>str(dict)</code> breaks in both directions. 9c and 9b can never fire. 5c, 6a and 4b always pass (<code>"check"</code> matches inside <code>actions/checkout</code>, <code>"version"</code> inside <code>node-version</code>). Comments are enough to satisfy 5h.</li>
+        <li>5f reports <code>task-definition</code> or <code>disk-</code> as a critical leaked secret, because they contain <code>"sk-"</code>.</li>
+        <li>A <code>build-and-test</code> job fails 3c as critical, because it's checked for a dependency on itself.</li>
+        <li>8a flags local <code>./</code> actions and never scans job-level reusable <code>uses: …@main</code>.</li>
+        <li>2a fails every <code>workflow_call</code> or <code>schedule</code> workflow. That accounts for 21 of the template's own failures.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="docs">
+  <h2>What the specs and docs say</h2>
+  <p class="lede">From reading <code>docs/specs/00–07</code>, <code>docs/user/**</code>, the README, CONTRIBUTING and METRICS.</p>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>Finding</th><th>Where</th><th>Impact</th></tr></thead>
+    <tbody>
+      <tr><td>The specs describe a generic "monitoring dashboard". None of them mentions a template, a pattern, a standard or a profile, so the product's real purpose isn't written down anywhere.</td><td class="src">00-overview.md, user/index.md</td><td><span class="chip c-no">purpose gap</span></td></tr>
+      <tr><td>Warning-severity failures don't affect health by design, and most pattern checks use warning.</td><td class="src">04 §Severity, 06 §6.3</td><td><span class="chip c-contra">false green</span></td></tr>
+      <tr><td>Only <code>repo</code> and <code>team</code> sources exist. A personal account has no way to say "track all my repos".</td><td class="src">01 §1.2, 02 §2.2</td><td><span class="chip c-no">blind spot</span></td></tr>
+      <tr><td>Module 8 (MCP server) is in the dependency graph but has no <code>08-*.md</code> spec, which breaks the AGENTS.md rule that every module has one.</td><td class="src">00-overview.md:101</td><td><span class="chip c-part">spec gap</span></td></tr>
+      <tr><td><code>workflow_weights</code> is described as a regex (<code>re.search</code>) in spec 06, but the code and the config docs use glob (<code>fnmatch</code>).</td><td class="src">06 §6.7, backlog.py:10</td><td><span class="chip c-part">spec drift</span></td></tr>
+      <tr><td>README, getting-started, CONTRIBUTING and deploy docs still clone or link <code>lucabello/grimoire</code> and its ghcr image.</td><td class="src">README.md, docs/user/*</td><td><span class="chip c-na">fork leftovers</span></td></tr>
+      <tr><td>The docs home links <code>concepts/architecture.md</code>, but the page lives at <code>explanation/architecture.md</code>. The link is broken.</td><td class="src">docs/user/index.md:37</td><td><span class="chip c-na">broken link</span></td></tr>
+      <tr><td>Grimoire doesn't follow some of your own patterns: it has no <code>CLAUDE.md</code>/<code>GEMINI.md</code> symlinks and no <code>CONVENTIONS.md</code>.</td><td class="src">repo root</td><td><span class="chip c-part">dogfooding</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="roadmap">
+  <h2>Recommended path</h2>
+  <p class="lede">Make the template the single rulebook, and make Grimoire the runner and viewer. Each step is useful on its own.</p>
+  <ol class="road">
+    <li><b>Stop the false greens (days)</b>Replace <code>&amp;&gt;/dev/null</code> in every check (or add a bash shebang), and install the missing tools in the image. Make pattern checks <code>severity: error</code> or add a third "non-compliant" health state. Make "tool missing" a failure instead of a pass. Have the audit exit non-zero on medium findings, or split those into their own check. Fix #50 and #52.</li>
+    <li><b>Track the fleet automatically</b>Add an <code>owner:</code> source (all non-archived, non-fork repos of a user or org) with <code>exclude</code>. Remove the 13 dead and 5 forked entries from <code>config.yaml</code>.</li>
+    <li><b>Add the top missing checks by reusing template scripts</b>Agent symlinks, the workflow baseline (<code>timeout-minutes</code>, <code>concurrency</code>, no <code>ubuntu-latest</code>), real branch protection through <code>gh api</code>, Conventional Commits on the default branch, and strict SHA pinning.</li>
+    <li><b>Move the rules into the template, pinned by SHA</b>Put a <code>conformance</code> package in <code>danielvm-git/.github</code>: one function per rule, each with an id, a severity and <code>applies_to</code> stacks, plus golden fixtures. Grimoire config gets <code>template: {repo, ref}</code>, and a single check runs it with <code>--json</code>. First fix the template's own <code>ci-cd-*</code> contradictions.</li>
+    <li><b>Stack profiles and a compliance matrix</b>Add <code>stack:</code> per repo (auto-detected, with an override), a <code>RuleResult</code> table, and a page with repos as rows and rules as columns. Show a compliance % and how many template versions each repo is behind.</li>
+  </ol>
+</section>
+
+<footer>Sources: three red-team reviewer agents (coverage, correctness, architecture), 11 open issues (#50–#60), <code>docs/specs/*</code>, <code>docs/user/**</code>, <code>data/checks/*</code>, and the <code>danielvm-git/.github</code> clone at <code>b48b6e0</code>. Repo counts come from <code>gh repo list</code> on 2026-11-08.</footer>
+</div>
+
+<script>
+(function(){
+  var btns=document.querySelectorAll('.filters button');
+  var rows=document.querySelectorAll('#cov tbody tr');
+  btns.forEach(function(b){b.addEventListener('click',function(){
+    btns.forEach(function(x){x.setAttribute('aria-pressed',x===b?'true':'false')});
+    var f=b.dataset.f;
+    rows.forEach(function(r){r.hidden=!(f==='all'||r.dataset.s===f)});
+  })});
+})();
+</script>

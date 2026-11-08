@@ -170,3 +170,58 @@ class TestTargetEnv:
         assert env["DEFAULT_BRANCH"] == "main"
         # Workspace env passthrough
         assert env["GH_TOKEN"] == "test"
+
+
+class TestTargetEnvInterpreter:
+    """Checks must be able to reach Grimoire's own interpreter (BUG: bare python3).
+
+    ``run.sh`` starts uvicorn directly, so the server's PATH does not contain the
+    venv. A check script that shells out to ``python3`` would then import the
+    system interpreter, which has no ``grimoire`` package, and every bundled
+    conformance check would fail on a real deployment.
+    """
+
+    def test_exposes_grimoire_python(self, tmp_path: Path) -> None:
+        import sys
+
+        ws = MockWorkspace(tmp_path)
+        repo = TrackedRepository(full_name="acme/alpha", default_branch="main")
+        env = target_env(ws, repo, "main")  # type: ignore[arg-type]
+        assert env["GRIMOIRE_PYTHON"] == sys.executable
+
+    def test_grimoire_python_can_import_the_package(self, tmp_path: Path) -> None:
+        import subprocess
+
+        ws = MockWorkspace(tmp_path)
+        repo = TrackedRepository(full_name="acme/alpha", default_branch="main")
+        env = target_env(ws, repo, "main")  # type: ignore[arg-type]
+        # Isolation: a PATH without the venv, exactly like run.sh in production.
+        probe_env = {**env, "PATH": "/usr/bin:/bin"}
+        result = subprocess.run(
+            [env["GRIMOIRE_PYTHON"], "-c", "import grimoire.conformance"],
+            capture_output=True,
+            text=True,
+            env=probe_env,
+        )
+        assert result.returncode == 0, result.stderr
+
+
+class TestBundledConformanceChecks:
+    """Every bundled conformance check must use the injected interpreter."""
+
+    def test_checks_use_grimoire_python(self) -> None:
+        import yaml
+
+        root = Path(__file__).resolve().parents[2] / "data" / "checks"
+        offenders = []
+        for path in sorted(root.glob("*.yaml")):
+            data = yaml.safe_load(path.read_text()) or {}
+            script = data.get("script") or ""
+            if "grimoire.conformance" not in script:
+                continue
+            if "$GRIMOIRE_PYTHON" not in script and "${GRIMOIRE_PYTHON" not in script:
+                offenders.append(path.name)
+        assert offenders == [], (
+            "conformance checks must call the CLI via $GRIMOIRE_PYTHON "
+            f"(fails on deployments without the venv on PATH): {offenders}"
+        )

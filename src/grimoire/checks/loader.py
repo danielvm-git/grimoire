@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from grimoire.targeting import TargetSpec
+
+Priority = Literal["P0", "P1", "P2"]
+
+# A pattern's priority fixes its severity: P0 gates landing (error), P1/P2 do not.
+PRIORITY_SEVERITY: dict[str, str] = {"P0": "error", "P1": "warning", "P2": "warning"}
 
 
 class CheckDefinition(BaseModel):
@@ -22,6 +27,20 @@ class CheckDefinition(BaseModel):
     schedule: str | None = None
     enabled: bool = True
     severity: Literal["warning", "error"] = "error"
+    # Set on pattern-conformance checks; these feed the per-repo compliance score.
+    priority: Priority | None = None
+
+    @model_validator(mode="after")
+    def priority_matches_severity(self) -> Self:
+        if (
+            self.priority is not None
+            and PRIORITY_SEVERITY[self.priority] != self.severity
+        ):
+            raise ValueError(
+                f"priority {self.priority} requires severity "
+                f"'{PRIORITY_SEVERITY[self.priority]}', got '{self.severity}'"
+            )
+        return self
 
 
 def load_checks(data_dir: Path) -> list[CheckDefinition]:

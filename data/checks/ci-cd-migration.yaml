@@ -1,3 +1,5 @@
+# Superseded by ci-layout (P0), which enforces the test-build-release.yml +
+# deploy.yml pair with the correct workflow_run gating. Kept disabled for reference.
 name: "CI/CD Migration Status"
 description: >
   Verifies repos have migrated to the v3 CI/CD workflow pair:
@@ -8,7 +10,7 @@ targets:
   # Default branch only — workflow layout is branch-invariant for this check.
   script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
 schedule: "0 * * * *"
-enabled: true
+enabled: false
 severity: warning
 script: |
   #!/usr/bin/env bash

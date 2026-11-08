@@ -8,12 +8,12 @@ targets:
 severity: warning
 script: |
   set -e
-  if ! command -v rg &>/dev/null && ! command -v grep &>/dev/null; then
+  if ! command -v rg >/dev/null 2>&1 && ! command -v grep >/dev/null 2>&1; then
     echo "Neither rg nor grep available, skipping"
     exit 0
   fi
   exclude_dirs="--glob=!node_modules --glob=!vendor --glob=!.git --glob=!dist --glob=!build --glob=!__pycache__ --glob=!*.lock --glob=!.venv --glob=!venv --glob=!workspace --glob=!.pytest_cache --glob=!.mypy_cache --glob=!.ruff_cache --glob=!.mimocode --glob=!site"
-  if command -v rg &>/dev/null; then
+  if command -v rg >/dev/null 2>&1; then
     count="$(rg -c 'TODO|FIXME|HACK' --type-not=lock $exclude_dirs . 2>/dev/null | wc -l || true)"
     if [ "$count" -gt 0 ]; then
       echo "WARN: Found $count files with TODO/FIXME/HACK markers:"

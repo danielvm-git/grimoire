@@ -49,6 +49,7 @@ nav:
   - Reference:
       - Configuration: reference/configuration.md
       - Checks: reference/checks.md
+      - Pattern conformance: reference/conformance.md
       - Actions: reference/actions.md
       - REST API: reference/api.md
       - MCP Integration: reference/mcp.md

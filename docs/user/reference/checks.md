@@ -26,6 +26,7 @@ Slug uniqueness is enforced — duplicate filenames cause a startup error.
 | `schedule` | string (cron) | No | `refresh_schedule` | Custom cron schedule |
 | `enabled` | boolean | No | `true` | Whether the check runs on schedule |
 | `severity` | `"error"` \| `"warning"` | No | `"error"` | How failures appear on the dashboard and in the backlog |
+| `priority` | `"P0"` \| `"P1"` \| `"P2"` | No | — | Marks a [pattern check](conformance.md) and feeds the compliance score. P0 requires `severity: error`; P1 and P2 require `severity: warning` |
 
 ## Target spec {: #target-spec }
 
@@ -97,6 +98,10 @@ The `severity` field controls whether a failure is reported as an **error** (red
 | Output cap | 64 KB (stdout + stderr) |
 | Shell | `/bin/sh` (override with a shebang, e.g. `#!/usr/bin/env bash`) |
 
+!!! warning "Don't use `&>` without a bash shebang"
+
+    In the Docker image `/bin/sh` is dash, and dash reads `cmd &>/dev/null` as "run `cmd` in the background". It always succeeds, so `if ! command -v tool &>/dev/null` takes the "missing" branch every time. Write `>/dev/null 2>&1` instead.
+
 ### Environment variables
 
 | Variable | Description |
@@ -107,6 +112,7 @@ The `severity` field controls whether a failure is reported as an **error** (red
 | `BRANCH` | Branch being checked |
 | `DEFAULT_BRANCH` | Default branch of the repository |
 | `GH_TOKEN` / `GITHUB_TOKEN` | GitHub API token |
+| `GRIMOIRE_PYTHON` | Interpreter running the server. Use it instead of bare `python3` so bundled modules such as `grimoire.conformance` are importable |
 
 ## API endpoints
 

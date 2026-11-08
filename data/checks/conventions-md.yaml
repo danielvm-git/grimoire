@@ -1,0 +1,12 @@
+# P1 pattern from danielvm-git/.github — source: align-existing-repo.md §5 (P1)
+# Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
+name: "CONVENTIONS.md present"
+description: >
+  CONVENTIONS.md exists and documents the Always Green rule.
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 */6 * * *"
+severity: warning
+priority: P1
+script: |
+  "${GRIMOIRE_PYTHON:-python3}" -m grimoire.conformance conventions-md

@@ -12,7 +12,7 @@ script: |
   run_lint() {
     local tool="$1" name="$2"
     shift 2
-    if ! command -v "$tool" &>/dev/null; then
+    if ! command -v "$tool" >/dev/null 2>&1; then
 
       echo "WARN: $name not installed, skipping"
       return 0
@@ -33,7 +33,7 @@ script: |
   fi
 
   if [ -f package.json ]; then
-    if ! [ -d node_modules ] && command -v npm &>/dev/null; then
+    if ! [ -d node_modules ] && command -v npm >/dev/null 2>&1; then
       echo "Installing node_modules ..."
       npm install --ignore-scripts --no-audit --no-fund 2>&1 || echo "WARN: npm install failed"
     fi
@@ -53,7 +53,7 @@ script: |
   fi
 
   if [ -f composer.json ]; then
-    if command -v php &>/dev/null; then
+    if command -v php >/dev/null 2>&1; then
       php_files="$(find . -name '*.php' -not -path './.git/*' -not -path './vendor/*' -not -path './node_modules/*' 2>/dev/null || true)"
       if [ -n "$php_files" ]; then
         run_lint php "php -l" sh -c 'for f in '"$php_files"'; do php -l "$f" || exit 1; done' || rc=1

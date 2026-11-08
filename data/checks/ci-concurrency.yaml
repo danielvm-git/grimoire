@@ -1,0 +1,12 @@
+# P0 pattern from danielvm-git/.github — source: align-existing-repo.md §3 (P0)
+# Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
+name: "CI concurrency groups"
+description: >
+  Every workflow sets a workflow-level concurrency group; test-build-release cancels in progress, deploy never does.
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 */6 * * *"
+severity: error
+priority: P0
+script: |
+  "${GRIMOIRE_PYTHON:-python3}" -m grimoire.conformance ci-concurrency

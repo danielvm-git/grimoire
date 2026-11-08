@@ -197,3 +197,68 @@ class TestBundledCheckDefinitions:
         assert c is not None
         assert 'local tool="$1" name="$2"' in c.script
         assert "shift 2" in c.script
+
+
+class TestPriority:
+    """Pattern checks carry a priority that fixes their severity."""
+
+    @staticmethod
+    def _write(tmp_path: Path, extra: str) -> Path:
+        checks_dir = tmp_path / "checks"
+        checks_dir.mkdir()
+        (checks_dir / "p.yaml").write_text(
+            "name: P\ndescription: d\ntargets:\n  regex: '.*'\nscript: 'true'\n" + extra
+        )
+        return tmp_path
+
+    def test_priority_defaults_to_none(self, tmp_path: Path) -> None:
+        assert load_checks(self._write(tmp_path, ""))[0].priority is None
+
+    def test_p0_with_error_loads(self, tmp_path: Path) -> None:
+        c = load_checks(self._write(tmp_path, "priority: P0\nseverity: error\n"))[0]
+        assert c.priority == "P0"
+
+    def test_p1_with_warning_loads(self, tmp_path: Path) -> None:
+        c = load_checks(self._write(tmp_path, "priority: P1\nseverity: warning\n"))[0]
+        assert c.priority == "P1"
+
+    def test_p0_with_warning_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="priority P0 requires severity 'error'"):
+            load_checks(self._write(tmp_path, "priority: P0\nseverity: warning\n"))
+
+    def test_p1_with_default_error_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="priority P1 requires severity 'warning'"):
+            load_checks(self._write(tmp_path, "priority: P1\n"))
+
+    def test_unknown_priority_rejected(self, tmp_path: Path) -> None:
+        with pytest.raises(ValueError):
+            load_checks(self._write(tmp_path, "priority: P9\n"))
+
+
+class TestBundledScriptsArePosixSafe:
+    """Scripts without a shebang run under /bin/sh (dash on Debian images).
+
+    In dash, `cmd &>/dev/null` backgrounds `cmd` and always succeeds, which made
+    `if ! command -v X &>/dev/null` skip-and-pass every check in Docker.
+    """
+
+    def test_no_bash_only_redirect_under_sh(self) -> None:
+        for c in load_checks(TestBundledCheckDefinitions._data_dir()):
+            if c.script.startswith("#!/usr/bin/env bash") or c.script.startswith(
+                "#!/bin/bash"
+            ):
+                continue
+            assert "&>" not in c.script, f"{c.slug} uses '&>' under /bin/sh"
+
+    def test_tool_probe_really_fails_under_dash(self, tmp_path: Path) -> None:
+        import shutil
+        import subprocess
+
+        sh = shutil.which("dash") or "/bin/sh"
+        probe = "if ! command -v definitely-not-a-tool >/dev/null 2>&1; then exit 3; fi; exit 0"
+        assert subprocess.run([sh, "-c", probe], check=False).returncode == 3
+
+    def test_migration_check_is_superseded(self) -> None:
+        checks = load_checks(TestBundledCheckDefinitions._data_dir())
+        migration = next(c for c in checks if c.slug == "ci-cd-migration")
+        assert migration.enabled is False

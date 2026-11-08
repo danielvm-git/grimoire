@@ -1,0 +1,12 @@
+# P0 pattern from danielvm-git/.github — source: branch-protection-rules.md (P0)
+# Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
+name: "Branch protection"
+description: >
+  The default branch blocks force-pushes and deletion (classic protection or rulesets).
+targets:
+  script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
+schedule: "0 */6 * * *"
+severity: error
+priority: P0
+script: |
+  "${GRIMOIRE_PYTHON:-python3}" -m grimoire.conformance branch-protection
