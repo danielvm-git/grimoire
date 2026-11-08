@@ -207,6 +207,17 @@ class TestCloneUrl:
         assert url == "https://x-access-token:ghp_test_token@github.com/owner/repo.git"
 
 
+class TestTokenRedaction:
+    async def test_failed_command_error_does_not_leak_token(
+        self, tmp_path: Path
+    ) -> None:
+        mgr = WorkspaceManager(_minimal_config(tmp_path))
+        url = str(tmp_path / "ghp_test_token" / "missing.git")
+        with pytest.raises(WorkspaceError) as exc_info:
+            await mgr._run_git("ls-remote", url, cwd=tmp_path)  # noqa: SLF001
+        assert "ghp_test_token" not in str(exc_info.value)
+
+
 # ---------------------------------------------------------------------------
 # Integration tests (real git operations)
 # ---------------------------------------------------------------------------

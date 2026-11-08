@@ -230,10 +230,15 @@ class WorkspaceManager:
         token = self._config.github.token
         return f"https://x-access-token:{token}@github.com/{full_name}.git"
 
+    def _redact(self, text: str) -> str:
+        """Mask the GitHub token: errors are stored as check output and shown in the UI."""
+        token = self._config.github.token
+        return text.replace(token, "***") if token else text
+
     async def _run_git(self, *args: str, cwd: Path) -> str:
         """Run a git command, capture output, and raise on failure."""
         cmd = ("git", *args)
-        logger.debug("git %s  (cwd=%s)", " ".join(args), cwd)
+        logger.debug("git %s  (cwd=%s)", self._redact(" ".join(args)), cwd)
         # Allow operations inside bare repos (git ≥2.38 safe.bareRepository).
         env = {
             **os.environ,
@@ -253,9 +258,10 @@ class WorkspaceManager:
         stderr = stderr_bytes.decode()
 
         if proc.returncode != 0:
-            raise WorkspaceError(
+            message = (
                 f"git {' '.join(args)} failed (rc={proc.returncode}): {stderr.strip()}"
             )
+            raise WorkspaceError(self._redact(message))
 
         logger.debug("git stdout: %s", stdout.strip())
         return stdout
