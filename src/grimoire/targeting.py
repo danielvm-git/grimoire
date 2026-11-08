@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+import sys
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, model_validator
@@ -59,6 +60,12 @@ def target_env(
     Includes the shared workspace env vars (``GH_TOKEN`` etc.) plus per-invocation
     context (``REPO_OWNER``, ``REPO_NAME``, ``REPO_FULL_NAME``, ``BRANCH``,
     ``DEFAULT_BRANCH``) so scripts can branch on which branch they're running for.
+
+    ``GRIMOIRE_PYTHON`` is the interpreter running the server. Deployments that
+    start uvicorn directly (``run.sh``) do not put the venv on ``PATH``, so a
+    script that calls bare ``python3`` would import a system interpreter without
+    the ``grimoire`` package. Bundled checks use ``"$GRIMOIRE_PYTHON"`` for that
+    reason.
     """
     owner, name = repo.full_name.split("/", 1)
     env = {**os.environ, **workspace.get_env()}
@@ -69,6 +76,7 @@ def target_env(
             "REPO_FULL_NAME": repo.full_name,
             "BRANCH": branch,
             "DEFAULT_BRANCH": repo.default_branch,
+            "GRIMOIRE_PYTHON": sys.executable,
         }
     )
     return env

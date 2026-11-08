@@ -9,7 +9,10 @@ Grimoire checks that each tracked repository follows the portfolio patterns defi
 
 Patterns without a grade in the template have no check. To add one, grade it in the template first.
 
-All pattern checks run on the default branch only, every 6 hours.
+All pattern checks run on the default branch only, every 6 hours. Each check
+calls `"$GRIMOIRE_PYTHON" -m grimoire.conformance <rule>`, so the rule runs with
+Grimoire's own interpreter even when the server was started without the
+virtualenv on `PATH` (for example `run.sh`).
 
 ## P0 checks
 

@@ -9,4 +9,4 @@ schedule: "0 */6 * * *"
 severity: error
 priority: P0
 script: |
-  python3 -m grimoire.conformance agent-context-symlinks
+  "${GRIMOIRE_PYTHON:-python3}" -m grimoire.conformance agent-context-symlinks

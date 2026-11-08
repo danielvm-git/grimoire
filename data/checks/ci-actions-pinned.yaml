@@ -9,4 +9,4 @@ schedule: "0 */6 * * *"
 severity: error
 priority: P0
 script: |
-  python3 -m grimoire.conformance ci-actions-pinned
+  "${GRIMOIRE_PYTHON:-python3}" -m grimoire.conformance ci-actions-pinned

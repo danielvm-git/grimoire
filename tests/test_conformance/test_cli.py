@@ -39,5 +39,8 @@ def test_every_rule_has_a_bundled_check() -> None:
     checks = {c.slug: c for c in load_checks(DATA_DIR)}
     for slug in get_rules():
         assert slug in checks, f"no data/checks/{slug}.yaml"
-        assert f"python3 -m grimoire.conformance {slug}" in checks[slug].script
+        # The interpreter comes from the environment: bare python3 is not on the
+        # PATH of deployments that start uvicorn directly (run.sh).
+        assert f"-m grimoire.conformance {slug}" in checks[slug].script
+        assert "GRIMOIRE_PYTHON" in checks[slug].script
         assert checks[slug].priority in ("P0", "P1")

@@ -112,6 +112,7 @@ The `severity` field controls whether a failure is reported as an **error** (red
 | `BRANCH` | Branch being checked |
 | `DEFAULT_BRANCH` | Default branch of the repository |
 | `GH_TOKEN` / `GITHUB_TOKEN` | GitHub API token |
+| `GRIMOIRE_PYTHON` | Interpreter running the server. Use it instead of bare `python3` so bundled modules such as `grimoire.conformance` are importable |
 
 ## API endpoints
 

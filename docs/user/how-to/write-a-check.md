@@ -56,8 +56,20 @@ Scripts execute inside the cloned repository directory for the target branch. Av
 | `REPO_FULL_NAME` | `owner/name` |
 | `BRANCH` | Branch being checked |
 | `DEFAULT_BRANCH` | Default branch of the repository |
+| `GRIMOIRE_PYTHON` | Interpreter running the Grimoire server |
 
 Scripts have a **5-minute timeout** and output is capped at 64 KB.
+
+!!! tip "Calling Python from a check"
+
+    Deployments that start uvicorn directly (`run.sh`) do not put the virtualenv
+    on `PATH`, so bare `python3` may be a system interpreter without Grimoire
+    installed. Use `"$GRIMOIRE_PYTHON"` when a check needs Grimoire's modules:
+
+    ```yaml
+    script: |
+      "$GRIMOIRE_PYTHON" -m grimoire.conformance ci-layout
+    ```
 
 ## Targeting
 

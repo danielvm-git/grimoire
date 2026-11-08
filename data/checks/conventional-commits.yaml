@@ -9,4 +9,4 @@ schedule: "0 */6 * * *"
 severity: warning
 priority: P1
 script: |
-  python3 -m grimoire.conformance conventional-commits
+  "${GRIMOIRE_PYTHON:-python3}" -m grimoire.conformance conventional-commits
