@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.15.2] - 2026-11-08
+
+### Bug Fixes
+
+- **checks:** correct the CI/CD Pipeline Audit rules ([#64](https://github.com/danielvm-git/grimoire/issues/64)) ([3585a2a](https://github.com/danielvm-git/grimoire/commit/3585a2a2772cfe448843ae73a064ce5a9874ed00))
+
 ## [0.15.1] - 2026-11-08
 
 ### Bug Fixes
