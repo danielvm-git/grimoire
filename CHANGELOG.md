@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.15.0] - 2026-11-08
+
+### Features
+
+- **checks:** enforce template P0/P1 patterns with a compliance score ([#61](https://github.com/danielvm-git/grimoire/issues/61)) ([faf591a](https://github.com/danielvm-git/grimoire/commit/faf591aa8ebb6d903251e4a4336645281828cc97))
+
 ## [0.14.0] - 2026-11-07
 
 ### Features
