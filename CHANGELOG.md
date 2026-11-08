@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.15.3] - 2026-11-08
+
+### Bug Fixes
+
+- **checks:** migration check gates deploy and allows CLI repos ([#65](https://github.com/danielvm-git/grimoire/issues/65)) ([481b41a](https://github.com/danielvm-git/grimoire/commit/481b41a6cbfa7e810a4113ec7539dbb91eacb5d0))
+
 ## [0.15.2] - 2026-11-08
 
 ### Bug Fixes
