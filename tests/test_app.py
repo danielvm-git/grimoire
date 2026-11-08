@@ -75,6 +75,17 @@ class TestLifespanFreshness:
                 assert data["status"] == "ok"
                 assert "version" in data
 
+    async def test_health_reports_cache_age_after_update_cache(self) -> None:
+        """cache_age_seconds appears once the cache has been populated."""
+        from grimoire.github.router import update_cache
+
+        update_cache([], [])
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            data = (await client.get("/health")).json()
+        assert "cache_age_seconds" in data
+
     async def test_health_endpoint_version(self) -> None:
         """Health endpoint returns version."""
         app = create_app()

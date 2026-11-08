@@ -47,6 +47,11 @@ def update_cache(
     _last_refresh = timestamp or datetime.now(tz=__import__("datetime").timezone.utc)
 
 
+def get_last_refresh() -> datetime | None:
+    """Return when the cache was last populated (read at call time, not import time)."""
+    return _last_refresh
+
+
 def _build_summary(repo: TrackedRepository, stats: RepositoryStats) -> RepoSummary:
     workflow_failures = sum(1 for w in stats.workflows if w.status == "failure")
     return RepoSummary(
