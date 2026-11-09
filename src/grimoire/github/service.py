@@ -545,6 +545,11 @@ async def fetch_repository_stats(
 
 
 def _map_conclusion(conclusion: str) -> str:
+    """Map a GitHub run conclusion (or status) onto a dashboard status.
+
+    ``skipped`` and ``neutral`` are real outcomes, not unknowns: a conditional
+    deploy that never ran must not look like an unreadable workflow.
+    """
     mapping = {
         "success": "success",
         "failure": "failure",
@@ -552,6 +557,8 @@ def _map_conclusion(conclusion: str) -> str:
         "timed_out": "failure",
         "startup_failure": "failure",
         "stale": "failure",
+        "skipped": "skipped",
+        "neutral": "neutral",
         "action_required": "pending",
         "pending": "pending",
         "queued": "pending",

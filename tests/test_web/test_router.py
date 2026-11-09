@@ -232,6 +232,9 @@ class TestDashboardPartial:
         resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
         assert "status-icon-success" in resp.text
         assert "status-icon-failure" in resp.text
+        # A skipped workflow gets its own icon, not the grey "unknown" dash.
+        assert "status-icon-skipped" in resp.text
+        assert "Deploy (main): skipped" in resp.text
 
 
 class TestDashboardListPartial:

@@ -53,6 +53,7 @@ The GitHub REST API has a rate limit of 5,000 requests/hour for authenticated us
 **Efficient fetching per resource type:**
 - **Issues:** Use `GET /repos/{owner}/{repo}/issues?state=open&per_page=100`. This returns both issues and PRs mixed together — filter client-side by excluding items that have a `pull_request` key in the JSON. Full list is needed to compute stale counts.
 - **Pull requests:** Use `GET /repos/{owner}/{repo}/pulls?state=open&per_page=100` (the Pulls API, not the Issues API). Full list is needed to compute stale counts.
+- **Conclusions:** `_map_conclusion` maps a GitHub conclusion to a dashboard status: `success` → `success`; `failure`, `cancelled`, `timed_out`, `startup_failure`, `stale` → `failure`; `action_required`, `pending`, `queued`, `in_progress` → `pending`; `skipped` → `skipped`; `neutral` → `neutral`; anything else → `unknown`.
 - **Workflows:** Use `GET /repos/{owner}/{repo}/actions/workflows` to list workflows, then `GET /repos/{owner}/{repo}/actions/workflows/{id}/runs?branch={branch}&per_page=1` to get only the latest run per workflow+branch. Before fetching runs, apply the repo's `workflow_include`/`workflow_exclude` glob patterns (via `fnmatch`) to skip irrelevant workflows.
 - Use `per_page=100` on all list endpoints to minimize pagination.
 

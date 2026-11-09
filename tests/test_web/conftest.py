@@ -60,6 +60,13 @@ def _populate_cache() -> None:
                     url="https://github.com/acme/api/actions",
                     run_url="https://github.com/acme/api/actions/runs/1",
                 ),
+                WorkflowStatus(
+                    name="Deploy",
+                    branch="main",
+                    status="skipped",
+                    url="https://github.com/acme/api/actions",
+                    run_url="https://github.com/acme/api/actions/runs/2",
+                ),
             ],
             stale_issue_items=[
                 IssueDetail(

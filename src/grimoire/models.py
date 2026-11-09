@@ -27,7 +27,7 @@ class WorkflowStatus(BaseModel):
 
     name: str
     branch: str
-    status: str  # "success" | "failure" | "pending" | "unknown"
+    status: str  # "success" | "failure" | "pending" | "skipped" | "neutral" | "unknown"
     url: str
     run_url: str = ""
     run_at: datetime | None = None  # when the latest run last updated
