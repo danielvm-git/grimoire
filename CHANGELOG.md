@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.17.1] - 2026-11-09
+
+### Bug Fixes
+
+- **web:** render skipped and neutral workflow runs as their own status ([#69](https://github.com/danielvm-git/grimoire/issues/69)) ([e990f6e](https://github.com/danielvm-git/grimoire/commit/e990f6e68833189ac7fe467e18f85cee4c3dd445))
+
 ## [0.17.0] - 2026-11-09
 
 ### Features
