@@ -93,3 +93,123 @@ async def test_scheduled_check_skips_when_disabled_at_fire_time(
     check.enabled = True
     await job()
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Startup run (BUG-2026-11-09T000002 — checks waited for their cron after deploy)
+# ---------------------------------------------------------------------------
+
+import grimoire.checks.scheduler as sched_mod  # noqa: E402
+
+
+def _startup_check(
+    slug: str, *, enabled: bool = True, schedule: str | None = "0 3 * * *"
+):
+    from grimoire.checks.loader import CheckDefinition
+    from grimoire.targeting import TargetSpec
+
+    return CheckDefinition(
+        name=slug.title(),
+        slug=slug,
+        description="",
+        targets=TargetSpec(regex=".*"),
+        script="exit 0",
+        schedule=schedule,
+        enabled=enabled,
+    )
+
+
+async def test_run_all_checks_once_runs_every_enabled_check(monkeypatch) -> None:
+    """Every enabled check runs at startup — not just the cron-less ones."""
+    from grimoire.models import TrackedRepository
+
+    checks = [
+        _startup_check("scheduled"),  # has a cron schedule
+        _startup_check("unscheduled", schedule=None),
+        _startup_check("disabled", enabled=False),
+    ]
+    ran: list[str] = []
+
+    async def fake_run(check, repos, workspace, engine, triggered_by="manual", **kw):
+        ran.append(f"{check.slug}:{triggered_by}")
+        return []
+
+    monkeypatch.setattr(sched_mod, "run_check_for_all_targets", fake_run)
+    started = await sched_mod.run_all_checks_once(
+        checks,
+        [TrackedRepository(full_name="acme/one", default_branch="main")],
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        triggered_by="startup",
+    )
+
+    assert started == 2
+    assert sorted(ran) == ["scheduled:startup", "unscheduled:startup"]
+
+
+async def test_run_all_checks_once_skips_conflicts(monkeypatch) -> None:
+    """A check already running (initial refresh, cron) is skipped, not fatal."""
+    from grimoire.checks.engine import CheckConflictError
+    from grimoire.models import TrackedRepository
+
+    calls: list[str] = []
+
+    async def fake_run(check, repos, workspace, engine, triggered_by="manual", **kw):
+        calls.append(check.slug)
+        if check.slug == "busy":
+            raise CheckConflictError("already running")
+        return []
+
+    monkeypatch.setattr(sched_mod, "run_check_for_all_targets", fake_run)
+    started = await sched_mod.run_all_checks_once(
+        [_startup_check("busy"), _startup_check("free")],
+        [TrackedRepository(full_name="acme/one", default_branch="main")],
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+    )
+
+    assert started == 1
+    assert sorted(calls) == ["busy", "free"]
+
+
+async def test_run_all_checks_once_survives_a_failing_check(monkeypatch) -> None:
+    """One broken check must not stop the rest of the startup run."""
+    from grimoire.models import TrackedRepository
+
+    async def fake_run(check, repos, workspace, engine, triggered_by="manual", **kw):
+        if check.slug == "boom":
+            raise RuntimeError("kaboom")
+        return []
+
+    monkeypatch.setattr(sched_mod, "run_check_for_all_targets", fake_run)
+    started = await sched_mod.run_all_checks_once(
+        [_startup_check("boom"), _startup_check("fine")],
+        [TrackedRepository(full_name="acme/one", default_branch="main")],
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+    )
+
+    assert started == 1
+
+
+async def test_run_all_checks_once_respects_the_switch(monkeypatch) -> None:
+    """`checks.run_on_startup: false` leaves the deploy quiet."""
+    from grimoire.models import TrackedRepository
+
+    calls: list[str] = []
+
+    async def fake_run(check, repos, workspace, engine, triggered_by="manual", **kw):
+        calls.append(check.slug)
+        return []
+
+    monkeypatch.setattr(sched_mod, "run_check_for_all_targets", fake_run)
+    started = await sched_mod.run_all_checks_once(
+        [_startup_check("a"), _startup_check("b")],
+        [TrackedRepository(full_name="acme/one", default_branch="main")],
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        enabled=False,
+    )
+
+    assert started == 0
+    assert calls == []

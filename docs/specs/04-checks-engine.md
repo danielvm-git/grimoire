@@ -257,6 +257,14 @@ See Module 7 (`docker-entrypoint.sh`) for implementation details.
 - On startup, load all checks and register enabled ones with APScheduler.
 - If `schedule` is set, use a `CronTrigger` parsed from the cron expression.
 - If `schedule` is not set, the check runs after each data refresh (driven by `refresh_schedule`).
+- **Startup pass:** after the initial refresh and workspace setup, `run_all_checks_once()`
+  runs *every enabled check* once with `triggered_by="startup"` (bounded to 5
+  concurrent checks), so a deploy has real results instead of an empty dashboard
+  waiting for the next cron window. The cron schedule then takes over. Checks that
+  are already running (`CheckConflictError`) or raise are skipped, and
+  `checks.run_on_startup: false` disables the whole pass. The startup refresh calls
+  `_do_refresh(run_schedule_less_checks=False)` so schedule-less checks are not run
+  twice on boot (BUG-2026-11-09T000002).
 - Toggling a check on/off adds/removes it from the scheduler and updates `CheckToggleRecord` in the DB.
 - Toggle state persists across restarts (read from DB on startup).
 

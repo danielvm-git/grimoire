@@ -132,6 +132,26 @@ visible (`/users/{user}/repos`).
 
 ---
 
+## `checks` {: #checks }
+
+**Optional.** Runtime behaviour for checks.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `run_on_startup` | boolean | `true` | Run every enabled check once when the app starts (after the initial refresh), then hand over to the cron schedules |
+
+```yaml
+checks:
+  run_on_startup: true
+```
+
+A deploy used to show empty checks until each cron window arrived. With the
+startup pass, results appear immediately. Set `run_on_startup: false` on large
+accounts where cloning every worktree and running every check at boot is too
+expensive — checks then wait for their schedule as before.
+
+---
+
 ## `staleness` {: #staleness }
 
 **Optional.** Thresholds for marking issues and PRs as stale.
