@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.17.2] - 2026-11-09
+
+### Bug Fixes
+
+- **web:** link dot-named repos through a proxy-safe query URL ([#70](https://github.com/danielvm-git/grimoire/issues/70)) ([82dbe60](https://github.com/danielvm-git/grimoire/commit/82dbe60bf62da1594cdcdec637f00c5a459a44d6))
+
 ## [0.17.1] - 2026-11-09
 
 ### Bug Fixes

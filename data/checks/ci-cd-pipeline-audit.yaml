@@ -85,7 +85,7 @@ script: |
       "6b": ("CI-VERIFY-002", "Put verification in its own named step"),
       "6c": ("CI-VERIFY-003", "Fail the job when verification fails"),
       "7a": ("CI-PROTECT-001", "Require status checks on the default branch"),
-      "7b": ("CI-PROTECT-002", "Require pull requests and enforce them for admins"),
+      "7b": ("CI-PROTECT-002", "Protect the default branch (direct push by the owner is allowed)"),
       "8a": ("CI-PIN-001", "Pin actions to a commit SHA or OCI digest"),
       "8b": ("CI-CACHE-001", "Cache dependencies (actions/cache or the setup-* cache input)"),
       "9a": ("CI-PERM-001", "Declare permissions: at workflow level or on every job"),
@@ -381,8 +381,12 @@ script: |
       )
 
 
-  def _protection_findings(classic: dict | None, rules: list | None) -> tuple[list[str], str | None]:
-      """Return (required check names, no-direct-push problem or None)."""
+  def _protection_findings(classic: dict | None, rules: list | None) -> list[str]:
+      """Return the required status check names.
+
+      Direct push to the default branch is allowed (solo-owner policy), so
+      neither a pull request nor an approving review is required.
+      """
       rules = rules or []
       checks: list[str] = []
       if classic:
@@ -394,14 +398,7 @@ script: |
               params = rule.get("parameters") or {}
               checks += [c.get("context", "") for c in params.get("required_status_checks") or []
                          if isinstance(c, dict)]
-      checks = sorted({c for c in checks if c})
-      if any(isinstance(r, dict) and r.get("type") == "pull_request" for r in rules):
-          return checks, None
-      if classic and classic.get("required_pull_request_reviews") is not None:
-          if (classic.get("enforce_admins") or {}).get("enabled"):
-              return checks, None
-          return checks, "pull request required but admins can push directly (enforce_admins is off)"
-      return checks, "does not require a pull request"
+      return sorted({c for c in checks if c})
 
 
   def _find_trigger_events(wf: dict) -> list[str]:
@@ -938,16 +935,14 @@ script: |
                  "Default branch is not protected")
               _sev("high")
       else:
-          bp_checks, bp_push = _protection_findings(classic, ruleset)
+          bp_checks = _protection_findings(classic, ruleset)
           _r("7a. Branch protection — status checks", bool(bp_checks), "N/A",
              f"Required checks: {', '.join(bp_checks)}" if bp_checks
              else "Protected, but no required status checks")
           if not bp_checks:
               _sev("high")
-          _r("7b. Branch protection — no direct push", bp_push is None, "N/A",
-             "Pull request required" if bp_push is None else f"Direct push possible: {bp_push}")
-          if bp_push is not None:
-              _sev("high")
+          _r("7b. Branch protection — no direct push", True, "N/A",
+             "Direct push allowed (solo-owner policy)")
 
       # ── 8. SUPPLY CHAIN / HYGIENE ───────────────────────────────────────
 

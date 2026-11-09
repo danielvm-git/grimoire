@@ -38,7 +38,7 @@ The canonical CI/CD layout is the copy-once pair `test-build-release.yml` + `dep
 | `conventions-md` | P1 | `repo.py` | `CONVENTIONS.md` is missing or does not mention Always Green |
 | `conventional-commits` | P1 | `repo.py` | Any of the last 50 non-merge commits has a non-Conventional subject (regex from `scripts/check-conventional-commits.sh`) |
 | `no-ai-coauthors` | P1 | `repo.py` | Any of the last 50 non-merge commits has a `Co-authored-by:` footer |
-| `pr-required` | P1 | `github.py` | The default branch does not require a PR with at least one approval |
+| `pr-required` | P1 | `github.py` | The default branch is unprotected or its protection cannot be read (direct push is allowed: solo-owner policy) |
 
 Branch protection may come from classic protection (`GET /repos/{repo}/branches/{branch}/protection`) or rulesets (`GET /repos/{repo}/rules/branches/{branch}`). Either one satisfies a rule.
 

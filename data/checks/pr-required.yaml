@@ -1,8 +1,8 @@
 # P1 pattern from danielvm-git/.github — source: branch-protection-rules.md (P1)
 # Logic lives in src/grimoire/conformance/ (tested); see docs/user/reference/conformance.md.
-name: "Pull request required"
+name: "Default branch protected"
 description: >
-  The default branch requires a pull request with at least one approving review.
+  The default branch is protected. Solo-owner policy: direct push is allowed, so no pull request or approving review is required.
 targets:
   script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
 schedule: "0 */6 * * *"

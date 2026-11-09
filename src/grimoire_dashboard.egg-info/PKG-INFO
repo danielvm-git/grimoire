@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: grimoire-dashboard
-Version: 0.12.4
+Version: 0.17.2
 Requires-Python: >=3.13
 License-File: LICENSE
 Requires-Dist: aiosqlite>=0.21

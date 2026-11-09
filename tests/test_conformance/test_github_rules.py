@@ -98,14 +98,21 @@ def test_rulesets_satisfy_protection(tmp_path: Path) -> None:
 
 
 @respx.mock
-def test_pr_without_approval_fails(tmp_path: Path) -> None:
+def test_pr_without_approval_passes_for_solo_owner(tmp_path: Path) -> None:
     respx.get(CLASSIC).mock(
         return_value=httpx.Response(200, json=_classic(approvals=0))
     )
     respx.get(RULES).mock(return_value=httpx.Response(200, json=[]))
     result = gr.pr_required(_ctx(tmp_path))
-    assert not result.passed
-    assert "no approving review" in result.problems[0]
+    assert result.passed
+    assert "solo-owner" in result.notes[0]
+
+
+@respx.mock
+def test_no_pull_request_rule_passes_for_solo_owner(tmp_path: Path) -> None:
+    respx.get(CLASSIC).mock(return_value=httpx.Response(200, json=_classic()))
+    respx.get(RULES).mock(return_value=httpx.Response(200, json=[]))
+    assert gr.pr_required(_ctx(tmp_path)).passed
 
 
 @respx.mock
