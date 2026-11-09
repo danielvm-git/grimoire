@@ -84,3 +84,58 @@ def register_checks(
             id=f"check:{check.slug}",
             replace_existing=True,
         )
+
+
+async def run_all_checks_once(
+    checks: list[CheckDefinition],
+    repos: list[TrackedRepository],
+    workspace: WorkspaceManager,
+    engine: AsyncEngine,
+    *,
+    triggered_by: str = "startup",
+    concurrency: int = 5,
+    enabled: bool = True,
+) -> int:
+    """Run every enabled check once, regardless of its schedule.
+
+    A deploy used to start with nothing to show: cron checks waited for their
+    next window and schedule-less checks only ran after a data refresh. Running
+    them once at startup gives the dashboard real results immediately; the cron
+    schedule then takes over as usual (BUG-2026-11-09T000002).
+
+    Returns the number of checks that were started. A check that is already
+    running (initial refresh, cron, manual run) or raises is skipped so one
+    problem cannot stop the rest of the startup pass.
+    """
+    if not enabled:
+        logger.info("Checks run-on-startup is disabled by config")
+        return 0
+
+    pending = [c for c in checks if c.enabled]
+    if not pending:
+        return 0
+
+    sem = asyncio.Semaphore(concurrency)
+    started = 0
+
+    async def _run(check: CheckDefinition) -> None:
+        nonlocal started
+        async with sem:
+            if not check.enabled:  # toggled off while the pass was running
+                return
+            try:
+                await run_check_for_all_targets(
+                    check, repos, workspace, engine, triggered_by=triggered_by
+                )
+                started += 1
+            except CheckConflictError:
+                logger.info(
+                    "Check '%s' already running; startup pass skipped it", check.slug
+                )
+            except Exception:
+                logger.exception("Startup check '%s' failed", check.slug)
+
+    logger.info("Running %d check(s) at startup before scheduling", len(pending))
+    await asyncio.gather(*(_run(c) for c in pending))
+    logger.info("Startup check pass started %d check(s)", started)
+    return started

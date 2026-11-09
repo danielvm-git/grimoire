@@ -161,6 +161,17 @@ RepoSource = Annotated[
 ]
 
 
+class ChecksConfig(BaseModel):
+    """Runtime behaviour for checks."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Run every enabled check once when the app boots, then hand over to the
+    # cron schedules. Disable on very large accounts where a startup burst of
+    # git worktrees is undesirable.
+    run_on_startup: bool = True
+
+
 class StalenessConfig(BaseModel):
     """Thresholds for marking issues/PRs as stale."""
 
@@ -244,6 +255,7 @@ class GrimoireConfig(BaseModel):
 
     repositories: list[RepoSource]
 
+    checks: ChecksConfig = Field(default_factory=ChecksConfig)
     staleness: StalenessConfig = Field(default_factory=StalenessConfig)
     backlog: BacklogConfig = Field(default_factory=BacklogConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)

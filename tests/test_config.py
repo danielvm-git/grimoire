@@ -649,3 +649,26 @@ class TestUserRepoSource:
         )
         with pytest.raises(Exception):
             load_config(config_file)
+
+
+class TestChecksConfig:
+    """Checks run at deploy unless the operator opts out."""
+
+    def test_run_on_startup_defaults_to_true(self, tmp_config: Path) -> None:
+        config = load_config(tmp_config)
+        assert config.checks.run_on_startup is True
+
+    def test_run_on_startup_can_be_disabled(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "ghp_test"
+            repositories:
+              - repo: "owner/repo"
+            checks:
+              run_on_startup: false
+            """)
+        )
+        config = load_config(config_file)
+        assert config.checks.run_on_startup is False

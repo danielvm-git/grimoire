@@ -1678,3 +1678,47 @@ bugs:
       reported by GET /user/repos.
     risk_level: medium
     commit_message: "feat(config): discover every repo of a user account with a user source"
+
+  - slug: checks-wait-for-cron-after-deploy
+    title: Checks did not run at deploy time, so a fresh deployment showed an empty checks column
+    module: src/grimoire/checks/scheduler.py, src/grimoire/app.py, src/grimoire/config.py
+    severity: medium
+    status: fixed
+    found_in: user report ("the checks are not running at the deploy moment, they are waiting the schedule")
+    description: >
+      After a deploy, cron-scheduled checks waited for their next window (some up to 24h) and
+      schedule-less checks only ran at the end of a data refresh. A freshly started deployment
+      therefore showed mostly "not-run" check badges until the schedule caught up.
+    reproduction_steps:
+      - Start the app with any check that has a cron schedule (e.g. "0 3 * * *").
+      - Inspect the dashboard immediately - the check shows "not-run" (or is missing) until 03:00.
+      - "sqlite3 grimoire.db \"select check_slug, triggered_by, status from check_run\"  # empty until cron fires"
+    root_cause_hypothesis: >
+      register_checks() only wired CronTrigger jobs, and the refresh callback ran just the
+      schedule-less subset. Nothing triggered a check run at startup.
+    files_changed:
+      - src/grimoire/checks/scheduler.py
+      - src/grimoire/app.py
+      - src/grimoire/config.py
+      - tests/test_checks/test_scheduler.py
+      - tests/test_config.py
+      - docs/user/reference/configuration.md
+      - docs/user/how-to/write-a-check.md
+      - docs/specs/04-checks-engine.md
+    approach: >
+      Add run_all_checks_once() (bounded to 5 concurrent checks, skips CheckConflictError and
+      per-check exceptions) and call it from the startup path after the initial refresh and
+      workspace setup, or in its own task when no refresh is needed. The startup refresh calls
+      _do_refresh(run_schedule_less_checks=False) so schedule-less checks do not run twice on
+      boot. New config `checks.run_on_startup` (default true) lets operators opt out.
+    regression: >-
+      tests/test_checks/test_scheduler.py::test_run_all_checks_once_runs_every_enabled_check,
+      ::test_run_all_checks_once_skips_conflicts,
+      ::test_run_all_checks_once_survives_a_failing_check,
+      ::test_run_all_checks_once_respects_the_switch (4, red before the change);
+      tests/test_config.py::TestChecksConfig (2). Smoke run: a temp instance with one cron check
+      scheduled for 03:00 and one schedule-less check logged "Running 2 check(s) at startup",
+      then two check_result rows with triggered_by=startup - once each, no duplicate from the
+      refresh pass.
+    risk_level: medium
+    commit_message: "feat(checks): run every enabled check once at startup, then follow the schedule"

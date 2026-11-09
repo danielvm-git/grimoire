@@ -24,7 +24,7 @@ from grimoire.checks.engine import CheckConflictError, run_check_for_all_targets
 from grimoire.checks.loader import CheckDefinition, load_checks
 from grimoire.checks.router import router as checks_router
 from grimoire.checks.router import set_checks_state
-from grimoire.checks.scheduler import register_checks
+from grimoire.checks.scheduler import register_checks, run_all_checks_once
 from grimoire.config import load_config, resolve_config_path
 from grimoire.database import (
     RUN_LEASE_SECONDS,
@@ -233,7 +233,9 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         )
 
     # Refresh callback for POST /api/refresh
-    async def _do_refresh() -> list[TrackedRepository]:
+    async def _do_refresh(
+        *, run_schedule_less_checks: bool = True
+    ) -> list[TrackedRepository]:
         try:
             with DATA_REFRESH_DURATION.time():
                 refreshed_repos, refreshed_stats = await refresh_all_stats(
@@ -259,7 +261,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
         # Run default-schedule checks (those without a cron schedule) concurrently.
         # Bounded so a large check set cannot multiply the engine's own fan-out.
-        default_checks = [c for c in checks if c.enabled and not c.schedule]
+        # The startup refresh turns this off: the startup pass runs *every*
+        # enabled check once, so these would otherwise run twice on every boot.
+        default_checks = (
+            []
+            if not run_schedule_less_checks
+            else [c for c in checks if c.enabled and not c.schedule]
+        )
         checks_sem = asyncio.Semaphore(5)
 
         async def _run_default_check(check: CheckDefinition) -> None:
@@ -320,7 +328,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         async def _initial_refresh() -> None:
             try:
                 logger.info("Background initial refresh starting")
-                refreshed_repos = await _do_refresh()
+                refreshed_repos = await _do_refresh(run_schedule_less_checks=False)
                 try:
                     await workspace.setup(refreshed_repos)
                 except Exception:
@@ -328,6 +336,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 logger.info(
                     "Background initial refresh complete — %d repos",
                     len(refreshed_repos),
+                )
+                await run_all_checks_once(
+                    checks,
+                    refreshed_repos,
+                    workspace,
+                    engine,
+                    triggered_by="startup",
+                    enabled=config.checks.run_on_startup,
                 )
             except asyncio.CancelledError:
                 # Shutdown cancelled us mid-refresh; that is not a failure.
@@ -342,6 +358,26 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         # transaction. Provenance: registry.yaml e2e-session-transaction-warning.
         _app.state.initial_refresh_task = asyncio.create_task(_initial_refresh())
 
+    elif config.checks.run_on_startup:
+
+        async def _startup_checks_only() -> None:
+            try:
+                await run_all_checks_once(
+                    checks,
+                    repos,
+                    workspace,
+                    engine,
+                    triggered_by="startup",
+                    enabled=True,
+                )
+            except asyncio.CancelledError:
+                logger.info("Startup check pass cancelled at shutdown")
+                raise
+            except Exception:
+                logger.exception("Startup check pass failed")
+
+        _app.state.initial_checks_task = asyncio.create_task(_startup_checks_only())
+
     yield
 
     # Shutdown
@@ -352,6 +388,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         refresh_task.cancel()
         with suppress(asyncio.CancelledError):
             await refresh_task
+
+    checks_task: asyncio.Task[None] | None = getattr(
+        _app.state, "initial_checks_task", None
+    )
+    if checks_task is not None and not checks_task.done():
+        checks_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await checks_task
 
     if scheduler:
         scheduler.shutdown(wait=False)

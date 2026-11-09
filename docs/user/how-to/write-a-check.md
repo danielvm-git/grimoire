@@ -149,6 +149,10 @@ Pattern checks feed the per-repo compliance score. See [Pattern conformance](../
 
 ## Set a custom schedule
 
+Every enabled check also runs once when Grimoire starts (see
+[`checks.run_on_startup`](../reference/configuration.md#checks)), then follows its
+schedule.
+
 By default, checks run on the global `refresh_schedule`. Override with a cron expression:
 
 ```yaml
