@@ -27,6 +27,7 @@ Slug uniqueness is enforced — duplicate filenames cause a startup error.
 | `enabled` | boolean | No | `true` | Whether the check runs on schedule |
 | `severity` | `"error"` \| `"warning"` | No | `"error"` | How failures appear on the dashboard and in the backlog |
 | `priority` | `"P0"` \| `"P1"` \| `"P2"` | No | — | Marks a [pattern check](conformance.md) and feeds the compliance score. P0 requires `severity: error`; P1 and P2 require `severity: warning` |
+| `publish_status` | string | No | — | Publishes each result as a [commit status](#publish-status) under this context, such as `grimoire/ci-audit` |
 
 ## Target spec {: #target-spec }
 
@@ -142,6 +143,14 @@ The exit code follows the worst failing severity: critical → `2`, high → `1`
 
 Set `GRIMOIRE_AUDIT_STRICT_SHA_PINNING=1` in the Grimoire environment to make `8a` accept only 40-character SHAs and OCI digests. Floating tags such as `@v6` then fail.
 
+### Publishing results as a commit status {: #publish-status }
+
+Set `publish_status` and Grimoire posts each result to the head commit of the branch it checked: `success` when the check passes, `failure` when it fails. The audit ships with `publish_status: grimoire/ci-audit`.
+
+To block merges on it, add `grimoire/ci-audit` as a required status check in the branch protection of the audited repository. A pull request then shows the audit result of its base branch's head commit; it does not run the audit on the pull request's own commits.
+
+The token in `config.yaml` needs permission to write commit statuses: `repo:status` for a classic token, or **Commit statuses: write** for a fine-grained one. If GitHub refuses, Grimoire logs a warning and the check result is unchanged. Grimoire uses commit statuses and not check-runs because GitHub only lets a GitHub App create check-runs.
+
 ### Machine-readable output and pull-request use
 
 Run the script with `--json` to get one object per rule instead of the table. The exit code is the same.
@@ -154,7 +163,7 @@ Run the script with `--json` to get one object per rule instead of the table. Th
 
 `status` is `pass`, `fail` or `unknown`. Rule IDs such as `CI-PERM-001`, `CI-PIN-001` and `CI-PROTECT-001` are stable: they do not change when rules are reordered or renumbered in the table.
 
-Grimoire runs checks on the branches it observes, so it cannot attach a result to a pull request. To get the audit before a merge, run the script in the audited repository's own CI:
+Grimoire runs checks on the branches it observes and publishes the result as a commit status on that branch's head. To audit a pull request's own changes before a merge, run the script in the audited repository's own CI:
 
 ```yaml
 on:

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from grimoire.checks.status import publish_result_status
 from grimoire.database import (
     PROCESS_OWNER_ID,
     RUN_LEASE_SECONDS,
@@ -245,6 +246,16 @@ async def run_check(
 
     duration = time.monotonic() - start_time
     update_check_metrics(check.slug, repo.full_name, branch, passed, duration)
+
+    if check.publish_status:
+        await publish_result_status(
+            check.publish_status,
+            repo.full_name,
+            workdir,
+            passed,
+            output,
+            env.get("GH_TOKEN", ""),
+        )
 
     return await _persist_result(check, repo, branch, passed, output, engine, run_id)
 

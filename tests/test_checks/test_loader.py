@@ -6,8 +6,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from grimoire.checks.loader import load_checks
+from grimoire.checks.loader import CheckDefinition, load_checks
+from grimoire.targeting import TargetSpec
 
 
 class TestLoadChecks:
@@ -262,3 +264,22 @@ class TestBundledScriptsArePosixSafe:
         checks = load_checks(TestBundledCheckDefinitions._data_dir())
         migration = next(c for c in checks if c.slug == "ci-cd-migration")
         assert migration.enabled is False
+
+
+def test_publish_status_defaults_to_none() -> None:
+    check = CheckDefinition(
+        name="n", description="d", targets=TargetSpec(list=["a/b"]), script="true"
+    )
+    assert check.publish_status is None
+
+
+def test_publish_status_rejects_blank_or_long_context() -> None:
+    for bad in ("", "x" * 256):
+        with pytest.raises(ValidationError):
+            CheckDefinition(
+                name="n",
+                description="d",
+                targets=TargetSpec(list=["a/b"]),
+                script="true",
+                publish_status=bad,
+            )

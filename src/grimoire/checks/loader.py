@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal, Self
 
 import yaml
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 from grimoire.targeting import TargetSpec
 
@@ -29,6 +29,9 @@ class CheckDefinition(BaseModel):
     severity: Literal["warning", "error"] = "error"
     # Set on pattern-conformance checks; these feed the per-repo compliance score.
     priority: Priority | None = None
+    # Commit-status context (e.g. ``grimoire/ci-audit``). When set, each result is
+    # published to the branch head commit so branch protection can require it.
+    publish_status: str | None = Field(default=None, min_length=1, max_length=255)
 
     @model_validator(mode="after")
     def priority_matches_severity(self) -> Self:
