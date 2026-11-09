@@ -69,6 +69,8 @@
                             {% if wf.status == "success" %}<i class="fa-solid fa-check status-icon status-icon-success"></i>
                             {% elif wf.status == "failure" %}<i class="fa-solid fa-xmark status-icon status-icon-failure"></i>
                             {% elif wf.status == "pending" %}<i class="fa-solid fa-clock status-icon status-icon-pending"></i>
+                            {% elif wf.status == "skipped" %}<i class="fa-solid fa-forward-step status-icon status-icon-skipped"></i>
+                            {% elif wf.status == "neutral" %}<i class="fa-solid fa-circle-half-stroke status-icon status-icon-neutral"></i>
                             {% else %}<i class="fa-solid fa-minus status-icon status-icon-unknown"></i>{% endif %}
                             <span class="text-sm">{{ wf.name }}</span>
                         </a>

@@ -1162,6 +1162,12 @@ def test_every_github_conclusion_maps_explicitly() -> None:
     assert _map_conclusion("in_progress") == "pending"
 
 
+def test_skipped_and_neutral_map_to_their_own_status() -> None:
+    """A skipped deploy is not an unknown failure — the dashboard must say so."""
+    assert _map_conclusion("skipped") == "skipped"
+    assert _map_conclusion("neutral") == "neutral"
+
+
 # ---------------------------------------------------------------------------
 # SQLITE_BUSY resilience (BUG-2026-11-07T000000)
 # ---------------------------------------------------------------------------

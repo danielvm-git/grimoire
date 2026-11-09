@@ -163,7 +163,9 @@ Icons (FontAwesome 6):
 - `fa-check` (green `#22c55e`) — success
 - `fa-xmark` (red `#ef4444`) — failure
 - `fa-clock` (yellow `#eab308`) — pending
-- `fa-minus` (gray `#6b7280`) — unknown
+- `fa-forward-step` (gray `#6b7280`) — skipped (GitHub conclusion `skipped`: the run was conditional and never executed)
+- `fa-circle-half-stroke` (gray `#6b7280`) — neutral (GitHub conclusion `neutral`)
+- `fa-minus` (gray `#6b7280`) — unknown (a conclusion Grimoire does not recognize)
 
 Each icon represents one workflow. Hover shows the workflow name. Click links to the GitHub run.
 
