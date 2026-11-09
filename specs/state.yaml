@@ -55,34 +55,35 @@ epic_cycle:
       (e2e-session-transaction-warning).
 
 release:
-  target_version: "0.15.0"
-  last_tag: "v0.15.0"
-  last_publish: "0.15.0"
+  target_version: "0.19.0"
+  last_tag: "v0.19.0"
+  last_publish: "0.19.0"
   ci_verified: true
-  ci_run: 42492029350
+  ci_run: 42630513653
   ci_runs_verified:
-    - "Test Build Release #42492029350 — success, test+build+release (faf591a)"
-    - "Test Build Release Docs #42492029335 — success (faf591a)"
-    - "Deploy #42492121216 — success (faf591a)"
-    - "Deploy Docs #42492082230 — success (faf591a)"
-  pr: 61
-  commit: "faf591a"
+    - "Test Build Release #42630513653 — success, test+build+release (c16bce9)"
+    - "Test Build Release Docs #42630513748 — success (c16bce9)"
+    - "Deploy / Deploy Docs — success after c16bce9"
+  pr: 73
+  commit: "c16bce9"
   changelog_entry: true
   version_files_consistent: true
-  bug: null
-  note: >
-    PR #48 (feat(web): run all checks for one repo) was merged to main as 41bc2d8 and
-    tagged v0.14.0. The release commit is 9389321 (version files 0.14.0). The feature
-    branch was already merged before release-branch ran, so this run verified and
-    recorded the release instead of re-merging it. Story e13s05 was implemented with
-    the #48 code but missing from the e13 capsule; it is recorded in this commit.
-  residual:
-    - id: egg-info-version-drift
-      detail: >
-        src/grimoire_dashboard.egg-info/PKG-INFO is tracked but the release job only
-        updates CHANGELOG.md, pyproject.toml and uv.lock, so the committed metadata
-        still reports 0.12.4 while pyproject is 0.14.0. Not committed here (it is
-        generated build output); consider untracking the egg-info directory.
+  bug: BUG-2026-11-09T000002
+
+# Session 2026-11-09 — three user-reported defects fixed and shipped
+decisions_latest:
+  - gate: bug-dot-segment-repo-url
+    decision: "Fixed the reported /repo/danielvm-git/.github 404 with a query-form URL shape (repo_url() + /repo?name=...), not a routing change, because the edge proxy rejects dot-prefixed path segments before the app sees the request. PR #70 (82dbe60); live check: the dashboard links /repo?name=danielvm-git/.github and that URL returns 200 with the repo page."
+    reason: "Root cause was provably outside the app (19-byte Go 404), so only the emitted URL could change."
+  - gate: bug-static-repo-list-drift
+    decision: "Replaced the 66-entry static list with a dynamic user: source after measuring 66 configured - 13 deleted = 53 tracked against 58 owned. PR #71 (850000e); resolve_repositories against the real account returned exactly 58, and live /health now reports tracked_repos: 58 with zero dashboard warnings."
+    reason: "The user asked for dynamic discovery; a static list drifts in both directions and silently wastes a 404 call per deleted repo per refresh."
+  - gate: bug-checks-wait-for-cron
+    decision: "Added run_all_checks_once() and wired it into startup after the initial refresh, with checks.run_on_startup to opt out. PR #73 (c16bce9); a smoke run showed a cron-scheduled and a schedule-less check each running once at boot, and the live deployment produced real check results within ~90 s of the redeploy."
+    reason: "The user asked for all checks to run at deploy time and then follow the schedule; the startup refresh skips the schedule-less pass so nothing runs twice."
+  - gate: gate-integrity
+    decision: "Every fix shipped failing-tests-first (8 + 10 + 6 new tests), green preflight (736 -> 752 passing) and green main CI; no gate, test or workflow was weakened."
+    reason: "Always Green and shift-left rules from CONVENTIONS.md."
 
 # Build&Ship cycle — 2026-11-08 (SCOPE: all pending work)
 decisions:
@@ -147,13 +148,15 @@ ship:
 
 git:
   branch: main
-  hash: "ea2fb58"
+  hash: "c16bce9"
   pushed: true
   clean: true
   worktrees: 1
 
 handoff:
-  last_step_completed: "Issue-closing run (2026-11-08, SCOPE=all pending work = GitHub issues #50-#60): PRs #64 (audit fixes: #50 #51 #52 #53 #55 #56 #58 #60), #65 (migration check: #54 #59), #66 (stable rule IDs + --json for #57), and a final fix for the audit script's bare-python3 PyYAML gap. Baseline 652 passed, final 713. Main CI green after #64; #57 stays open for an owner decision. Previous: Build&Ship cycle (2026-11-08) completed for SCOPE=all pending work. One work item existed: the unmerged conformance branch. Shipped as PR #61 (merge faf591a, auto-released v0.15.0) with two in-branch fixes found during verification (GRIMOIRE_PYTHON for bundled checks, tracked spec 09). Baseline and final Preflight: 644 passed, 89% coverage. Main CI green on all four workflows after merge. Removed 2 worktrees and 4 merged branches; one stale remote branch (danielvm-git/repo-custom-prompt-copy-398e24) left in place because patch-ids no longer prove it merged. Previous entry follows."
+  last_step_completed: "Session 2026-11-09 closed three user-reported defects: dot-named repo URLs (PR #70), dynamic user: repo discovery replacing the drifting static list (PR #71, live 58/58 tracked), and all-checks-at-startup (PR #73, live results within ~90s of deploy). All shipped failing-tests-first with green preflight (752 passed) and green main CI. main = c16bce9 / v0.19.0. Previous entry follows."
+
+  previous_step_completed: "Issue-closing run (2026-11-08, SCOPE=all pending work = GitHub issues #50-#60): PRs #64 (audit fixes: #50 #51 #52 #53 #55 #56 #58 #60), #65 (migration check: #54 #59), #66 (stable rule IDs + --json for #57), and a final fix for the audit script's bare-python3 PyYAML gap. Baseline 652 passed, final 713. Main CI green after #64; #57 stays open for an owner decision. Previous: Build&Ship cycle (2026-11-08) completed for SCOPE=all pending work. One work item existed: the unmerged conformance branch. Shipped as PR #61 (merge faf591a, auto-released v0.15.0) with two in-branch fixes found during verification (GRIMOIRE_PYTHON for bundled checks, tracked spec 09). Baseline and final Preflight: 644 passed, 89% coverage. Main CI green on all four workflows after merge. Removed 2 worktrees and 4 merged branches; one stale remote branch (danielvm-git/repo-custom-prompt-copy-398e24) left in place because patch-ids no longer prove it merged. Previous entry follows."
 
   previous_cycle_2: "release-branch verified and recorded v0.14.0. PR #48 (feat/repo-checks-run) was already merged as 41bc2d8 and tagged v0.14.0; the release commit is 9389321. just check is green (559 passed, 88% coverage, zero lint/type errors) and main CI is green (Test Build Release Docs, Deploy, Deploy Docs). Recorded the missing e13s05 story, refreshed the security review for the run-checks diff, and cleaned up the feature branch/worktree. Previous build&ship entry follows."
 
