@@ -72,6 +72,8 @@ repositories:
       exclude: ["Publish *"]       # then exclude matching (applied after include)
 
   # From a GitHub team
+  - user: "my-github-login"
+    exclude: ["my-github-login/scratchpad"]
   - team: "my-org/my-team"
     exclude:
       - "my-org/deprecated-repo"
@@ -122,6 +124,7 @@ log_file: "./grimoire.log"
 - `GitConfig(user: GitUserConfig, signing: SigningConfig | None = None, ssh_known_hosts: Path | None = None)`
 - `StaticRepoSource(repo: str, branches: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
 - `TeamRepoSource(team: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
+- `UserRepoSource(user: str, exclude: list[str] = [], workflows: WorkflowFilter = WorkflowFilter())`
 - `WorkflowFilter(include: list[str] = [], exclude: list[str] = [])` — glob patterns (fnmatch) on workflow name
 - `RepoSource` — discriminated union of the above (by field presence)
 - `StalenessConfig(pull_requests_days: int = 30, issues_days: int = 365, problematic_stale_issues_pct: int = 20, problematic_stale_prs_pct: int = 20)`

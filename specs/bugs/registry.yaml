@@ -1625,3 +1625,56 @@ bugs:
       matrix/list links using the query form. Red before the change, green after.
     risk_level: low
     commit_message: "fix(web): link dot-named repos through a proxy-safe query URL"
+
+  - slug: static-repo-list-drift
+    title: Repository list was hand-maintained, so tracked repos drift from the account
+    module: src/grimoire/config.py, src/grimoire/github/service.py, src/grimoire/github/client.py, config.yaml
+    severity: high
+    status: fixed
+    found_in: user report ("I have 58 repos, why is it fetching just 53")
+    description: >
+      config.yaml enumerated repositories one per entry, so the tracked set was whatever had
+      been typed there. Measured 2026-11-09: 66 config entries, 13 of them pointing at repos
+      that no longer exist (each costing one API 404 per refresh), and 5 existing repos missing
+      from the list. 66 - 13 = 53 tracked, while the account owns 58.
+    reproduction_steps:
+      - "gh api 'user/repos?per_page=100&affiliation=owner' --paginate --jq length   # 58"
+      - "grep -c '^\\s*- repo:' config.yaml                                          # 66"
+      - "curl -s https://grimoire.bigbase.click/health                                # tracked_repos: 53"
+      - "curl -s https://grimoire.bigbase.click/metrics | grep 'status=\"404\"'        # 13 stale entries"
+    root_cause_hypothesis: >
+      GrimoireConfig.repositories accepted only StaticRepoSource (repo:) and TeamRepoSource
+      (team:). There was no source meaning "every repo this account owns", so a personal account
+      could only be tracked by editing YAML. Per-entry resolution hides both failure modes:
+      deleted entries are skipped silently and new repos are never discovered. TeamRepoSource
+      proved the discovery pattern, but no user equivalent existed.
+    files_changed:
+      - src/grimoire/config.py
+      - src/grimoire/github/client.py
+      - src/grimoire/github/service.py
+      - config.yaml
+      - tests/test_config.py
+      - tests/test_github/test_client.py
+      - tests/test_github/test_service.py
+      - docs/user/reference/configuration.md
+      - docs/specs/01-scaffolding-and-configuration.md
+      - docs/specs/02-github-data-service.md
+    approach: >
+      Add UserRepoSource (user:, exclude:, workflows:) resolved through get_user_repos():
+      /user/repos?affiliation=owner when the configured login is the token owner (private repos
+      included), /users/{user}/repos?type=owner otherwise, with the token login cached once.
+      _resolve_user mirrors _resolve_team: exclude list, archived tombstone, and cached fallback
+      on error or 304. config.yaml now uses `- user: "danielvm-git"`, so discovery replaced the
+      66-entry list; the two branches:[master] overrides were redundant (both repos report
+      default_branch=master).
+    regression: >-
+      test_user_source_is_parsed, test_repo_source_rejects_mixed_selectors (tests/test_config.py);
+      test_get_user_repos_uses_authenticated_endpoint,
+      test_get_user_repos_uses_public_endpoint_for_other_users, test_authenticated_login_is_cached
+      (tests/test_github/test_client.py); test_resolve_user_source_returns_every_repo,
+      test_resolve_user_source_skips_excluded_and_archived,
+      test_resolve_user_source_falls_back_to_cache_on_error (tests/test_github/test_service.py).
+      Verified against the real account: resolve_repositories returned exactly the 58 repos
+      reported by GET /user/repos.
+    risk_level: medium
+    commit_message: "feat(config): discover every repo of a user account with a user source"

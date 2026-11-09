@@ -99,6 +99,37 @@ repositories:
       exclude: ["Release *"]
 ```
 
+### User source
+
+Track every repository owned by a GitHub user account — discovery instead of
+enumeration. A repository created on GitHub appears on the next refresh; a
+deleted or renamed one disappears. Archived repos are always excluded.
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `user` | string | Yes | GitHub login (`danielvm-git`) |
+| `exclude` | list of strings | No | Repos to exclude (full names) |
+| `workflows.include` | list of strings | No | Glob patterns — only track matching workflows |
+| `workflows.exclude` | list of strings | No | Glob patterns — exclude matching workflows |
+
+```yaml
+repositories:
+  - user: "danielvm-git"
+    exclude:
+      - "danielvm-git/scratchpad"
+```
+
+When `user` matches the account behind `github.token`, private repositories are
+included (`/user/repos`). For any other account only public repositories are
+visible (`/users/{user}/repos`).
+
+!!! tip "Static lists drift"
+
+    A `repo:` list has to be edited whenever you create or delete a repository: it
+    silently keeps deleted repos (one wasted API call each per refresh) and misses
+    new ones. Prefer a `user:` or `team:` source for anything you do not need
+    per-repo `branches:` overrides for.
+
 ---
 
 ## `staleness` {: #staleness }

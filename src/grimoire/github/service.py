@@ -21,6 +21,7 @@ from grimoire.config import (
     StalenessConfig,
     StaticRepoSource,
     TeamRepoSource,
+    UserRepoSource,
 )
 from grimoire.database import (
     CachedIssue,
@@ -145,6 +146,8 @@ async def resolve_repositories(
                 return [repo] if repo is not None else []
             if isinstance(source, TeamRepoSource):
                 return await _resolve_team(source, client, cached_repo_meta)
+            if isinstance(source, UserRepoSource):
+                return await _resolve_user(source, client, cached_repo_meta)
             return []
 
     # Resolve all sources concurrently; gather preserves config order so the
@@ -311,6 +314,65 @@ async def _resolve_team(
             )
         )
 
+    return resolved
+
+
+async def _resolve_user(
+    source: UserRepoSource,
+    client: GitHubClient,
+    cached_repo_meta: dict[str, CachedRepository] | None = None,
+) -> list[TrackedRepository]:
+    """Discover every repository owned by ``source.user``.
+
+    Mirrors :func:`_resolve_team`: an exclusion list, an archived-repo tombstone,
+    and a cached fallback so a failed (or 304) listing never empties the
+    dashboard.
+    """
+    source_label = f"user:{source.user}"
+    exclude_set = set(source.exclude)
+
+    def _from_cache() -> list[TrackedRepository]:
+        return [
+            _tracked_from_cache(cached)
+            for cached in (cached_repo_meta or {}).values()
+            if cached.source == source_label
+            and not cached.archived
+            and cached.full_name not in exclude_set
+        ]
+
+    try:
+        repos = await client.get_user_repos(source.user)
+    except Exception:
+        logger.warning(
+            "Failed to fetch repos for user %s, keeping cached user repos",
+            source.user,
+            exc_info=True,
+        )
+        return _from_cache()
+
+    if repos is None:
+        # 304 Not Modified: the account did not change.
+        return _from_cache()
+
+    resolved: list[TrackedRepository] = []
+    for repo_data in repos:
+        full_name = repo_data.get("full_name", "")
+        if not full_name or full_name in exclude_set:
+            continue
+        default_branch = repo_data.get("default_branch", "main")
+        if repo_data.get("archived", False):
+            await _remember_archived_repo(client, full_name, default_branch)
+            continue
+        resolved.append(
+            TrackedRepository(
+                full_name=full_name,
+                default_branch=default_branch,
+                branches=[default_branch],
+                source=source_label,
+                workflow_include=source.workflows.include,
+                workflow_exclude=source.workflows.exclude,
+            )
+        )
     return resolved
 
 
@@ -912,9 +974,11 @@ async def prune_removed_repos(engine: AsyncEngine, config: GrimoireConfig) -> in
     sources (``repo:`` entries) so the full set of expected names is known
     without making API calls.  Returns the number of repos pruned.
     """
-    has_team_sources = any(isinstance(s, TeamRepoSource) for s in config.repositories)
-    if has_team_sources:
-        logger.debug("Config contains team sources — skipping DB prune")
+    has_dynamic_sources = any(
+        isinstance(s, (TeamRepoSource, UserRepoSource)) for s in config.repositories
+    )
+    if has_dynamic_sources:
+        logger.debug("Config contains dynamic sources — skipping pre-refresh DB prune")
         return 0
 
     configured_names: set[str] = set()

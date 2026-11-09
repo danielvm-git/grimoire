@@ -39,6 +39,18 @@ class GitHubClient:
 
 The GitHub REST API has a rate limit of 5,000 requests/hour for authenticated users. With 50+ repos being refreshed periodically, minimizing calls is critical.
 
+**Repository sources:**
+
+- `repo:` — one repo, validated with `GET /repos/{owner}/{repo}`; a 404 removes it
+  from the tracked set.
+- `team:` — `GET /orgs/{org}/teams/{slug}/repos` (paginated).
+- `user:` — dynamic discovery. `GET /user/repos?affiliation=owner` when the
+  configured login is the token's own account (private repos included), otherwise
+  `GET /users/{user}/repos?type=owner` (public only). The login behind the token
+  is read once via `GET /user` and cached on the client. Archived repos are
+  tombstoned, `exclude:` names are dropped, and a failed (or 304) listing falls
+  back to the cached `user:<login>` rows so the dashboard never empties.
+
 **Conditional requests (ETags):**
 - On every API response, store the `ETag` and `Last-Modified` headers in the `CachedETag` DB table, keyed by the full request URL.
 - On subsequent requests, send `If-None-Match` (ETag) and `If-Modified-Since` headers.

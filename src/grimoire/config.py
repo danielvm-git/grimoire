@@ -10,7 +10,13 @@ from typing import Annotated, Literal, Union
 import yaml
 from apscheduler.triggers.cron import CronTrigger
 from dataconfy import ConfigManager, DataManager
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 from typing_extensions import Self
 
 
@@ -116,6 +122,8 @@ class WorkflowFilter(BaseModel):
 class StaticRepoSource(BaseModel):
     """A single repository specified by full name, with optional branch list."""
 
+    model_config = ConfigDict(extra="forbid")
+
     repo: str
     branches: list[str] = Field(default_factory=list)
     workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
@@ -124,13 +132,32 @@ class StaticRepoSource(BaseModel):
 class TeamRepoSource(BaseModel):
     """All repositories belonging to a GitHub team, with optional exclusions."""
 
+    model_config = ConfigDict(extra="forbid")
+
     team: str
     exclude: list[str] = Field(default_factory=list)
     workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
 
 
+class UserRepoSource(BaseModel):
+    """Every repository owned by a GitHub user account.
+
+    Discovery, not enumeration: the account is the source of truth, so a repo
+    created on GitHub shows up on the next refresh without touching the config.
+    When the configured user is the token's own account, private repos are
+    included (``/user/repos``); for anyone else the public listing is used.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    user: str
+    exclude: list[str] = Field(default_factory=list)
+    workflows: WorkflowFilter = Field(default_factory=WorkflowFilter)
+
+
 RepoSource = Annotated[
-    Union[StaticRepoSource, TeamRepoSource], Field(discriminator=None)
+    Union[StaticRepoSource, TeamRepoSource, UserRepoSource],
+    Field(discriminator=None),
 ]
 
 
@@ -245,14 +272,25 @@ class GrimoireConfig(BaseModel):
         return v
 
 
+_REPO_SOURCE_KEYS = ("repo", "team", "user")
+
+
 def _parse_repo_source(raw: dict) -> RepoSource:  # type: ignore[type-arg]
     """Disambiguate a repository source dict into the correct model."""
-    if "repo" in raw:
+    present = [key for key in _REPO_SOURCE_KEYS if key in raw]
+    if len(present) > 1:
+        raise ValueError(
+            f"Repository source must have exactly one of {_REPO_SOURCE_KEYS}, "
+            f"got: {raw}"
+        )
+    if present == ["repo"]:
         return StaticRepoSource.model_validate(raw)
-    if "team" in raw:
+    if present == ["team"]:
         return TeamRepoSource.model_validate(raw)
+    if present == ["user"]:
+        return UserRepoSource.model_validate(raw)
     raise ValueError(
-        f"Repository source must have either 'repo' or 'team' key, got: {raw}"
+        f"Repository source must have exactly one of {_REPO_SOURCE_KEYS}, got: {raw}"
     )
 
 
