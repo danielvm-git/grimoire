@@ -13,6 +13,7 @@ from grimoire.config import (
     GrimoireConfig,
     StaticRepoSource,
     TeamRepoSource,
+    UserRepoSource,
     _get_xdg_config_path,
     _get_xdg_data_dir,
     load_config,
@@ -605,3 +606,46 @@ def test_resolve_config_path_matches_load_config(
 
     assert resolve_config_path() == config_file
     assert load_config().github.token == "test"
+
+
+class TestUserRepoSource:
+    """A personal account can be tracked without listing every repository."""
+
+    def test_user_source_is_parsed(self, tmp_path: Path) -> None:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            textwrap.dedent("""\
+            github:
+              token: "ghp_test"
+            repositories:
+              - user: "danielvm-git"
+                exclude:
+                  - "danielvm-git/private-sandbox"
+                workflows:
+                  exclude: ["Dependabot *"]
+            """)
+        )
+        config = load_config(config_file)
+        source = config.repositories[0]
+        assert isinstance(source, UserRepoSource)
+        assert source.user == "danielvm-git"
+        assert source.exclude == ["danielvm-git/private-sandbox"]
+        assert source.workflows.exclude == ["Dependabot *"]
+
+    @pytest.mark.parametrize(
+        "entry",
+        [
+            '{"repo": "owner/repo", "user": "owner"}',
+            '{"team": "org/slug", "user": "owner"}',
+            '{"repo": "owner/repo", "team": "org/slug"}',
+        ],
+    )
+    def test_repo_source_rejects_mixed_selectors(
+        self, tmp_path: Path, entry: str
+    ) -> None:
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(
+            'github:\n  token: "ghp_test"\nrepositories:\n  - ' + entry + "\n"
+        )
+        with pytest.raises(Exception):
+            load_config(config_file)

@@ -741,3 +741,69 @@ async def test_unchanged_etag_is_not_rewritten(client: GitHubClient, engine) -> 
     await client.get_repo("owner/repo")
     await client.get_repo("owner/repo")
     assert writes == 1, f"expected one write for an unchanged ETag, got {writes}"
+
+
+# ---------------------------------------------------------------------------
+# User repo discovery (BUG-2026-11-09T000001)
+# ---------------------------------------------------------------------------
+
+
+def _repo_page(*names: str) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json=[{"full_name": n, "default_branch": "main"} for n in names],
+        headers={"X-RateLimit-Remaining": "4999"},
+    )
+
+
+@respx.mock
+async def test_get_user_repos_uses_authenticated_endpoint(client: GitHubClient) -> None:
+    """The token owner's own repos include private ones, via /user/repos."""
+    respx.get("https://api.github.com/user").mock(
+        return_value=httpx.Response(200, json={"login": "Danielvm-Git"})
+    )
+    own = respx.get("https://api.github.com/user/repos").mock(
+        return_value=_repo_page("danielvm-git/grimoire", "danielvm-git/pi")
+    )
+
+    repos = await client.get_user_repos("danielvm-git")
+
+    assert own.called
+    assert [r["full_name"] for r in repos or []] == [
+        "danielvm-git/grimoire",
+        "danielvm-git/pi",
+    ]
+
+
+@respx.mock
+async def test_get_user_repos_uses_public_endpoint_for_other_users(
+    client: GitHubClient,
+) -> None:
+    """Another account's repos come from the public /users/{user}/repos path."""
+    respx.get("https://api.github.com/user").mock(
+        return_value=httpx.Response(200, json={"login": "someone-else"})
+    )
+    public = respx.get("https://api.github.com/users/octocat/repos").mock(
+        return_value=_repo_page("octocat/Hello-World")
+    )
+
+    repos = await client.get_user_repos("octocat")
+
+    assert public.called
+    assert [r["full_name"] for r in repos or []] == ["octocat/Hello-World"]
+
+
+@respx.mock
+async def test_authenticated_login_is_cached(client: GitHubClient) -> None:
+    """The identity lookup happens once, not per refresh."""
+    route = respx.get("https://api.github.com/user").mock(
+        return_value=httpx.Response(200, json={"login": "danielvm-git"})
+    )
+    respx.get("https://api.github.com/user/repos").mock(
+        return_value=_repo_page("danielvm-git/a")
+    )
+
+    await client.get_user_repos("danielvm-git")
+    await client.get_user_repos("danielvm-git")
+
+    assert route.call_count == 1

@@ -20,6 +20,7 @@ from grimoire.config import (
     StalenessConfig,
     StaticRepoSource,
     TeamRepoSource,
+    UserRepoSource,
 )
 from grimoire.database import (
     CachedIssue,
@@ -30,7 +31,7 @@ from grimoire.database import (
     create_tables,
     get_engine,
 )
-from grimoire.github.client import GitHubClient
+from grimoire.github.client import GitHubAPIError, GitHubClient
 from grimoire.github.service import (
     _map_conclusion,
     fetch_repository_stats,
@@ -1254,3 +1255,87 @@ async def test_team_lookup_failure_keeps_cached_team_repos(
     repos = await resolve_repositories(config, client)
     assert [r.full_name for r in repos] == ["org/team-repo"]
     assert repos[0].source == "team"
+
+
+# ---------------------------------------------------------------------------
+# Dynamic user repo discovery (BUG-2026-11-09T000001)
+# ---------------------------------------------------------------------------
+
+_USER_REPOS_PAYLOAD = [
+    {"full_name": "acme/one", "default_branch": "main", "archived": False},
+    {"full_name": "acme/two", "default_branch": "master", "archived": False},
+    {"full_name": "acme/old", "default_branch": "main", "archived": True},
+]
+
+
+async def test_resolve_user_source_returns_every_repo(engine: AsyncEngine) -> None:
+    """A user source tracks the whole account instead of a typed list."""
+    client = GitHubClient(token="t", engine=engine, backoff_factors=(0.0, 0.0, 0.0))
+
+    async def fake_get_user_repos(user: str) -> list[dict[str, object]]:
+        assert user == "acme"
+        return _USER_REPOS_PAYLOAD
+
+    client.get_user_repos = fake_get_user_repos  # type: ignore[method-assign]
+    config = _make_config(repos=[UserRepoSource(user="acme")])
+    try:
+        repos = await resolve_repositories(config, client)
+    finally:
+        await client.close()
+
+    assert [r.full_name for r in repos] == ["acme/one", "acme/two"]
+    assert repos[1].default_branch == "master"
+    assert all(r.source == "user:acme" for r in repos)
+
+
+async def test_resolve_user_source_skips_excluded_and_archived(
+    engine: AsyncEngine,
+) -> None:
+    """Exclusions apply, and archived repos are tombstoned instead of tracked."""
+    client = GitHubClient(token="t", engine=engine, backoff_factors=(0.0, 0.0, 0.0))
+
+    async def fake_get_user_repos(user: str) -> list[dict[str, object]]:
+        return _USER_REPOS_PAYLOAD
+
+    client.get_user_repos = fake_get_user_repos  # type: ignore[method-assign]
+    config = _make_config(repos=[UserRepoSource(user="acme", exclude=["acme/two"])])
+    try:
+        repos = await resolve_repositories(config, client)
+    finally:
+        await client.close()
+
+    assert [r.full_name for r in repos] == ["acme/one"]
+    async with AsyncSession(engine) as session:
+        tombstone = await session.get(CachedRepository, "acme/old")
+    assert tombstone is not None
+    assert tombstone.archived is True
+
+
+async def test_resolve_user_source_falls_back_to_cache_on_error(
+    engine: AsyncEngine,
+) -> None:
+    """A failed listing keeps the previously discovered user repos."""
+    async with AsyncSession(engine) as session:
+        session.add(
+            CachedRepository(
+                full_name="acme/cached",
+                default_branch="main",
+                source="user:acme",
+                fetched_at=datetime.now(UTC),
+            )
+        )
+        await session.commit()
+
+    client = GitHubClient(token="t", engine=engine, backoff_factors=(0.0, 0.0, 0.0))
+
+    async def boom(user: str) -> list[dict[str, object]]:
+        raise GitHubAPIError("nope", status_code=500)
+
+    client.get_user_repos = boom  # type: ignore[method-assign]
+    config = _make_config(repos=[UserRepoSource(user="acme")])
+    try:
+        repos = await resolve_repositories(config, client)
+    finally:
+        await client.close()
+
+    assert [r.full_name for r in repos] == ["acme/cached"]

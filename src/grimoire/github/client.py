@@ -84,6 +84,8 @@ class GitHubClient:
         self._rate_limit_limit: int | None = None
         self._rate_limit_reset: float | None = None
         self._pagination_lock = asyncio.Lock()
+        # Login behind the token; "" means "looked up, unavailable".
+        self._login: str | None = None
 
     # -- public properties ---------------------------------------------------
 
@@ -122,6 +124,30 @@ class GitHubClient:
             f"/orgs/{org}/teams/{team_slug}/repos",
         )
         return result if result is not None else []
+
+    async def get_authenticated_login(self) -> str | None:
+        """Return the login behind the token, fetched at most once."""
+        if self._login is None:
+            data = await self._request("GET", "/user", use_etag=False)
+            login = (data or {}).get("login")
+            self._login = login if isinstance(login, str) else ""
+        return self._login or None
+
+    async def get_user_repos(self, user: str) -> list[dict[str, Any]] | None:
+        """Return every repository owned by *user*.
+
+        ``/user/repos`` is used when *user* is the token's own account so that
+        private repositories are included; anyone else only exposes their public
+        repositories through ``/users/{user}/repos``.
+        """
+        login = await self.get_authenticated_login()
+        if login is not None and login.lower() == user.lower():
+            return await self._paginated_get(
+                "/user/repos", params={"affiliation": "owner"}
+            )
+        return await self._paginated_get(
+            f"/users/{user}/repos", params={"type": "owner"}
+        )
 
     async def get_repo(self, full_name: str) -> dict[str, Any] | None:
         owner, repo = full_name.split("/", 1)
