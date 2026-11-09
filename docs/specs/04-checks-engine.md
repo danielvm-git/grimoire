@@ -26,6 +26,7 @@ schedule: "0 */8 * * *"   # optional cron; omit to use default refresh interval
 enabled: true              # optional; default true
 severity: error            # optional; "error" (red, default) or "warning" (yellow)
 priority: P0               # optional; marks a pattern check (P0 | P1 | P2), see spec 09
+publish_status: grimoire/uv-lock   # optional; publish each result as a commit status
 ```
 
 **Branch scoping.** `list` and `regex` include every observed branch of a matched repo. `script` is evaluated *per (repo, branch)*, so it doubles as the branch filter: return exit code 0 for branches the check should run against, non-zero for the rest. Branches not configured on the repository in `config.yaml` are never considered.
@@ -64,6 +65,7 @@ class CheckDefinition(BaseModel):
     enabled: bool = True
     severity: Literal["warning", "error"] = "error"
     priority: Literal["P0", "P1", "P2"] | None = None
+    publish_status: str | None = None  # 1-255 chars; commit-status context
 
     @model_validator(mode="after")
     def priority_matches_severity(self) -> Self:
@@ -194,6 +196,8 @@ async def run_check_for_all_targets(
 - `reserve_checks_for_repo(engine, checks, repo_full_name)` calls `prepare_check_run` for each enabled check and returns a `RepoRunPlan(reserved, skipped)`; checks already running are skipped, not failed. Raises `CheckConflictError` if a one-repo run for that repo is in flight.
 - `run_reserved_checks_for_repo(plan, repos, workspace, engine)` runs each reserved check via `run_check_for_all_targets(..., specific_repo=repo)` (bounded concurrency) and releases the slots.
 - `is_repo_run_active` / `get_repo_run_progress` expose in-memory progress (`completed`/`total` checks).
+
+**Publishing results (`checks/status.py`).** When `publish_status` is set, `run_check` posts a commit status to the head commit of the workdir (`git rev-parse HEAD`) after the script finishes: `POST /repos/{owner}/{repo}/statuses/{sha}` with `state` `success` or `failure`, `context` = the field value, and a description of at most 140 characters (last output line on failure). Check-runs are not used because they require a GitHub App; a PAT can write statuses, and branch protection can require a status context. Publishing is best-effort: HTTP or network errors are logged (a refusal names the missing token permission) and never change the check result. A workdir without a head commit or an empty token skips publishing.
 
 **Subprocess execution details:**
 - Scripts that begin with a shebang (`#!`) line are written to a temporary file, made executable, and run directly via `create_subprocess_exec` so the OS honors the interpreter (e.g. `#!/usr/bin/env bash`, `#!/usr/bin/env python3`). The temp file is cleaned up after execution.
@@ -330,6 +334,7 @@ class CheckRunDetail(BaseModel):
 - [ ] Toggle persists across restarts (stored in DB)
 - [ ] REST API endpoints return correct responses with proper status codes
 - [ ] `POST /api/checks/{slug}/run?repo=owner/repo` targets only the specified repo
+- [ ] A check with `publish_status` posts a commit status per result; a refused or failed post never fails the check; a check without the field makes no GitHub call
 - [ ] Tests mock subprocess execution and workspace
 - [ ] `priority` loads, and a priority/severity mismatch raises at load time
 - [ ] No bundled `/bin/sh` script uses `&>`

@@ -9,6 +9,7 @@ targets:
   script: '[ "$BRANCH" = "$DEFAULT_BRANCH" ]'
 schedule: "0 * * * *"
 severity: error
+publish_status: grimoire/ci-audit
 script: |
   #!/usr/bin/env python3
   """CI/CD Pipeline Audit — checks every repo against the solo-dev checklist."""
