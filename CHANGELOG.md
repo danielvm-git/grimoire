@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.19.2] - 2026-11-09
+
+### Bug Fixes
+
+- **checks:** accept workflow_call as a deploy trigger in pipeline audit ([#76](https://github.com/danielvm-git/grimoire/issues/76)) ([6cf47d3](https://github.com/danielvm-git/grimoire/commit/6cf47d3374de18c9e47c3bfb43bd02839c949a50))
+
 ## [0.19.1] - 2026-11-09
 
 ### Bug Fixes
