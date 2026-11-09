@@ -49,6 +49,53 @@ except Exception:
     templates.env.globals["VERSION"] = "0.5.0"
 
 
+# ---------------------------------------------------------------------------
+# URL builders
+# ---------------------------------------------------------------------------
+#
+# Reverse proxies commonly reject requests whose path contains a dot-prefixed
+# segment (".github" and friends) before they reach the app — the edge answers
+# with a bare "404 page not found". A query string is unaffected by that guard,
+# so repos whose name starts with a dot are linked in query form and get a
+# query-form route to match (BUG-2026-11-09T000000).
+
+
+def _repo_name_is_dot_safe(full_name: str) -> bool:
+    _, _, name = full_name.partition("/")
+    return not name.startswith(".")
+
+
+def repo_url(full_name: str) -> str:
+    """Return the repo detail URL, in the shape the edge proxy accepts."""
+    if _repo_name_is_dot_safe(full_name):
+        return f"/repo/{full_name}"
+    return f"/repo?name={full_name}"
+
+
+def repo_checks_status_url(full_name: str, *, was_running: bool = False) -> str:
+    """Return the run-checks polling URL for a repo."""
+    if _repo_name_is_dot_safe(full_name):
+        base = f"/partials/repo-checks-status/{full_name}"
+        separator = "?"
+    else:
+        base = f"/partials/repo-checks-status?name={full_name}"
+        separator = "&"
+    return f"{base}{separator}was_running=1" if was_running else base
+
+
+def repo_checks_run_url(full_name: str) -> str:
+    """Return the run-checks trigger URL for a repo."""
+    if _repo_name_is_dot_safe(full_name):
+        return f"/partials/repo-checks-run/{full_name}"
+    return f"/partials/repo-checks-run?name={full_name}"
+
+
+# Every template that links to a repo page uses these builders.
+templates.env.globals["repo_url"] = repo_url
+templates.env.globals["repo_checks_status_url"] = repo_checks_status_url
+templates.env.globals["repo_checks_run_url"] = repo_checks_run_url
+
+
 # Module-level staleness config — set from app lifespan
 _staleness_config: StalenessConfig = StalenessConfig()
 
@@ -638,9 +685,40 @@ async def _load_check_outputs(result_ids: list[int]) -> dict[int, str]:
     return outputs
 
 
+def _split_repo_name(value: str) -> tuple[str, str] | None:
+    """Split ``owner/repo`` from a query parameter, or None when malformed."""
+    owner, separator, name = value.partition("/")
+    if not separator or not owner or not name or "/" in name:
+        return None
+    return owner, name
+
+
 @router.get("/repo/{owner}/{name}", response_class=HTMLResponse)
 async def repository_detail(request: Request, owner: str, name: str) -> HTMLResponse:
     """Repository detail page."""
+    return await _repository_page(request, owner, name)
+
+
+@router.get("/repo", response_class=HTMLResponse)
+async def repository_detail_query(request: Request, name: str = "") -> HTMLResponse:
+    """Repository detail page addressed by query string.
+
+    The only URL shape a dot-prefixed repo name (``.github``) can use, because
+    proxies reject dot segments in the path (BUG-2026-11-09T000000).
+    """
+    parts = _split_repo_name(name)
+    if parts is None:
+        return templates.TemplateResponse(
+            request,
+            "not_found.html",
+            context={"entity": f"Repository {name}" if name else "Repository"},
+            status_code=404,
+        )
+    return await _repository_page(request, *parts)
+
+
+async def _repository_page(request: Request, owner: str, name: str) -> HTMLResponse:
+    """Render the repository detail page for one repo."""
     from grimoire.github.router import _cache, _repos
 
     full_name = f"{owner}/{name}"
@@ -744,9 +822,24 @@ async def repo_checks_status_partial(
     request: Request, owner: str, name: str, was_running: bool = False
 ) -> HTMLResponse:
     """Return the run-checks button for a repo (idle or running)."""
+    return _repo_checks_status(request, f"{owner}/{name}", was_running)
+
+
+@router.get("/partials/repo-checks-status", response_class=HTMLResponse)
+async def repo_checks_status_partial_query(
+    request: Request, name: str = "", was_running: bool = False
+) -> HTMLResponse:
+    """Query-string form of the status partial (dot-named repos)."""
+    if _split_repo_name(name) is None:
+        raise HTTPException(status_code=404, detail=f"Repository {name} not found")
+    return _repo_checks_status(request, name, was_running)
+
+
+def _repo_checks_status(
+    request: Request, full_name: str, was_running: bool
+) -> HTMLResponse:
     from grimoire.checks.engine import is_repo_run_active
 
-    full_name = f"{owner}/{name}"
     running = is_repo_run_active(full_name)
     resp = _repo_checks_button(request, full_name, running)
     if was_running and not running:
@@ -759,6 +852,23 @@ async def repo_checks_run_trigger(
     request: Request, owner: str, name: str, background_tasks: BackgroundTasks
 ) -> HTMLResponse:
     """Run every enabled check against one repo as a background task."""
+    return await _repo_checks_run(request, f"{owner}/{name}", background_tasks)
+
+
+@router.post("/partials/repo-checks-run", response_class=HTMLResponse)
+async def repo_checks_run_trigger_query(
+    request: Request, background_tasks: BackgroundTasks, name: str = ""
+) -> HTMLResponse:
+    """Query-string form of the run trigger (dot-named repos)."""
+    if _split_repo_name(name) is None:
+        raise HTTPException(status_code=404, detail=f"Repository {name} not found")
+    return await _repo_checks_run(request, name, background_tasks)
+
+
+async def _repo_checks_run(
+    request: Request, full_name: str, background_tasks: BackgroundTasks
+) -> HTMLResponse:
+    """Reserve and start every enabled check for *full_name*."""
     import grimoire.checks.engine as checks_eng
     from grimoire.checks.router import _checks
     from grimoire.checks.router import _engine as checks_engine
@@ -766,7 +876,6 @@ async def repo_checks_run_trigger(
     from grimoire.checks.router import _workspace as checks_workspace
     from grimoire.github.router import _repos as known_repos
 
-    full_name = f"{owner}/{name}"
     if full_name not in known_repos:
         raise HTTPException(status_code=404, detail=f"Repository {full_name} not found")
     if checks_workspace is None or checks_engine is None:

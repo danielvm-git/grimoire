@@ -1579,3 +1579,49 @@ bugs:
     status: fixed
     evidence: "test_script_reexecs_under_grimoire_python_when_yaml_is_missing (tests/test_checks/test_pipeline_audit.py): pass"
     description: Found in the final review of #50-#60. Same class as the conformance GRIMOIRE_PYTHON gap; the script now re-execs under GRIMOIRE_PYTHON once.
+
+  - slug: dot-segment-repo-url
+    title: Repo detail page is unreachable for repositories whose name starts with a dot
+    module: src/grimoire/web/router.py, src/grimoire/web/templates
+    severity: high
+    status: fixed
+    found_in: user report (https://grimoire.bigbase.click/repo/danielvm-git/.github -> 404)
+    description: >
+      The dashboard links every repo to /repo/{owner}/{name}. For the tracked repo
+      danielvm-git/.github the edge proxy rejects the dot-prefixed path segment before the
+      request reaches Grimoire and answers with a bare "404 page not found" (19 bytes), so the
+      detail page cannot be opened at all. Percent-encoding, a trailing slash and a query
+      suffix all failed to get past the guard.
+    reproduction_steps:
+      - "curl -s -o /dev/null -w '%{http_code} %{size_download}\\n' https://grimoire.bigbase.click/repo/danielvm-git/.github   # 404 19"
+      - "curl -s -o /dev/null -w '%{http_code} %{size_download}\\n' https://grimoire.bigbase.click/repo/danielvm-git/big-bolao # 200 (control)"
+      - "curl -s https://grimoire.bigbase.click/repo/danielvm-git/.github   # body is '404 page not found', not Grimoire HTML"
+    root_cause_hypothesis: >
+      Two facts combined: the edge proxy rejects any path containing a dot-prefixed segment
+      (a dot inside a segment is fine — /repo/x/foo.bar reaches the app), and Grimoire puts the
+      repo name in the path, so a repo literally named .github is always linked in the rejected
+      shape. Grimoire never sees the request, so no routing change on /repo/{owner}/{name} can
+      help; the link shape must change. The repo page's own HTMX endpoints use the same shape and
+      would fail silently there too.
+    files_changed:
+      - src/grimoire/web/router.py
+      - src/grimoire/web/templates/partials/dashboard_matrix.html
+      - src/grimoire/web/templates/partials/dashboard_list.html
+      - src/grimoire/web/templates/partials/backlog_items.html
+      - src/grimoire/web/templates/partials/check_results.html
+      - src/grimoire/web/templates/partials/action_results.html
+      - src/grimoire/web/templates/partials/action_run_detail.html
+      - src/grimoire/web/templates/partials/repo_checks_button.html
+      - tests/test_web/test_router.py
+      - docs/specs/06-web-application.md
+    approach: >
+      Add a query-form route for the detail page and both run-checks partials, and a single
+      repo_url()/repo_checks_*_url() builder pair (registered as Jinja globals) that returns the
+      query form only when the repo name starts with a dot. Every template link now goes through
+      the builder, so ordinary repos keep their existing URLs.
+    regression:
+      tests/test_web/test_router.py::TestRepoUrlBuilder (2), TestQueryFormRepoRoutes (6) —
+      builder shape, query-form rendering for a dot repo, malformed/unknown name 404s, and
+      matrix/list links using the query form. Red before the change, green after.
+    risk_level: low
+    commit_message: "fix(web): link dot-named repos through a proxy-safe query URL"
