@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.19.1] - 2026-11-09
+
+### Bug Fixes
+
+- **checks:** allow solo-owner direct push to the default branch ([#75](https://github.com/danielvm-git/grimoire/issues/75)) ([44c8764](https://github.com/danielvm-git/grimoire/commit/44c8764cd420844dbf17c672a1e4a976ac2b4b3e))
+
 ## [0.19.0] - 2026-11-09
 
 ### Features
