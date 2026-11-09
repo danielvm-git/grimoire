@@ -103,30 +103,14 @@ def branch_protection(ctx: RuleContext) -> RuleResult:
 
 
 def pr_required(ctx: RuleContext) -> RuleResult:
-    """P1: changes reach the default branch through a PR with at least one approval."""
+    """P1: the default branch is protected.
+
+    Solo-owner policy: direct push is allowed, so neither a pull request nor an
+    approving review is required. Only an unprotected or unreadable branch fails.
+    """
     p = fetch_protection(ctx)
     if not p.readable:
         return _unreadable(p, ctx.default_branch)
-    approvals = 0
-    if p.classic is not None:
-        reviews = p.classic.get("required_pull_request_reviews") or {}
-        approvals = max(
-            approvals, int(reviews.get("required_approving_review_count", 0) or 0)
-        )
-    for rule in p.rules or []:
-        if rule.get("type") == "pull_request":
-            params = rule.get("parameters") or {}
-            approvals = max(
-                approvals, int(params.get("required_approving_review_count", 0) or 0)
-            )
-    if approvals >= 1:
-        return RuleResult(passed=True, notes=[f"{approvals} approval(s) required"])
-    if p.classic is None and not any(
-        r.get("type") == "pull_request" for r in p.rules or []
-    ):
-        return RuleResult.from_problems(
-            [f"'{ctx.default_branch}' does not require a pull request"]
-        )
-    return RuleResult.from_problems(
-        [f"'{ctx.default_branch}' requires a pull request but no approving review"]
-    )
+    if p.classic is None and not p.rules:
+        return RuleResult.from_problems([f"'{ctx.default_branch}' is not protected"])
+    return RuleResult(passed=True, notes=["direct push allowed (solo-owner policy)"])

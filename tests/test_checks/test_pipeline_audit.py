@@ -599,7 +599,7 @@ def test_branch_protection_without_required_checks_fails_7a(
     assert result.status("7b.") == ["PASS"]
 
 
-def test_branch_protection_admins_may_push_directly_fails_7b(
+def test_branch_protection_admins_may_push_directly_passes_7b(
     audit: Audit, github
 ) -> None:
     body = {
@@ -608,7 +608,17 @@ def test_branch_protection_admins_may_push_directly_fails_7b(
         "enforce_admins": {"enabled": False},
     }
     _with_api(audit, github({PROTECTION: (200, body)}))
-    assert _env_run(audit).status("7b.") == ["FAIL"]
+    result = _env_run(audit)
+    assert result.status("7b.") == ["PASS"]
+    assert "solo-owner" in result.find("7b.")[0][3]
+
+
+def test_branch_protection_without_pull_request_rule_passes_7b(
+    audit: Audit, github
+) -> None:
+    body = {"required_status_checks": {"contexts": ["test"]}}
+    _with_api(audit, github({PROTECTION: (200, body)}))
+    assert _env_run(audit).status("7b.") == ["PASS"]
 
 
 def test_branch_protection_rulesets_satisfy_both(audit: Audit, github) -> None:
