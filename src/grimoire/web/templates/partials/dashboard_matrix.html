@@ -55,7 +55,7 @@
 
             {# ── Repository Name ── #}
             <td class="py-0.5">
-                <a href="/repo/{{ repo.full_name }}" class="link link-hover text-sm"
+                <a href="{{ repo_url(repo.full_name) }}" class="link link-hover text-sm"
                    title="{{ repo.full_name }}">{{ repo.full_name }}</a>
             </td>
 

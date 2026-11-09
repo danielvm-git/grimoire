@@ -3,9 +3,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from httpx import AsyncClient
+
+from grimoire.models import RepositoryStats, TrackedRepository, WorkflowStatus
 
 
 class TestDashboard:
@@ -1054,3 +1057,106 @@ def test_drop_untargeted_results_discards_retargeted_check_rows() -> None:
         [listed, scripted], {"listed": {("a/y", "main")}, "scripted": set()}, results
     )
     assert set(kept) == {("listed", "a/y", "main"), ("scripted", "a/x", "main")}
+
+
+# ---------------------------------------------------------------------------
+# Proxy-safe URLs for repos whose name starts with a dot
+# (BUG-2026-11-09T000000 — /repo/owner/.github is rejected by the edge proxy)
+# ---------------------------------------------------------------------------
+
+import contextlib  # noqa: E402
+from collections.abc import Iterator  # noqa: E402
+
+DOT_REPO = "acme/.github"
+
+
+@contextlib.contextmanager
+def _dot_repo() -> Iterator[None]:
+    """Register a repo whose name starts with a dot for one test."""
+    from grimoire.github.router import _cache, _repos
+
+    _repos[DOT_REPO] = TrackedRepository(
+        full_name=DOT_REPO, default_branch="main", branches=["main"], source="static"
+    )
+    _cache[DOT_REPO] = RepositoryStats(
+        full_name=DOT_REPO,
+        default_branch="main",
+        workflows=[
+            WorkflowStatus(
+                name="CI",
+                branch="main",
+                status="success",
+                url="https://github.com/acme/.github/actions",
+            ),
+        ],
+        fetched_at=datetime.now(tz=timezone.utc),
+        last_commit_at=datetime(2026, 4, 11, tzinfo=timezone.utc),
+        total_branches=1,
+    )
+    try:
+        yield
+    finally:
+        _repos.pop(DOT_REPO, None)
+        _cache.pop(DOT_REPO, None)
+
+
+class TestRepoUrlBuilder:
+    """A repository URL must survive proxies that reject dot-prefixed segments."""
+
+    def test_repo_url_keeps_path_form_for_normal_repos(self) -> None:
+        from grimoire.web.router import repo_url
+
+        assert repo_url("acme/api") == "/repo/acme/api"
+
+    def test_repo_url_uses_query_form_for_dot_repos(self) -> None:
+        from grimoire.web.router import repo_url
+
+        assert repo_url("acme/.github") == "/repo?name=acme/.github"
+
+
+class TestQueryFormRepoRoutes:
+    """The query form is the only shape the edge proxy forwards for `.github`."""
+
+    async def test_repository_detail_accepts_query_form(
+        self, web_client: AsyncClient
+    ) -> None:
+        resp = await web_client.get("/repo?name=acme/api")
+        assert resp.status_code == 200
+        assert "acme/api" in resp.text
+
+    async def test_repository_detail_query_form_renders_dot_repo(
+        self, web_client: AsyncClient
+    ) -> None:
+        with _dot_repo():
+            resp = await web_client.get("/repo?name=acme/.github")
+        assert resp.status_code == 200
+        assert "acme/.github" in resp.text
+
+    async def test_repository_detail_query_form_404s_for_unknown_repo(
+        self, web_client: AsyncClient
+    ) -> None:
+        resp = await web_client.get("/repo?name=acme/does-not-exist")
+        assert resp.status_code == 404
+
+    async def test_repository_detail_query_form_404s_without_owner(
+        self, web_client: AsyncClient
+    ) -> None:
+        resp = await web_client.get("/repo?name=justaname")
+        assert resp.status_code == 404
+
+    async def test_dashboard_links_dot_repos_with_query_form(
+        self, web_client: AsyncClient
+    ) -> None:
+        with _dot_repo():
+            resp = await web_client.get("/partials/dashboard-matrix?sort=name&dir=asc")
+        assert resp.status_code == 200
+        assert 'href="/repo?name=acme/.github"' in resp.text
+        assert 'href="/repo/acme/.github"' not in resp.text
+
+    async def test_list_view_links_dot_repos_with_query_form(
+        self, web_client: AsyncClient
+    ) -> None:
+        with _dot_repo():
+            resp = await web_client.get("/partials/dashboard-list?sort=name&dir=asc")
+        assert resp.status_code == 200
+        assert 'href="/repo?name=acme/.github"' in resp.text

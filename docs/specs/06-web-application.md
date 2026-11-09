@@ -234,8 +234,15 @@ This pattern is shared across all long-running operations:
 
 ## 6.4 — Repository Detail Page
 
-**Route:** `GET /repo/{owner}/{name}`
+**Route:** `GET /repo/{owner}/{name}`, plus `GET /repo?name={owner}/{name}`
 **Template:** `templates/repository.html`
+
+The query form exists for repositories whose name starts with a dot (`.github`):
+reverse proxies reject a dot-prefixed path segment before the request reaches the
+app, so `repo_url()` emits `?name=` for those repos and the path form for every
+other. The run-checks partials carry the same two shapes
+(`/partials/repo-checks-status[/{owner}/{name}]`,
+`/partials/repo-checks-run[/{owner}/{name}]`). See BUG-2026-11-09T000000.
 
 ### Sections
 

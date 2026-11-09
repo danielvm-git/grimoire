@@ -34,7 +34,7 @@
                         {% if r.repo_full_name == "(global)" %}
                         <span class="text-sm opacity-40">None</span>
                         {% else %}
-                        <a href="/repo/{{ r.repo_full_name }}" class="link link-hover text-sm">{{ r.repo_full_name }}</a>
+                        <a href="{{ repo_url(r.repo_full_name) }}" class="link link-hover text-sm">{{ r.repo_full_name }}</a>
                         {% endif %}
                     </td>
                     <td class="font-mono text-xs">{{ r.branch }}</td>
