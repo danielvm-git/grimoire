@@ -37,7 +37,7 @@ virtualenv on `PATH` (for example `run.sh`).
 | `conventions-md` | `CONVENTIONS.md` exists and documents the Always Green rule | Align §5 |
 | `conventional-commits` | The last 50 non-merge commits use Conventional Commits | `CONVENTIONS.md` |
 | `no-ai-coauthors` | No `Co-authored-by:` footer in the last 50 non-merge commits | `CONVENTIONS.md` § Git Attribution |
-| `pr-required` | The default branch requires a pull request with at least one approval | Branch protection rules |
+| `pr-required` | The default branch is protected; direct push is allowed (solo-owner policy) | Branch protection rules |
 
 ## Compliance score
 

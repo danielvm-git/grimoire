@@ -133,7 +133,7 @@ The exit code follows the worst failing severity: critical → `2`, high → `1`
 
 | Rule | Severity | What it checks |
 |------|----------|----------------|
-| `7a`, `7b` | high | The default branch has required status checks (7a) and no direct push (7b). Read from the GitHub API (classic protection and rulesets). An unprotected branch fails both. If the token cannot read protection, both are `UNKNOWN` |
+| `7a`, `7b` | high | The default branch has required status checks (7a) and a protected branch (7b; direct push by the owner is allowed, so no PR or review is required). Read from the GitHub API (classic protection and rulesets). An unprotected branch fails both. If the token cannot read protection, both are `UNKNOWN` |
 | `8a` | medium | Every `uses:` ref is pinned. The row names the forms found: `sha`, `digest` (`docker://…@sha256:…`), `version`, `floating-major` (`@v6`) |
 | `8b` | medium | Dependency caching, read from parsed steps: `actions/cache`, `setup-python`/`setup-node` `cache:`, `setup-go` `cache: true`, `setup-uv` `enable-cache`, `rust-cache`. `cache: true` on `setup-python` is rejected by GitHub Actions and is flagged |
 | `9a` | medium | Every workflow sets `permissions:` at the top level, or on every job. The row names jobs that inherit the default |
