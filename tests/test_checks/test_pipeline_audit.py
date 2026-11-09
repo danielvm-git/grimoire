@@ -498,6 +498,33 @@ def test_push_trigger_still_required_on_primary_pipeline(audit: Audit) -> None:
     assert audit.run().status("2a.") == ["FAIL"]
 
 
+DEPLOY_CALLABLE = """\
+name: Deploy
+on:
+  workflow_call:
+jobs:
+  deploy:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo deploy
+"""
+
+
+def test_reusable_deploy_workflow_needs_no_push_or_workflow_run(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow("deploy-go.yml", DEPLOY_CALLABLE)
+    assert audit.run().status("2a. trigger") == ["PASS"]
+
+
+def test_deploy_workflow_without_any_trigger_still_fails(audit: Audit) -> None:
+    audit.workflow("test-build-release.yml", PIPELINE)
+    audit.workflow(
+        "deploy-go.yml",
+        DEPLOY_CALLABLE.replace("workflow_call:", "issues:\n    types: [opened]"),
+    )
+    assert audit.run().status("2a. trigger") == ["FAIL"]
+
+
 # ── #52: rules 7a/7b read branch protection from the API ─────────────────────
 
 

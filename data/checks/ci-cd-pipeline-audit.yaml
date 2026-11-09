@@ -516,7 +516,9 @@ script: |
           events = _find_trigger_events(wf)
           has_push = "push" in events
           has_pr = "pull_request" in events
-          has_wf_run = "workflow_run" in events or "workflow_dispatch" in events
+          # A reusable workflow (workflow_call) is started by its caller, which owns
+          # the real trigger, so it can never carry a push or workflow_run of its own.
+          has_wf_run = bool({"workflow_run", "workflow_dispatch", "workflow_call"} & set(events))
 
           is_deploy = "deploy" in fname.lower()
 
