@@ -29,6 +29,11 @@ COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --no-dev --frozen
 
 COPY src/ src/
+# Config and the checks/actions catalog ship in the image (Kamal deploys the image
+# as is); runtime state goes to the /app/state volume (see config/deploy.yml).
+COPY config.yaml ./
+COPY data/ data/
+RUN mkdir -p /app/state
 COPY docker-entrypoint.sh /usr/local/bin/
 
 EXPOSE 8000
@@ -37,4 +42,5 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["uv", "run", "uvicorn", "grimoire.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
+# The venv's uvicorn directly: `uv run` may try to resync at startup and hang before bind.
+CMD [".venv/bin/uvicorn", "grimoire.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

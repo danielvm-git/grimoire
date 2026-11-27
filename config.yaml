@@ -26,7 +26,9 @@ mcp:
   token: "${GRIMOIRE_MCP_TOKEN:-}"
   endpoint_path: "/mcp"
 
+# Paths: env overrides for the container (Kamal mounts the state volume);
+# locally they fall back to the repo directory.
 data_dir: "./data"
-workspace_dir: "./workspace"
-database_path: "./grimoire.db"
-log_file: "./grimoire.log"
+workspace_dir: "${GRIMOIRE_WORKSPACE:-./workspace}"
+database_path: "${GRIMOIRE_DB_PATH:-./grimoire.db}"
+log_file: "${GRIMOIRE_LOG_FILE:-./grimoire.log}"
