@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.20.0] - 2026-11-27
+
+### Features
+
+- **deploy:** grimoire no Oracle com Kamal, atrás do Cloudflare Access ([#78](https://github.com/danielvm-git/grimoire/issues/78)) ([32ac0a4](https://github.com/danielvm-git/grimoire/commit/32ac0a4045c320cae9b3efc8deff268cdde966dd))
+
 ## [0.19.2] - 2026-11-09
 
 ### Bug Fixes
