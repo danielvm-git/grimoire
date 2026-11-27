@@ -1,0 +1,59 @@
+# Kamal 2 — grimoire no Oracle A1 (produção), alcançado pela tailnet.
+# Deploy só pelo GitHub Actions (.github/workflows/deploy.yml).
+service: grimoire
+image: danielvm-git/grimoire
+
+servers:
+  web:
+    hosts:
+      - oracle-prod # nome MagicDNS do Oracle na tailnet
+
+ssh:
+  user: deploy
+  keys_only: true
+  key_data:
+    - KAMAL_SSH_KEY
+
+registry:
+  server: ghcr.io
+  username: danielvm-git
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+builder:
+  arch: arm64 # o CI constrói a imagem; o Kamal nunca constrói
+
+# kamal-proxy compartilhado (bolão, caixa): só 127.0.0.1:8080, o cloudflared é o
+# único cliente. Na borda, o Cloudflare Access exige login (só o dono).
+proxy:
+  host: grimoire.danielvm.net
+  app_port: 8000
+  ssl: false
+  forward_headers: true
+  healthcheck:
+    path: /health
+    interval: 5
+    timeout: 5
+  run:
+    http_port: 8080
+    https_port: 8443
+    bind_ips:
+      - 127.0.0.1
+
+# data/setup.sh instala ferramentas a cada boot (pip install charmcraft): dá tempo.
+deploy_timeout: 240
+
+env:
+  clear:
+    GRIMOIRE_DB_PATH: /app/state/grimoire.db
+    GRIMOIRE_WORKSPACE: /app/state/workspace
+    GRIMOIRE_LOG_FILE: /app/state/grimoire.log
+    TZ: America/Sao_Paulo
+  secret:
+    - GITHUB_TOKEN
+    - GRIMOIRE_MCP_TOKEN
+
+volumes:
+  - /srv/grimoire:/app/state # cache (SQLite, clones); reconstruído a partir do GitHub
+
+retain_containers: 2

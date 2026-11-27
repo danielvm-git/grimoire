@@ -1,61 +1,131 @@
+# ============================================================================
+# deploy.yml — Kamal deploy no Oracle A1 (produção)
+#
+# Roda só depois de "Test Build Release" passar num push à main. Nunca constrói:
+# publica a imagem exata que o CI construiu, depois de conferir a proveniência.
+#
+#   deploy-meta → gh attestation verify → Tailscale (OIDC, tag:ci) → kamal deploy
+#
+# Environment "production", segredos:
+#   KAMAL_SSH_KEY          chave do usuário `deploy` no Oracle (só pela tailnet)
+#   GRIMOIRE_GITHUB_TOKEN  token GitHub (fine-grained, só leitura) que o app usa
+#   GRIMOIRE_MCP_TOKEN     token do endpoint /mcp
+# Environment "production", variáveis (não secretas):
+#   TS_OAUTH_CLIENT_ID, TS_AUDIENCE   identidade federada do Tailscale
+# ============================================================================
 name: Deploy
-# version: 3.0.0 — adapted from workflow-templates/deploy-python.yml
-# story: e10s01
-# Triggered by test-build-release.yml only (workflow name must match exactly)
 
 on:
   workflow_run:
     workflows: ["Test Build Release"]
     types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
-  actions: read
 
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
 env:
-  SITE_URL: "https://grimoire.bigbase.click"
+  SITE_URL: https://grimoire.danielvm.net
+  # Host key fixada: o deploy falha se outra máquina responder por oracle-prod.
+  ORACLE_HOST_KEY: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKg7IJKpbW/pEapRqjxXYdZpEA6t5xdSzCaOu6Y33KUJ
 
 jobs:
   deploy:
-    if: >
+    if: >-
       github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 10
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: production
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+      attestations: read
+      id-token: write
     steps:
-      - name: Download deploy-meta artifact
-        uses: actions/download-artifact@v8
+      - name: Download deploy-meta
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: deploy-meta
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ github.event.workflow_run.id }}
-          repository: ${{ github.event.workflow_run.repository.full_name }}
           path: deploy-meta
 
-      - name: Verify deploy-meta artifact
+      - name: Read deploy-meta
         id: meta
         run: |
-          if [ ! -s deploy-meta/deploy-meta.json ]; then
-            echo "::error::deploy-meta artifact missing or empty"
-            exit 1
-          fi
-          REF=$(jq -r '.sha' deploy-meta/deploy-meta.json)
-          APP_TYPE=$(jq -r '.app_type' deploy-meta/deploy-meta.json)
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-          echo "app_type=$APP_TYPE" >> "$GITHUB_OUTPUT"
-          echo "Deploy metadata: $(cat deploy-meta/deploy-meta.json)"
+          set -euo pipefail
+          sha=$(jq -r .sha deploy-meta/deploy-meta.json)
+          digest=$(jq -r .digest deploy-meta/deploy-meta.json)
+          [[ "$sha" == "${{ github.event.workflow_run.head_sha }}" ]] || { echo "::error::sha mismatch"; exit 1; }
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::bad digest"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy to BigBase
-        uses: danielvm-git/.github/actions/bigbase-deploy@v1
+      - name: Verify provenance and that the tag is the attested digest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ghcr.io/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh attestation verify "oci://${IMAGE}@${{ steps.meta.outputs.digest }}" \
+            --repo "${{ github.repository }}" \
+            --signer-workflow "${{ github.repository }}/.github/workflows/test-build-release.yml"
+          echo "${GH_TOKEN}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          tagged=$(docker buildx imagetools inspect "${IMAGE}:${{ steps.meta.outputs.sha }}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          [[ "$tagged" == "${{ steps.meta.outputs.digest }}" ]] || { echo "::error::tag does not point at the attested digest"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          site_id: ${{ secrets.BIGBASE_SITE_ID }}
-          app_type: ${{ steps.meta.outputs.app_type }}
-          site_url: ${{ env.SITE_URL }}
-          deploy_token: ${{ secrets.BIGBASE_DEPLOY_TOKEN }}
-          ref: ${{ steps.meta.outputs.ref }}
-          branch: main
+          ref: ${{ steps.meta.outputs.sha }}
+          persist-credentials: false
+
+      - name: Join the tailnet (ephemeral, tag:ci)
+        uses: tailscale/github-action@064b10558093f38325e838ddea35486bdc6b1d5c # v4.4.0
+        with:
+          oauth-client-id: ${{ vars.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ vars.TS_AUDIENCE }}
+          tags: tag:ci
+          ping: oracle-prod
+
+      - name: Pin the Oracle host key
+        run: |
+          install -d -m 700 ~/.ssh
+          echo "oracle-prod ${ORACLE_HOST_KEY}" > ~/.ssh/known_hosts
+          # HostKeyAlias: o SSHKit procura nome E IP da tailnet; com o alias, só "oracle-prod".
+          printf 'Host oracle-prod\n  StrictHostKeyChecking yes\n  HostKeyAlias oracle-prod\n  UserKnownHostsFile ~/.ssh/known_hosts\n' > ~/.ssh/config
+          chmod 600 ~/.ssh/known_hosts ~/.ssh/config
+
+      - uses: ruby/setup-ruby@145243922b4465b78e04dd66294782c7de45901f # v1.345.0
+        with:
+          ruby-version: '3.4'
+
+      - name: Kamal deploy (no build, the attested image)
+        env:
+          KAMAL_SSH_KEY: ${{ secrets.KAMAL_SSH_KEY }}
+          KAMAL_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          GRIMOIRE_GITHUB_TOKEN: ${{ secrets.GRIMOIRE_GITHUB_TOKEN }}
+          GRIMOIRE_MCP_TOKEN: ${{ secrets.GRIMOIRE_MCP_TOKEN }}
+        run: |
+          gem install kamal -v 2.12.0 --no-document
+          kamal deploy --skip-push --version "${{ steps.meta.outputs.sha }}"
+
+      # O site inteiro fica atrás do Cloudflare Access: sem login, a borda tem de
+      # redirecionar para o Access. Se responder 200, o Access não está protegendo.
+      - name: Check Cloudflare Access is enforced
+        run: |
+          for _ in 1 2 3 4 5 6; do
+            # Newline in -w: without it `read` hits EOF, returns 1, and bash -e ends the step.
+            read -r code loc < <(curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' "${SITE_URL}/" || true)
+            if [[ "$code" == "302" && "$loc" == https://*.cloudflareaccess.com/* ]]; then echo "Access OK"; exit 0; fi
+            [[ "$code" == "200" ]] && { echo "::error::${SITE_URL} answered 200 without login: Access is not protecting it"; exit 1; }
+            sleep 10
+          done
+          echo "::error::${SITE_URL} returned ${code} ${loc}"; exit 1

@@ -23,6 +23,12 @@ src/grimoire/checks/loader.py
 src/grimoire/checks/queries.py
 src/grimoire/checks/router.py
 src/grimoire/checks/scheduler.py
+src/grimoire/checks/status.py
+src/grimoire/conformance/__init__.py
+src/grimoire/conformance/__main__.py
+src/grimoire/conformance/github.py
+src/grimoire/conformance/repo.py
+src/grimoire/conformance/workflows.py
 src/grimoire/github/__init__.py
 src/grimoire/github/client.py
 src/grimoire/github/router.py
@@ -36,6 +42,7 @@ src/grimoire/observability/logging.py
 src/grimoire/observability/metrics.py
 src/grimoire/web/__init__.py
 src/grimoire/web/backlog.py
+src/grimoire/web/compliance.py
 src/grimoire/web/prompts.py
 src/grimoire/web/router.py
 src/grimoire/workspace/__init__.py
