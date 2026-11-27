@@ -26,9 +26,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 WORKDIR /app
 
 COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --no-dev --frozen
+# Dependencies first (cached layer); the project itself needs src/, so it is installed after.
+RUN uv sync --no-dev --frozen --no-install-project
 
 COPY src/ src/
+RUN uv sync --no-dev --frozen
 # Config and the checks/actions catalog ship in the image (Kamal deploys the image
 # as is); runtime state goes to the /app/state volume (see config/deploy.yml).
 COPY config.yaml ./
