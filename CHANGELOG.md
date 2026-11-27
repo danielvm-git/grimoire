@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.20.1] - 2026-11-27
+
+### Bug Fixes
+
+- **docker:** install the project after src/ is copied ([#79](https://github.com/danielvm-git/grimoire/issues/79)) ([676d6ac](https://github.com/danielvm-git/grimoire/commit/676d6acbd237586b0937a98c6bb9e320aa000e05))
+
 ## [0.20.0] - 2026-11-27
 
 ### Features
