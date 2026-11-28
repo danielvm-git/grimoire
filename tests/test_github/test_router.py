@@ -65,3 +65,19 @@ async def test_update_cache_preserves_real_fetched_at_from_db():
     assert lr == old_time
     # Verify it's actually in the past
     assert (datetime.now(tz=timezone.utc) - lr).total_seconds() > 3600
+
+
+async def test_update_cache_treats_naive_timestamp_as_utc():
+    """SQLite returns fetched_at without tzinfo; the cache must store it as UTC.
+
+    A naive _last_refresh made /health raise "can't subtract offset-naive and
+    offset-aware datetimes" on every fresh container until a refresh finished.
+    """
+    naive = datetime(2026, 11, 28, 1, 54, 15)
+    update_cache([_make_repo()], [_make_stats()], timestamp=naive)
+
+    from grimoire.github.router import get_last_refresh
+
+    lr = get_last_refresh()
+    assert lr == naive.replace(tzinfo=timezone.utc)
+    assert lr.tzinfo is not None

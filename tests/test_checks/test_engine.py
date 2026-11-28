@@ -452,3 +452,46 @@ def test_stale_memory_flag_expires() -> None:
         assert "stale" not in _running_checks
     finally:
         _running_checks.pop("stale", None)
+
+
+class TestPersistResultLock:
+    async def test_result_saved_when_first_commit_hits_a_lock(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A SQLITE_BUSY on commit is retried, so the check result is not lost.
+
+        In production the INSERT INTO check_result failed with "database is
+        locked" a few times an hour and the result was dropped.
+        """
+        from sqlalchemy.exc import OperationalError
+
+        engine = await get_engine(str(tmp_path / "test.db"))
+        await create_tables(engine)
+        ws = MockWorkspace(tmp_path)
+
+        real_commit = AsyncSession.commit
+        calls = {"n": 0}
+
+        async def flaky_commit(self: AsyncSession) -> None:
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OperationalError(
+                    "INSERT INTO check_result", {}, Exception("database is locked")
+                )
+            await real_commit(self)
+
+        monkeypatch.setattr(AsyncSession, "commit", flaky_commit)
+        monkeypatch.setattr("grimoire.db_exec.asyncio.sleep", _no_sleep)
+
+        result = await run_check(_check("echo hello"), _repo(), "main", ws, engine)  # type: ignore[arg-type]
+
+        assert result.passed is True
+        monkeypatch.setattr(AsyncSession, "commit", real_commit)
+        async with AsyncSession(engine) as session:
+            rows = (await session.exec(select(CheckResultRecord))).all()
+        assert len(rows) == 1
+        assert calls["n"] >= 2
+
+
+async def _no_sleep(_seconds: float) -> None:
+    return None

@@ -28,6 +28,7 @@ from grimoire.checks.scheduler import register_checks, run_all_checks_once
 from grimoire.config import load_config, resolve_config_path
 from grimoire.database import (
     RUN_LEASE_SECONDS,
+    as_utc,
     create_tables,
     ensure_schema_compatibility,
     get_engine,
@@ -134,12 +135,12 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         newest_fetched_at: datetime | None = None
         if cached_repos:
             oldest = min(
-                (s.fetched_at for s in cached_stats if s.fetched_at),
+                (as_utc(s.fetched_at) for s in cached_stats if s.fetched_at),
                 default=None,
             )
             # The newest fetched_at represents when the last refresh completed
             newest_fetched_at = max(
-                (s.fetched_at for s in cached_stats if s.fetched_at),
+                (as_utc(s.fetched_at) for s in cached_stats if s.fetched_at),
                 default=None,
             )
             if oldest:
@@ -187,7 +188,7 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             cached_repos, cached_stats = await load_stats_from_db(engine)
             if cached_repos:
                 newest_fetched_at = max(
-                    (s.fetched_at for s in cached_stats if s.fetched_at),
+                    (as_utc(s.fetched_at) for s in cached_stats if s.fetched_at),
                     default=None,
                 )
                 update_cache(cached_repos, cached_stats, timestamp=newest_fetched_at)

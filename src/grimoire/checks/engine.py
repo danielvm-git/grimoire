@@ -27,6 +27,7 @@ from grimoire.database import (
     start_run_heartbeat,
     touch_queued_runs,
 )
+from grimoire.db_exec import retry_on_lock
 from grimoire.models import CheckResult
 from grimoire.observability.metrics import update_check_metrics
 from grimoire.script import (
@@ -281,19 +282,24 @@ async def _persist_result(
         timestamp=now,
     )
 
-    record = CheckResultRecord(
-        run_id=run_id,
-        check_slug=check.slug,
-        check_name=check.name,
-        repo_full_name=repo.full_name,
-        branch=branch,
-        passed=passed,
-        output=output,
-        timestamp=now,
-    )
-    async with AsyncSession(engine) as session:
-        session.add(record)
-        await session.commit()
+    async def _save() -> None:
+        # A fresh record and session per attempt: a commit that hit SQLITE_BUSY
+        # rolled back and wrote nothing, so retrying cannot duplicate the row.
+        record = CheckResultRecord(
+            run_id=run_id,
+            check_slug=check.slug,
+            check_name=check.name,
+            repo_full_name=repo.full_name,
+            branch=branch,
+            passed=passed,
+            output=output,
+            timestamp=now,
+        )
+        async with AsyncSession(engine) as session:
+            session.add(record)
+            await session.commit()
+
+    await retry_on_lock(_save)
 
     return result
 
