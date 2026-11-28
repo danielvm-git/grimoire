@@ -12,6 +12,12 @@
 
 * **release:** finalize e11 end-to-end browser testing epic ([f6481c1](https://github.com/danielvm-git/grimoire/commit/f6481c1d84d0a791132c419283cc17a182ef8156))
 
+## [0.20.2] - 2026-11-28
+
+### Bug Fixes
+
+- **fix:** /health on a fresh container, and lost check results on SQLite locks ([#80](https://github.com/danielvm-git/grimoire/issues/80)) ([6a9900f](https://github.com/danielvm-git/grimoire/commit/6a9900f1125671a014f5efda3a0f75b108959795))
+
 ## [0.20.1] - 2026-11-27
 
 ### Bug Fixes
