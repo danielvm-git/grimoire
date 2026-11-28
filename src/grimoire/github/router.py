@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
+from grimoire.database import as_utc
 from grimoire.github.schemas import (
     RefreshResponse,
     RefreshStatusResponse,
@@ -44,7 +45,7 @@ def update_cache(
         _cache[s.full_name] = s
     for r in repos:
         _repos[r.full_name] = r
-    _last_refresh = timestamp or datetime.now(tz=__import__("datetime").timezone.utc)
+    _last_refresh = as_utc(timestamp) if timestamp else datetime.now(tz=timezone.utc)
 
 
 def get_last_refresh() -> datetime | None:

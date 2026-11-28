@@ -41,6 +41,18 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def as_utc(value: datetime) -> datetime:
+    """Return *value* as an aware UTC datetime.
+
+    SQLite keeps no timezone, so datetimes read back from it are naive even
+    though grimoire always writes UTC. Mixing them with ``datetime.now(utc)``
+    raises ``TypeError``; normalise at the boundary instead.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 # ---------------------------------------------------------------------------
 # Check results
 # ---------------------------------------------------------------------------

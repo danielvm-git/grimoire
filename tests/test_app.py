@@ -86,6 +86,20 @@ class TestLifespanFreshness:
             data = (await client.get("/health")).json()
         assert "cache_age_seconds" in data
 
+    async def test_health_with_naive_db_timestamp(self) -> None:
+        """/health stays 200 when the cache was loaded with a naive DB timestamp."""
+        from datetime import datetime
+
+        from grimoire.github.router import update_cache
+
+        update_cache([], [], timestamp=datetime(2026, 11, 28, 1, 54, 15))
+        app = create_app()
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json()["cache_age_seconds"] >= 0
+
     async def test_health_endpoint_version(self) -> None:
         """Health endpoint returns version."""
         app = create_app()
